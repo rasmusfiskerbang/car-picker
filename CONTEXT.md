@@ -57,16 +57,12 @@ A Danish leasing company whose publicly available private-leasing offers are inc
 _Avoid_: Dealer, the market, all providers
 
 **Catalogue dataset**:
-The complete current representation of catalogue candidates from every covered provider, produced by one successful all-provider refresh. It has one generation timestamp and is built and validated as a unit before atomically replacing and deleting its predecessor. A failure for any provider rejects the whole replacement and leaves the current dataset unchanged. No historical datasets or cross-refresh offer records are retained.
+The complete published representation of catalogue candidates from every covered provider, produced by one successful all-provider refresh. It has one generation timestamp and remains published until another dataset is built and validated as a unit, then atomically replaces and deletes its predecessor. A failure for any provider rejects the replacement and leaves the published dataset unchanged. No historical datasets or cross-refresh offer records are retained.
 _Avoid_: Provider snapshot, incremental update, mixed-age catalogue, revision history, live market
 
 **Coverage register**:
-The public declaration of which covered providers and designated offer-source scopes contribute to the current catalogue dataset, including quarantined-candidate counts and the dataset's single generation timestamp and freshness state.
+The public declaration of which covered providers and designated offer-source scopes contribute to the published catalogue dataset, including quarantined-candidate counts and the dataset's single generation timestamp.
 _Avoid_: Market coverage percentage, the whole market
-
-**Stale catalogue**:
-A catalogue dataset that has not been successfully replaced within the declared freshness window. The entire public catalogue is withheld until a current all-provider dataset is available.
-_Avoid_: Stale provider, partially current catalogue, inactive provider
 
 **Designated offer source**:
 The bounded first-party source set selected as authoritative for one covered provider's catalogue candidates: one primary structured endpoint or offer-detail surface plus only explicitly enumerated supporting documents, with deterministic rules proving which offer and version each document applies to. Missing values remain unknown rather than being enriched from unlisted, third-party, or ambiguously applicable sources.
