@@ -80,13 +80,25 @@ _Avoid_: Unattributed value, copied description, detached excerpt
 The single time-ordered source of truth for payments and receipts a prospective lessee faces when a leasing offer runs to normal completion. Each amount appears once as an event with its source meaning, direction, amount basis, contract-relative timing or recurrence, and refundability where relevant. It contains unavoidable contractual amounts and the payment and expected return of refundable deposits, but excludes conditional or uncertain amounts; a provider-advertised aggregate total is a separate sourced assertion.
 _Avoid_: Total expense, monthly-price field, duplicated payment fields
 
+**Upfront cash requirement**:
+The sum of mandatory payments due from accepting a leasing agreement through vehicle handover, including refundable deposits and establishment or delivery fees without netting later receipts. It is unavailable when evidence cannot establish whether a mandatory amount falls within that window.
+_Avoid_: Cash at signing, first payment, down payment
+
+**Nominal base outlay**:
+The face-value sum of mandatory base payments minus expected mandatory base receipts over normal contract completion, without inflation, discounting, financing cost, or opportunity cost. Conditional exposures and externally priced costs are excluded; a fully refundable deposit therefore nets to zero while still contributing to the upfront cash requirement.
+_Avoid_: Total cost, present value, expected cost
+
+**Nominal monthly equivalent**:
+The nominal base outlay spread over the full advertised normal-completion term in months. It is distinct from a provider-advertised monthly payment and does not use the minimum binding period, notice period, or number of recurring instalments as its denominator.
+_Avoid_: Monthly payment, advertised monthly price, average instalment
+
 **Derived comparison value**:
-A reproducible result calculated from the current evidence-backed offer facts, such as nominal base outlay, monthly equivalent, or operation readiness. It is not a provider-stated offer fact and is recalculated as needed rather than becoming part of the leasing offer.
+A reproducible result calculated from the current evidence-backed offer facts, such as nominal base outlay, nominal monthly equivalent, or operation readiness. It is not a provider-stated offer fact and is recalculated as needed rather than becoming part of the leasing offer.
 _Avoid_: Provider price, persisted offer fact, authoritative total
 
 **Exposure scenario**:
-A possible cash-flow variation caused by a conditional or uncertain event, represented by its standardized kind, trigger, required inputs, and any sourced formula, rate, cap, or fixed amount. An unquantified liability remains visible with an unclear or unstated calculation; the service never invents its cost or probability. Unusual provider-specific obligations remain representable rather than being forced into an unrelated kind.
-_Avoid_: Base cost, guaranteed payment, estimated expected cost
+A possible payment or receipt caused by a conditional or uncertain event, represented by its standardized kind, trigger, required inputs, and any sourced formula, rate, cap, or fixed amount. Voluntary end options remain end mechanisms; an unquantified exposure stays visible without an invented cost or probability, and unusual obligations remain representable without being forced into an unrelated kind.
+_Avoid_: Base cost, guaranteed payment, voluntary end option, estimated expected cost
 
 **Service arrangement**:
 The disclosed treatment of a standardized service or external-cost category within a leasing offer: `included`, `optional`, `required_external`, or `excluded`, together with its scope, limits, and provider wording. Whether that arrangement is known is expressed separately by the offer fact state.
