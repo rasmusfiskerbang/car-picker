@@ -33,11 +33,11 @@ The evidence-backed description of the car configuration advertised in one leasi
 _Avoid_: Shared vehicle identity, master vehicle, fuzzy vehicle match
 
 **Catalogue candidate**:
-A discovered leasing offer that has not yet satisfied the evidence required for public catalogue inclusion.
+A discovered leasing offer that has not yet satisfied the evidence required for inclusion in the active comparison catalogue.
 _Avoid_: Catalogue offer, listing
 
 **Catalogue offer**:
-A leasing offer admitted to the public catalogue after first-party evidence establishes an authorized covered provider, private-consumer eligibility, passenger-car scope, current availability, and a classifiable contract form.
+A leasing offer admitted to the active comparison catalogue after first-party evidence establishes an authorized covered provider, private-consumer eligibility, passenger-car scope, current availability, and a classifiable contract form.
 _Avoid_: Candidate, all available offers
 
 **Comparison-ready offer**:
@@ -49,19 +49,19 @@ The evidentiary state of a comparison-relevant fact: `known` when the designated
 _Avoid_: Nullable field, missing value
 
 **Quarantined offer**:
-A catalogue candidate retained only in the current catalogue dataset and withheld from the public catalogue because a required admission fact is missing, uncertain, contradictory, or malformed. It carries structured quarantine reasons and supporting evidence so coverage and source quality remain explainable, then disappears when the catalogue dataset is replaced.
+A catalogue candidate retained only in the current catalogue dataset and withheld from the active comparison catalogue because a required admission fact is missing, uncertain, contradictory, or malformed. It carries structured quarantine reasons and supporting evidence so coverage and source quality remain explainable, then disappears when the catalogue dataset is replaced.
 _Avoid_: Bad offer, excluded listing
 
 **Covered provider**:
-A Danish leasing company whose publicly available private-leasing offers are included in the service's declared market coverage.
+A Danish leasing company whose publicly available private-leasing offers are included in the tool's declared source scope.
 _Avoid_: Dealer, the market, all providers
 
 **Catalogue dataset**:
-The complete published representation of catalogue candidates from every covered provider, produced by one successful all-provider refresh. It has one generation timestamp and remains published until another dataset is built and validated as a unit, then atomically replaces and deletes its predecessor. A failure for any provider rejects the replacement and leaves the published dataset unchanged. No historical datasets or cross-refresh offer records are retained.
+The complete active representation of catalogue candidates from every covered provider, produced by one successful all-provider refresh. It has one generation timestamp and remains active until another dataset is built and validated as a unit, then atomically replaces and deletes its predecessor. A failure for any provider rejects the replacement and leaves the active dataset unchanged. No historical datasets or cross-refresh offer records are retained.
 _Avoid_: Provider snapshot, incremental update, mixed-age catalogue, revision history, live market
 
 **Coverage register**:
-The public declaration of which covered providers and designated offer-source scopes contribute to the published catalogue dataset, including quarantined-candidate counts and the dataset's single generation timestamp.
+The record of which covered providers and designated offer-source scopes contribute to the active catalogue dataset, including quarantined-candidate counts and the dataset's single generation timestamp.
 _Avoid_: Market coverage percentage, the whole market
 
 **Designated offer source**:
