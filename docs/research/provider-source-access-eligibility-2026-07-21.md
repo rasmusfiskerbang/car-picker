@@ -1,26 +1,24 @@
 # Provider source-access eligibility register
 
-Version: 1.1.0
+Version: 1.2.0
 Assessment date: 2026-07-21
-Candidate-input provenance: non-versioned local scratch capture; not a validated frozen repository snapshot
+Frozen provider universe: [FindLeasing private-provider universe — 20 July 2026](findleasing-private-provider-universe-2026-07-20.md)
 
 ## Decision-grade result
 
-This is a **provisional source-access register**, not a completed assessment of the ticket’s fixed 20 July provider snapshot. It has **43 eligible**, **2 blocked**, **1 ineligible**, and **52 deferred** rows for the 98 provider records present in a local scratch capture. That capture supports useful triage, but it is neither committed nor independently reproducible from the repository; the live endpoint has since differed. The issue therefore remains open pending an authorized, versioned frozen input.
+This register assesses every provider in the committed 20 July 2026 frozen universe: **98 provider records and 4,495 private-filtered discovery records**. It finds **43 eligible**, **2 blocked**, **1 ineligible**, and **52 deferred** providers. This is source-access eligibility, not active catalogue coverage or offer-level admission.
 
-The first-pass consequences remain narrow: Fleasing and Terminalen are the previously human-reviewed first-party pilot routes. Clevr Car is `blocked` by its WAF under this policy; Kvalitetsbiler is `deferred` because its detailed terms depend on FindLeasing; Bertelsen Leasing is `blocked`; and Agilease is `ineligible`. `eligible` is source-access eligibility only, not active catalogue coverage or offer-level admission.
+The initial cross-form pilot may use Fleasing and Terminalen as the previously human-reviewed first-party routes. Clevr Car is `blocked` by its WAF under this policy; Kvalitetsbiler is `deferred` because its detailed terms depend on FindLeasing; Bertelsen Leasing is `blocked`; and Agilease is `ineligible`.
 
-## Candidate-input provenance and correction
+## Frozen provider universe
 
-Version 1.0.0 incorrectly described the list as fully representing the fixed 20 July 2026 snapshot. Every provider ID, name, and record count in this register actually came from a **non-versioned local scratch directory** discovered during the follow-up audit: `/private/tmp/findleasing-private.UEJalY`. It contained 45 JSON pages, 4,495 records, and 98 distinct `dealer.id` values; its directory modification time is `2026-07-20 21:03:10 +0200`, its listing publication times range through `2026-07-20T17:16:05+02:00`, and the concatenated-page SHA-256 is `0ffbaa572aee84900b9185c098866a031014eeee8ddce1abc7f949e3b69c9f34`.
+The versioned [provider-universe manifest](findleasing-private-provider-universe-2026-07-20.md) is the authoritative input for this research. It contains exactly the provider ID, canonical name, and private-filtered record count needed to define the universe; it records the capture provenance, the 45-page / 4,495-record aggregate, the source endpoint identity, the raw-capture hash, deterministic canonicalization, and its canonical-row checksum.
 
-That directory is not a repository artifact, does not provide a capture manifest, and will not exist for a fresh clone. The committed [provider-landscape and acquisition-routes research](provider-landscape-and-acquisition-routes.md) records the matching aggregate but not the 98 names/IDs or raw pages. A later live endpoint response reported 4,479 rather than 4,495 records, so the live API must **not** be used to reconstruct or validate this candidate list. The row count is therefore a local-capture fact, not a supported claim that the ticket’s frozen universe has been fully represented.
-
-The two Lokal Leasing rows are retained only because that local capture contained distinct provider IDs 345 and 643. No new source capture was created, ingested, or committed by this work.
+FindLeasing remains **discovery-only and not an authorized offer source**. The raw listing documents are intentionally not committed. No live endpoint response was used to define this universe, acquire offers, or replace the manifest.
 
 ## Method and policy
 
-One shallow assessment was made per provider record in the provisional local-capture list on 21 July 2026. It: (1) opened the provider’s recorded first-party site; (2) followed at most two first-party links whose path indicated leasing/private/car inventory; (3) recorded explicit private-leasing and car wording when present; (4) retrieved `robots.txt` once; and (5) recorded one linked published terms/privacy/cookie page when discoverable. A public 200 response is not itself proof of private scope. No log-in, CAPTCHA, WAF, rate limit, private endpoint, third-party embed, or search/aggregator route was bypassed.
+One shallow assessment was made per provider record in the frozen manifest on 21 July 2026. It: (1) opened the provider’s recorded first-party site; (2) followed at most two first-party links whose path indicated leasing/private/car inventory; (3) recorded explicit private-leasing and car wording when present; (4) retrieved `robots.txt` once; and (5) recorded one linked published terms/privacy/cookie page when discoverable. A public 200 response is not itself proof of private scope. No log-in, CAPTCHA, WAF, rate limit, private endpoint, third-party embed, or search/aggregator route was bypassed.
 
 `eligible` means the shallow scan found first-party private-leasing and passenger-car/inventory wording on an accessible public route, with no observed applicable opt-out. `blocked` means qualifying evidence exists but a published/direct access boundary stops use. `ineligible` means first-party material disproves current private passenger-car scope. `deferred` means the shallow evidence is insufficient, the route is unavailable, or the complete offer depends on a third party. Absent commercial terms are recorded as “not found”, not treated as consent. Robots rules were evaluated only for the observed public source route; bot-specific exclusions that did not govern that route are noted as non-applicable.
 
@@ -28,7 +26,7 @@ One shallow assessment was made per provider record in the provisional local-cap
 
 **Terms key:** “not found” means no commercial terms link was discovered in the one-pass first-party scan; a linked privacy/cookie page is recorded only as the published policy located, not as commercial permission. **Access key:** “public 200” means the source was viewable without authentication in this audit; it does not grant a content-reuse licence.
 
-| ID | Provisional local-capture provider (records) | First-party scope evidence / best plausible offer source | Terms and robots checked once | Access / dependency | Assessment |
+| ID | Frozen-manifest provider (records) | First-party scope evidence / best plausible offer source | Terms and robots checked once | Access / dependency | Assessment |
 | ---: | --- | --- | --- | --- | --- |
 | 338 | Agilease A/S (102) | First-party Agilease offer and product copy frame leasing for companies and show ex-VAT prices; no private offer was found. [Source](https://agilease.dk/biler/bmw-ix3-impressive-c9b5f686) | [published policy](https://agilease.dk/cookiepolitik); [robots 200](https://agilease.dk/robots.txt) | public 200; unauthenticated. No third-party dependency used. | `ineligible` |
 | 890 | Aksel.nu ApS (13) | The linked first-party route associated private-leasing wording with car/inventory content in the shallow text scan; it needs offer-level confirmation. [Source](https://aksel.nu/leasing-biler/) | [published policy](https://aksel.nu/cookiepolitik/); [robots 200](https://aksel.nu/robots.txt) | public 200; unauthenticated. No required third-party offer source observed. | `eligible` |
@@ -131,7 +129,7 @@ One shallow assessment was made per provider record in the provisional local-cap
 
 ## Consequences for the initial cross-form pilot
 
-- If/when the frozen input is preserved, use Fleasing’s first-party detail HTML and Terminalen’s model price pages as the two previously human-reviewed pilot routes; validate individual leasing offers separately before catalogue admission.
+- Use Fleasing’s first-party detail HTML and Terminalen’s model price pages as the two previously human-reviewed pilot routes; validate individual leasing offers separately before catalogue admission.
 - Do not collect Clevr Car or Bertelsen Leasing without a provider feed or explicit written authorization that resolves the WAF/security boundary.
 - Do not use Kvalitetsbiler’s FindLeasing iframe or the FindLeasing listing API. A first-party feed or provider-supplied static contract data is needed.
 - Exclude Agilease from private passenger-car work unless it publishes a current qualifying private offer.
@@ -139,8 +137,8 @@ One shallow assessment was made per provider record in the provisional local-cap
 
 ## Limitations
 
-- This is a provisional-local-capture, shallow source-access assessment—not a validated fixed-universe assessment, offer-level validation, an extraction design, legal advice, or an assertion of market coverage.
+- This is a frozen-universe, shallow source-access assessment—not offer-level validation, an extraction design, legal advice, or an assertion of market coverage.
 - Provider pages and access rules change; the assessment date is part of every conclusion. `eligible` does not authorize republishing content or make a provider a covered provider.
-- The non-versioned local capture contains both private-only and mixed private/business records and may include non-passenger inventory. Its count is not a durable discovery snapshot.
+- The committed manifest intentionally retains only the minimal derived provider universe. It cannot be used to inspect, acquire, enrich, display, or republish FindLeasing offers, and the raw listing corpus is intentionally absent.
 - Several providers expose only marketing or generic inventory pages in this pass. They remain `deferred` even where the aggregator had private-filtered records; the aggregator cannot fill the evidentiary gap.
 
