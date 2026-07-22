@@ -1,0 +1,16 @@
+{
+  "url": "/nye-biler/hyundai/hyundai-inster/pris-og-udstyr",
+  "template": "modelSubpage",
+  "pimModelId": "HY_INSTER",
+  "vehicleData": {"brand": "Hyundai", "model": "INSTER"},
+  "grid": [{"content": [
+    {"alias": "anchor", "anchorId": "privatleasing"},
+    {"alias": "headline", "title": "Privatlease INSTER"},
+    {"alias": "imagetextpicker", "columns": [
+      {"title": "Lav udbetaling", "text": "<h2>3.095 kr./md.</h2><p>Udbetaling: 4.995 kr.<br>Periode: 36 mdr.<br>Samlet betaling i perioden: 117.195 kr.</p>"},
+      {"title": "Lav månedlig ydelse", "text": "<h2>2.795 kr./md.</h2><p>Udbetaling: 49.995 kr.<br>Periode: 36 mdr.<br>Samlet betaling i perioden: 151.395 kr.</p>"}
+    ]},
+    {"alias": "richtext", "text": "<p>Alle beløb er inkl. moms. Priseksemplerne er baseret på 36 mdr. med 10.000 km/år. Samlet betaling er inkl. alle fabriksanbefalede services samt gebyr på 650 kr. som dækker inspektionen ved udløb. Gebyret opkræves sammen med sidste ydelse. Prisen er ekskl. CO2-afgift, forsikring og ekstra dæk.</p>"},
+    {"alias": "imagetextpicker", "columns": [{"title": "Privatleasing", "text": "<p>Når leasingaftalen udløber, afleverer du bilen hos os, og du skal ikke håndtere et videresalg eller bekymre dig om værditab.</p>"}]}
+  ]}]
+}

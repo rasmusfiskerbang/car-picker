@@ -4,7 +4,7 @@ The production tracer bullet builds a static Danish catalogue from a
 schema-versioned canonical catalogue dataset:
 
 ```sh
-python3 -m car_picker refresh-fleasing --dataset var/catalogue-dataset.json
+python3 -m car_picker refresh-catalogue --dataset var/catalogue-dataset.json
 python3 -m car_picker build-site --dataset var/catalogue-dataset.json --output site
 python3 -m http.server --directory site 4173
 ```
