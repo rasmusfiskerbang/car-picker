@@ -56,6 +56,10 @@ _Avoid_: Bad offer, excluded listing
 A Danish leasing company whose publicly available private-leasing offers are included in the tool's declared source scope.
 _Avoid_: Dealer, the market, all providers
 
+**Provider assessment register**:
+The record of candidate providers evaluated for source access, each marked `eligible`, `blocked`, `ineligible`, or `deferred` with its reason, relevant source URLs, and assessment date. It distinguishes an accessible qualifying source, a qualifying source stopped by an explicit access boundary, first-party evidence disproving current private passenger-car scope, and evidence too weak for a conclusion; none of these statuses implies active catalogue coverage.
+_Avoid_: Coverage register, exclusion list, covered-provider list
+
 **Catalogue dataset**:
 The complete active representation of catalogue candidates from every covered provider, produced by one successful all-provider refresh. It has one generation timestamp and remains active until another dataset is built and validated as a unit, then atomically replaces and deletes its predecessor. A failure for any provider rejects the replacement and leaves the active dataset unchanged. No historical datasets or cross-refresh offer records are retained.
 _Avoid_: Provider snapshot, incremental update, mixed-age catalogue, revision history, live market
