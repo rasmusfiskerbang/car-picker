@@ -134,6 +134,10 @@ def map_detail_page(
         "annualMileageKm": not_stated_fact(discovered_offer.url, detail.private_tab_fragment),
         "normalEndMechanism": not_stated_fact(discovered_offer.url, detail.private_tab_fragment),
         "residualRiskAllocation": residual_risk_allocation_fact(detail.private_terms, discovered_offer.url),
+        "registrationTaxTreatment": not_stated_fact(discovered_offer.url, detail.private_tab_fragment),
+        "serviceArrangements": not_stated_fact(discovered_offer.url, detail.private_tab_fragment),
+        "exclusions": not_stated_fact(discovered_offer.url, detail.private_tab_fragment),
+        "exposureScenarios": not_stated_fact(discovered_offer.url, detail.private_tab_fragment),
         "sourceMetadata": source_metadata,
     }
     reasons = admission_reasons(candidate)

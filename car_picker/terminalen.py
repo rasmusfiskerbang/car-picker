@@ -186,10 +186,12 @@ def map_configuration(
         "annualMileageKm": mileage,
         "normalEndMechanism": normal_end_fact(api_url, end_wording),
         "residualRiskAllocation": residual_risk_fact(api_url, end_wording),
+        "registrationTaxTreatment": not_stated(api_url, legal_wording),
         "baseCashFlowStream": events,
         "baseCashFlowBlockers": blockers,
         "serviceArrangements": service_arrangements_fact(api_url, legal_wording),
         "exclusions": exclusions_fact(api_url, legal_wording),
+        "exposureScenarios": not_stated(api_url, legal_wording),
         "sourceMetadata": {"parserVersion": PARSER_VERSION, "documents": documents},
         "admissionStatus": "quarantined",
     }

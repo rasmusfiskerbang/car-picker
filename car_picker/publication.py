@@ -51,9 +51,15 @@ PRESENTATION_SCHEMA: dict[str, Any] = {
                 "required": [
                     "offerIdentity",
                     "provider",
+                    "providerSourceUrl",
                     "vehicleSpecification",
                     "supportedLeasingForm",
+                    "providerFormLabel",
                     "residualRiskAllocation",
+                    "registrationTaxTreatment",
+                    "serviceArrangements",
+                    "exclusions",
+                    "exposureScenarios",
                     "advertisedMonthlyPayment",
                     "upfrontCashRequirement",
                     "nominalBaseOutlay",
@@ -65,9 +71,15 @@ PRESENTATION_SCHEMA: dict[str, Any] = {
                 "properties": {
                     "offerIdentity": {"type": "string"},
                     "provider": {"type": "string"},
+                    "providerSourceUrl": {"type": "string"},
                     "vehicleSpecification": {"$ref": "#/$defs/valueFact"},
                     "supportedLeasingForm": {"$ref": "#/$defs/valueFact"},
+                    "providerFormLabel": {"$ref": "#/$defs/valueFact"},
                     "residualRiskAllocation": {"$ref": "#/$defs/valueFact"},
+                    "registrationTaxTreatment": {"$ref": "#/$defs/valueFact"},
+                    "serviceArrangements": {"$ref": "#/$defs/serviceListFact"},
+                    "exclusions": {"$ref": "#/$defs/serviceListFact"},
+                    "exposureScenarios": {"$ref": "#/$defs/exposureListFact"},
                     "advertisedMonthlyPayment": {"$ref": "#/$defs/moneyFact"},
                     "upfrontCashRequirement": {"$ref": "#/$defs/moneyFact"},
                     "nominalBaseOutlay": {"$ref": "#/$defs/moneyFact"},
@@ -112,6 +124,44 @@ PRESENTATION_SCHEMA: dict[str, Any] = {
                 "state": {"enum": sorted(FACT_STATES)},
                 "value": {"type": ["string", "integer"]},
                 "evidence": {"$ref": "#/$defs/evidence"},
+            },
+        },
+        "serviceListFact": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["state", "evidence"],
+            "properties": {
+                "state": {"enum": sorted(FACT_STATES)},
+                "value": {"type": "array", "items": {"$ref": "#/$defs/serviceArrangement"}},
+                "evidence": {"$ref": "#/$defs/evidence"},
+            },
+        },
+        "serviceArrangement": {
+            "type": "object", "additionalProperties": False,
+            "required": ["category", "treatment", "scope"],
+            "properties": {
+                "category": {"type": "string"},
+                "treatment": {"enum": ["included", "optional", "required_external", "excluded"]},
+                "scope": {"type": "string"},
+            },
+        },
+        "exposureListFact": {
+            "type": "object", "additionalProperties": False,
+            "required": ["state", "evidence"],
+            "properties": {
+                "state": {"enum": sorted(FACT_STATES)},
+                "value": {"type": "array", "items": {"$ref": "#/$defs/exposureScenario"}},
+                "evidence": {"$ref": "#/$defs/evidence"},
+            },
+        },
+        "exposureScenario": {
+            "type": "object", "additionalProperties": False,
+            "required": ["kind", "trigger", "requiredInputs"],
+            "properties": {
+                "kind": {"type": "string"}, "trigger": {"type": "string"},
+                "requiredInputs": {"type": "array", "items": {"type": "string"}},
+                "formula": {"type": "string"}, "amountDkk": {"type": "integer", "minimum": 0},
+                "rateDkk": {"type": "integer", "minimum": 0}, "capDkk": {"type": "integer", "minimum": 0},
             },
         },
         "cashFlowEvent": {
@@ -187,9 +237,15 @@ def project_offer(offer: Mapping[str, Any]) -> dict[str, Any]:
     projected_offer = {
         "offerIdentity": string_value(offer, "offerIdentity"),
         "provider": string_value(offer, "provider"),
+        "providerSourceUrl": derived_value_source_url(offer),
         "vehicleSpecification": project_vehicle_specification(offer.get("vehicleSpecification")),
         "supportedLeasingForm": project_value_fact(offer.get("supportedLeasingForm")),
+        "providerFormLabel": project_provider_form_label(offer.get("supportedLeasingForm")),
         "residualRiskAllocation": project_value_fact(offer.get("residualRiskAllocation")),
+        "registrationTaxTreatment": project_registration_tax_fact(offer.get("registrationTaxTreatment")),
+        "serviceArrangements": project_list_fact(offer.get("serviceArrangements"), valid_service_arrangement),
+        "exclusions": project_list_fact(offer.get("exclusions"), valid_service_arrangement),
+        "exposureScenarios": project_list_fact(offer.get("exposureScenarios"), valid_exposure_scenario),
         "advertisedMonthlyPayment": project_money_fact(offer.get("advertisedMonthlyPayment")),
         "upfrontCashRequirement": project_derived_money_fact(comparison_values["upfrontCashRequirement"], offer),
         "nominalBaseOutlay": project_derived_money_fact(comparison_values["nominalBaseOutlay"], offer),
@@ -361,6 +417,51 @@ def project_value_fact(value: Any) -> dict[str, Any]:
     )
 
 
+def project_provider_form_label(value: Any) -> dict[str, Any]:
+    fact = project_fact(value)
+    if fact["state"] == "known":
+        fact["value"] = fact["evidence"]["wording"]
+    return fact
+
+
+def project_registration_tax_fact(value: Any) -> dict[str, Any]:
+    return project_known_value_fact(
+        value, "value", lambda known_value: known_value in {"full", "proportional"},
+        "Known registration-tax treatment must be full or proportional",
+    )
+
+
+def project_list_fact(value: Any, valid_item: Callable[[Mapping[str, Any]], bool]) -> dict[str, Any]:
+    fact = project_fact(value)
+    if fact["state"] == "known":
+        items = list_value(object_value(value, "offer fact").get("value"), "offer fact value")
+        if not all(isinstance(item, Mapping) and valid_item(item) for item in items):
+            raise ValueError("Known detail facts require supported structured values")
+        fact["value"] = [dict(item) for item in items]
+    return fact
+
+
+def valid_service_arrangement(value: Mapping[str, Any]) -> bool:
+    return (
+        all(isinstance(value.get(field), str) and value[field] for field in ("category", "treatment", "scope"))
+        and value["treatment"] in {"included", "optional", "required_external", "excluded"}
+    )
+
+
+def valid_exposure_scenario(value: Mapping[str, Any]) -> bool:
+    inputs = value.get("requiredInputs")
+    return (
+        all(isinstance(value.get(field), str) and value[field] for field in ("kind", "trigger"))
+        and isinstance(inputs, list)
+        and all(isinstance(item, str) and item for item in inputs)
+        and all(
+            key not in value or (isinstance(value[key], int) and not isinstance(value[key], bool) and value[key] >= 0)
+            for key in ("amountDkk", "rateDkk", "capDkk")
+        )
+        and ("formula" not in value or (isinstance(value["formula"], str) and value["formula"]))
+    )
+
+
 def project_known_value_fact(
     value: Any,
     value_key: str,
@@ -401,10 +502,13 @@ def validate_presentation_projection(projection: Mapping[str, Any]) -> None:
     offers = list_value(projection.get("offers"), "offers")
     for offer in offers:
         projection_offer = object_value(offer, "presentation offer")
-        for field_name in ("offerIdentity", "provider"):
+        for field_name in ("offerIdentity", "provider", "providerSourceUrl"):
             string_value(projection_offer, field_name)
-        for field_name in ("vehicleSpecification", "supportedLeasingForm", "residualRiskAllocation"):
+        for field_name in ("vehicleSpecification", "supportedLeasingForm", "providerFormLabel", "residualRiskAllocation"):
             validate_projected_fact(projection_offer.get(field_name), "value")
+        validate_projected_fact(projection_offer.get("registrationTaxTreatment"), "value")
+        for field_name in ("serviceArrangements", "exclusions", "exposureScenarios"):
+            validate_projected_list_fact(projection_offer.get(field_name))
         for field_name in (
             "advertisedMonthlyPayment",
             "upfrontCashRequirement",
@@ -429,6 +533,18 @@ def validate_projected_fact(value: Any, value_key: str) -> None:
     string_value(evidence, "wording")
     if state == "known" and value_key not in fact:
         raise ValueError(f"Known presentation offer fact requires {value_key}")
+
+
+def validate_projected_list_fact(value: Any) -> None:
+    fact = object_value(value, "presentation list fact")
+    state = string_value(fact, "state")
+    if state not in FACT_STATES:
+        raise ValueError(f"Unknown presentation fact state: {state}")
+    evidence = object_value(fact.get("evidence"), "source evidence")
+    string_value(evidence, "sourceUrl")
+    string_value(evidence, "wording")
+    if state == "known":
+        list_value(fact.get("value"), "known presentation list fact value")
 
 
 def validate_projected_cash_flow_event(event: Mapping[str, Any]) -> None:
@@ -715,6 +831,10 @@ function residualRiskLabel(value) {{
   return value === "provider" ? "Udbyderen bærer risikoen" : value === "lessee" ? "Den kommende leasingtager bærer risikoen" : value;
 }}
 
+function registrationTaxLabel(value) {{
+  return value === "full" ? "Betalt fuldt" : value === "proportional" ? "Betales forholdsmæssigt" : value;
+}}
+
 function renderOffers(container, offers, filters) {{
   const visibleOffers = offers.filter((offer) => matchesFilters(offer, filters));
   container.replaceChildren(...visibleOffers.map(offerCard));
@@ -768,9 +888,10 @@ function offerCard(offer) {{
     factRow("Nominelt månedligt gennemsnit", offer.nominalMonthlyEquivalent, money, "Beregnet af tjenesten"),
     factRow("Fuld løbetid", offer.termMonths, (value) => `${{value}} måneder`),
     factRow("Kilometer om året", offer.annualMileageKm, (value) => `${{formatNumber(value)}} km`),
-    factRow("Normal afslutning", offer.normalEndMechanism, String),
+    factRow("Normal afslutning", offer.normalEndMechanism, endMechanismLabel),
   );
   card.append(facts);
+  card.append(offerDetail(offer));
   if (offer.cashFlowBreakdown && offer.cashFlowBreakdown.length > 0) card.append(cashFlowBreakdown(offer.cashFlowBreakdown, offer));
   return card;
 }}
@@ -780,7 +901,78 @@ function vehicleLabel(fact) {{
 }}
 
 function endSentence(fact) {{
-  return fact.state === "known" ? fact.value : `Normal afslutning: ${{factLabels[fact.state]}}.`;
+  return fact.state === "known" ? endMechanismLabel(fact.value) : `Normal afslutning: ${{unavailableFactText(fact)}}`;
+}}
+
+function endMechanismLabel(value) {{
+  const labels = {{
+    return_to_provider: "Bilen afleveres til udbyderen ved normal udløb.",
+    designate_third_party_buyer: "Den kommende leasingtager skal anvise en tredjepartskøber ved normal udløb.",
+    mandatory_purchase_or_payoff: "Den kommende leasingtager skal købe bilen eller betale den aftalte restforpligtelse ved normal udløb.",
+  }};
+  return labels[value] || "Udbyderen har ikke beskrevet en normal afslutning med en standardiseret mekanisme.";
+}}
+
+function offerDetail(offer) {{
+  const detail = document.createElement("details");
+  detail.className = "offer-detail";
+  detail.append(text("summary", "Se aftalens vilkår, usikkerheder og kilder"));
+  const content = document.createElement("section");
+  content.append(
+    heading("Normal afslutning", 4),
+    factRow("Normal afslutning", offer.normalEndMechanism, endMechanismLabel),
+    factRow("Restværdirisiko", offer.residualRiskAllocation, residualRiskLabel),
+    factRow("Registreringsafgift", offer.registrationTaxTreatment, registrationTaxLabel),
+    factRow("Udbyderens formbetegnelse", offer.providerFormLabel, String),
+    heading("Service og eksterne omkostninger", 4),
+    listFact("Serviceordninger", offer.serviceArrangements, serviceArrangementText),
+    listFact("Udelukket eller eksternt", offer.exclusions, serviceArrangementText),
+    heading("Betingede eksponeringer", 4),
+    listFact("Mulige betalinger", offer.exposureScenarios, exposureText),
+    providerSource(offer),
+  );
+  detail.append(content);
+  return detail;
+}}
+
+function listFact(label, fact, itemText) {{
+  const section = document.createElement("section");
+  section.className = "detail-fact";
+  section.append(heading(label, 5));
+  if (fact.state === "known") {{
+    const list = document.createElement("ul");
+    fact.value.forEach((item) => list.append(text("li", itemText(item))));
+    section.append(list);
+  }} else {{
+    section.append(text("p", unavailableFactText(fact)));
+  }}
+  section.append(evidenceDetails(label, fact));
+  return section;
+}}
+
+function serviceArrangementText(item) {{
+  const treatments = {{ included: "inkluderet", optional: "valgfri", required_external: "påkrævet eksternt", excluded: "udelukket" }};
+  return `${{item.category}}: ${{treatments[item.treatment] || item.treatment}}. ${{item.scope}}`;
+}}
+
+function exposureText(item) {{
+  const values = [];
+  if (item.formula) values.push(item.formula);
+  if (item.rateDkk !== undefined) values.push(`${{money(item.rateDkk)}} pr. enhed`);
+  if (item.capDkk !== undefined) values.push(`loft ${{money(item.capDkk)}}`);
+  if (item.amountDkk !== undefined) values.push(`fast beløb ${{money(item.amountDkk)}}`);
+  const inputs = item.requiredInputs.length ? ` Kræver: ${{item.requiredInputs.join(", ")}}.` : " Beløb er ikke oplyst.";
+  return `${{item.kind}}: ${{item.trigger}}${{inputs}}${{values.length ? ` Regel: ${{values.join(", ")}}.` : ""}}`;
+}}
+
+function providerSource(offer) {{
+  const paragraph = text("p", "Kontrollér altid aktuel pris og vilkår hos udbyderen.");
+  const link = document.createElement("a");
+  link.href = offer.providerSourceUrl;
+  link.textContent = "Åbn udbyderens førstehåndskilde";
+  link.rel = "noreferrer";
+  paragraph.append(" ", link);
+  return paragraph;
 }}
 
 function factRow(label, fact, formatter, origin = "Oplyst af udbyderen") {{
@@ -790,6 +982,12 @@ function factRow(label, fact, formatter, origin = "Oplyst af udbyderen") {{
   const value = document.createElement("dd");
   value.textContent = fact.state === "known" ? formatter(fact.valueDkk ?? fact.value) : unavailableFactText(fact);
   const originLabel = text("p", origin, "fact-origin");
+  const evidence = evidenceDetails(label, fact);
+  row.append(title, value, originLabel, evidence);
+  return row;
+}}
+
+function evidenceDetails(label, fact) {{
   const evidence = document.createElement("details");
   const summary = document.createElement("summary");
   summary.textContent = `Kilde for ${{label}}`;
@@ -799,14 +997,19 @@ function factRow(label, fact, formatter, origin = "Oplyst af udbyderen") {{
   link.textContent = "Åbn udpeget førstehåndskilde";
   link.rel = "noreferrer";
   evidence.append(summary, wording, link);
-  row.append(title, value, originLabel, evidence);
-  return row;
+  return evidence;
 }}
 
 function unavailableFactText(fact) {{
   const blockers = (fact.blockingFacts || []).map(blockingFactLabel);
-  const stateLabel = factLabels[fact.state] || "Ikke oplyst";
-  return blockers.length ? `${{stateLabel}} — mangler: ${{blockers.join(", ")}}` : stateLabel;
+  const explanations = {{
+    not_stated: "Ikke oplyst af udbyderen.",
+    unclear: "Udbyderens formulering kan ikke tolkes sikkert.",
+    conflicting: "Kilderne modsiger hinanden.",
+    not_applicable: "Ikke relevant for dette tilbud.",
+  }};
+  const stateText = explanations[fact.state] || factLabels[fact.state] || "Ikke oplyst";
+  return blockers.length ? `${{stateText}} Mangler: ${{blockers.join(", ")}}.` : stateText;
 }}
 
 function blockingFactLabel(value) {{
@@ -967,7 +1170,11 @@ dd { margin: .25rem 0 .4rem; font-weight: 700; }
 .fact-origin { margin: -.15rem 0 .45rem; color: #52645b; font-size: .78rem; }
 details { font-size: .875rem; color: #52645b; }
 details p { margin: .5rem 0; }
-.cash-flow-breakdown { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid #e7ebe6; }
+.cash-flow-breakdown, .offer-detail { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid #e7ebe6; }
+.offer-detail > summary { font-weight: 700; cursor: pointer; }
+.offer-detail section { margin-top: 1rem; }
+.offer-detail h4, .offer-detail h5 { margin: 1rem 0 .4rem; }
+.detail-fact ul { margin: .35rem 0; padding-left: 1.2rem; }
 .cash-flow-breakdown ul { margin: .65rem 0 0; padding-left: 1.2rem; }
 .cash-flow-breakdown li + li { margin-top: .45rem; }
 .calculation-equations { margin-top: 1rem; }

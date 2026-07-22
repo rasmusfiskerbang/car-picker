@@ -45,6 +45,7 @@ class BuildSiteTest(unittest.TestCase):
             {
                 "offerIdentity": "terminalen:ioniq-5:essential-84",
                 "provider": "Terminalen",
+                "providerSourceUrl": "https://example.test/ioniq-5",
                 "vehicleSpecification": {
                     "state": "known",
                     "value": "Hyundai IONIQ 5 Essential 84 kWh",
@@ -61,6 +62,14 @@ class BuildSiteTest(unittest.TestCase):
                         "wording": "Privatleasing med aflevering ved udløb.",
                     },
                 },
+                "providerFormLabel": {
+                    "state": "known",
+                    "value": "Privatleasing med aflevering ved udløb.",
+                    "evidence": {
+                        "sourceUrl": "https://example.test/ioniq-5",
+                        "wording": "Privatleasing med aflevering ved udløb.",
+                    },
+                },
                 "residualRiskAllocation": {
                     "state": "known",
                     "value": "provider",
@@ -68,6 +77,25 @@ class BuildSiteTest(unittest.TestCase):
                         "sourceUrl": "https://example.test/ioniq-5",
                         "wording": "Udbyderen bærer værditabet.",
                     },
+                },
+                "registrationTaxTreatment": {
+                    "state": "known", "value": "full",
+                    "evidence": {"sourceUrl": "https://example.test/ioniq-5", "wording": "Registreringsafgiften er betalt fuldt."},
+                },
+                "serviceArrangements": {
+                    "state": "known", "value": [{"category": "service", "treatment": "included", "scope": "Alle fabriksanbefalede services."}],
+                    "evidence": {"sourceUrl": "https://example.test/ioniq-5", "wording": "Inkl. alle fabriksanbefalede services."},
+                },
+                "exclusions": {
+                    "state": "known", "value": [{"category": "insurance", "treatment": "required_external", "scope": "Forsikring aftales og betales særskilt."}],
+                    "evidence": {"sourceUrl": "https://example.test/ioniq-5", "wording": "Forsikring er ikke inkluderet."},
+                },
+                "exposureScenarios": {
+                    "state": "known", "value": [
+                        {"kind": "excess_mileage", "trigger": "Hvis kilometergrænsen overskrides.", "requiredInputs": ["Ekstra kilometer"], "rateDkk": 2},
+                        {"kind": "damage", "trigger": "Hvis bilen afleveres med skader ud over normal slitage.", "requiredInputs": []},
+                    ],
+                    "evidence": {"sourceUrl": "https://example.test/ioniq-5", "wording": "Overkørte kilometer afregnes med 2 kr. pr. km; skader kan medføre betaling."},
                 },
                 "advertisedMonthlyPayment": {
                     "state": "known",
@@ -119,7 +147,7 @@ class BuildSiteTest(unittest.TestCase):
                 },
                 "normalEndMechanism": {
                     "state": "known",
-                    "value": "Bilen afleveres ved normal udløb.",
+                    "value": "return_to_provider",
                     "evidence": {
                         "sourceUrl": "https://example.test/ioniq-5",
                         "wording": "Bilen afleveres ved leasingperiodens udløb.",
