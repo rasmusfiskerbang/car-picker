@@ -8,6 +8,8 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
+from car_picker.comparison import calculate_comparison_values, is_time_ordered
+
 
 PRESENTATION_SCHEMA_VERSION = "catalogue-presentation/v1"
 FACT_STATES = {"known", "not_stated", "unclear", "conflicting", "not_applicable"}
@@ -71,6 +73,10 @@ PRESENTATION_SCHEMA: dict[str, Any] = {
                     "termMonths": {"$ref": "#/$defs/valueFact"},
                     "annualMileageKm": {"$ref": "#/$defs/valueFact"},
                     "normalEndMechanism": {"$ref": "#/$defs/valueFact"},
+                    "cashFlowBreakdown": {
+                        "type": "array",
+                        "items": {"$ref": "#/$defs/cashFlowEvent"},
+                    },
                 },
             },
         },
@@ -93,6 +99,7 @@ PRESENTATION_SCHEMA: dict[str, Any] = {
                 "state": {"enum": sorted(FACT_STATES)},
                 "valueDkk": {"type": "integer"},
                 "evidence": {"$ref": "#/$defs/evidence"},
+                "blockingFacts": {"type": "array", "items": {"type": "string"}},
             },
         },
         "valueFact": {
@@ -102,6 +109,22 @@ PRESENTATION_SCHEMA: dict[str, Any] = {
             "properties": {
                 "state": {"enum": sorted(FACT_STATES)},
                 "value": {"type": ["string", "integer"]},
+                "evidence": {"$ref": "#/$defs/evidence"},
+            },
+        },
+        "cashFlowEvent": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["meaning", "direction", "amountDkk", "amountBasis", "timing", "recurrenceCount", "refundability", "evidence"],
+            "properties": {
+                "meaning": {"type": "string"},
+                "direction": {"type": "string"},
+                "amountDkk": {"type": ["integer", "null"]},
+                "amountBasis": {"type": "string"},
+                "timing": {"type": "string"},
+                "recurrenceCount": {"type": ["integer", "null"], "minimum": 1},
+                "refundability": {"type": "string"},
+                "blockingFacts": {"type": "array", "items": {"type": "string"}},
                 "evidence": {"$ref": "#/$defs/evidence"},
             },
         },
@@ -158,19 +181,146 @@ def project_provider(provider: Mapping[str, Any]) -> dict[str, Any]:
 
 def project_offer(offer: Mapping[str, Any]) -> dict[str, Any]:
     require_equal(offer, "admissionStatus", "admitted")
-    return {
+    comparison_values = calculate_comparison_values(offer)
+    projected_offer = {
         "offerIdentity": string_value(offer, "offerIdentity"),
         "provider": string_value(offer, "provider"),
         "vehicleSpecification": project_vehicle_specification(offer.get("vehicleSpecification")),
         "supportedLeasingForm": project_value_fact(offer.get("supportedLeasingForm")),
         "advertisedMonthlyPayment": project_money_fact(offer.get("advertisedMonthlyPayment")),
-        "upfrontCashRequirement": project_money_fact(offer.get("upfrontCashRequirement")),
-        "nominalBaseOutlay": project_money_fact(offer.get("nominalBaseOutlay")),
-        "nominalMonthlyEquivalent": project_money_fact(offer.get("nominalMonthlyEquivalent")),
+        "upfrontCashRequirement": project_derived_money_fact(comparison_values["upfrontCashRequirement"], offer),
+        "nominalBaseOutlay": project_derived_money_fact(comparison_values["nominalBaseOutlay"], offer),
+        "nominalMonthlyEquivalent": project_derived_money_fact(comparison_values["nominalMonthlyEquivalent"], offer),
         "termMonths": project_value_fact(offer.get("termMonths")),
         "annualMileageKm": project_value_fact(offer.get("annualMileageKm")),
         "normalEndMechanism": project_value_fact(offer.get("normalEndMechanism")),
     }
+    if isinstance(offer.get("baseCashFlowStream"), list):
+        breakdown = project_cash_flow_breakdown(offer["baseCashFlowStream"])
+        if breakdown:
+            projected_offer["cashFlowBreakdown"] = breakdown
+    return projected_offer
+
+
+def project_derived_money_fact(value: Mapping[str, Any], offer: Mapping[str, Any]) -> dict[str, Any]:
+    evidence = {
+        "sourceUrl": derived_value_source_url(offer),
+        "wording": "Beregnet af tjenesten fra betalingsstrømmen.",
+    }
+    if value["state"] == "known":
+        return {"state": "known", "valueDkk": value["valueDkk"], "evidence": evidence}
+    return {"state": "not_stated", "evidence": evidence, "blockingFacts": value["blockingFacts"]}
+
+
+def derived_value_source_url(offer: Mapping[str, Any]) -> str:
+    canonical_url = offer.get("canonicalOfferUrl")
+    if isinstance(canonical_url, str) and canonical_url:
+        return canonical_url
+    events = offer.get("baseCashFlowStream")
+    if isinstance(events, list):
+        for event in events:
+            if not isinstance(event, Mapping):
+                continue
+            evidence = event.get("evidence")
+            source_url = evidence.get("sourceUrl") if isinstance(evidence, Mapping) else None
+            if isinstance(source_url, str) and source_url:
+                return source_url
+    for field_name in ("upfrontCashRequirement", "nominalBaseOutlay", "nominalMonthlyEquivalent"):
+        fact = offer.get(field_name)
+        if isinstance(fact, Mapping):
+            evidence = fact.get("evidence")
+            if isinstance(evidence, Mapping):
+                source_url = evidence.get("sourceUrl")
+                if isinstance(source_url, str) and source_url:
+                    return source_url
+    raise ValueError("base cash-flow stream requires at least one source URL")
+
+
+def project_cash_flow_breakdown(events: list[Any]) -> list[dict[str, Any]]:
+    if not all(isinstance(event, Mapping) for event in events):
+        return []
+    event_rows = [event for event in events if isinstance(event, Mapping)]
+    if not is_time_ordered(event_rows) or not all(cash_flow_event_has_presentation_shape(event) for event in event_rows):
+        return []
+    return [
+        project_cash_flow_event(event)
+        for event in event_rows
+    ]
+
+
+def cash_flow_event_has_presentation_shape(event: Mapping[str, Any]) -> bool:
+    required_strings = ("meaning", "direction", "amountBasis", "timing", "refundability")
+    evidence = event.get("evidence")
+    return (
+        all(isinstance(event.get(field), str) and event[field] for field in required_strings)
+        and isinstance(evidence, Mapping)
+        and isinstance(evidence.get("sourceUrl"), str)
+        and bool(evidence["sourceUrl"])
+        and isinstance(evidence.get("wording"), str)
+        and bool(evidence["wording"])
+        and valid_or_missing_cash_flow_number(event.get("amountDkk"))
+        and valid_or_missing_recurrence_count(event.get("recurrenceCount", 1))
+        and (
+            (
+                event.get("amountDkk") is not None
+                and event.get("recurrenceCount", 1) is not None
+            )
+            or has_precise_blocking_facts(event.get("blockingFacts"))
+        )
+    )
+
+
+def has_precise_blocking_facts(value: Any) -> bool:
+    return isinstance(value, list) and bool(value) and all(isinstance(item, str) and item for item in value)
+
+
+def project_cash_flow_event(event: Mapping[str, Any]) -> dict[str, Any]:
+    amount, recurrence_count, blocking_facts = checked_cash_flow_event_values(event, "base cash-flow event")
+    evidence_value = object_value(event.get("evidence"), "base cash-flow evidence")
+    projected_event = {
+        "meaning": string_value(event, "meaning"),
+        "direction": string_value(event, "direction"),
+        "amountDkk": amount,
+        "amountBasis": amount_basis(event),
+        "timing": string_value(event, "timing"),
+        "recurrenceCount": recurrence_count,
+        "refundability": string_value(event, "refundability"),
+        "evidence": {
+            "sourceUrl": string_value(evidence_value, "sourceUrl"),
+            "wording": string_value(evidence_value, "wording"),
+        },
+    }
+    if blocking_facts:
+        projected_event["blockingFacts"] = blocking_facts
+    return projected_event
+
+
+def valid_or_missing_cash_flow_number(value: Any) -> bool:
+    return value is None or (isinstance(value, int) and not isinstance(value, bool) and value >= 0)
+
+
+def valid_or_missing_recurrence_count(value: Any) -> bool:
+    return value is None or (isinstance(value, int) and not isinstance(value, bool) and value >= 1)
+
+
+def checked_cash_flow_event_values(event: Mapping[str, Any], context: str) -> tuple[Any, Any, list[str]]:
+    recurrence_count = event.get("recurrenceCount", 1)
+    amount = event.get("amountDkk")
+    blocking_facts = string_list_value(event.get("blockingFacts", []), f"{context} blockingFacts")
+    if not valid_or_missing_recurrence_count(recurrence_count):
+        raise ValueError(f"{context} recurrenceCount must be a positive integer or null")
+    if not valid_or_missing_cash_flow_number(amount):
+        raise ValueError(f"{context} amountDkk must be a non-negative integer or null")
+    if (amount is None or recurrence_count is None) and not blocking_facts:
+        raise ValueError(f"missing {context} values require precise blocking facts")
+    return amount, recurrence_count, blocking_facts
+
+
+def amount_basis(event: Mapping[str, Any]) -> str:
+    basis = string_value(event, "amountBasis")
+    if basis not in {"including_vat", "excluding_vat", "not_stated"}:
+        raise ValueError("base cash-flow event amountBasis must be a supported amount basis")
+    return basis
 
 
 def admission_status(offer: Mapping[str, Any]) -> str:
@@ -261,6 +411,9 @@ def validate_presentation_projection(projection: Mapping[str, Any]) -> None:
             validate_projected_fact(projection_offer.get(field_name), "valueDkk")
         for field_name in ("termMonths", "annualMileageKm", "normalEndMechanism"):
             validate_projected_fact(projection_offer.get(field_name), "value")
+        if "cashFlowBreakdown" in projection_offer:
+            for event in list_value(projection_offer["cashFlowBreakdown"], "cashFlowBreakdown"):
+                validate_projected_cash_flow_event(object_value(event, "cash-flow event"))
 
 
 def validate_projected_fact(value: Any, value_key: str) -> None:
@@ -273,6 +426,16 @@ def validate_projected_fact(value: Any, value_key: str) -> None:
     string_value(evidence, "wording")
     if state == "known" and value_key not in fact:
         raise ValueError(f"Known presentation offer fact requires {value_key}")
+
+
+def validate_projected_cash_flow_event(event: Mapping[str, Any]) -> None:
+    for field_name in ("meaning", "direction", "timing", "refundability"):
+        string_value(event, field_name)
+    amount_basis(event)
+    checked_cash_flow_event_values(event, "cash-flow event")
+    evidence = object_value(event.get("evidence"), "cash-flow event evidence")
+    string_value(evidence, "sourceUrl")
+    string_value(evidence, "wording")
 
 
 def write_site_atomically(output_path: Path, projection: Mapping[str, Any]) -> None:
@@ -316,6 +479,13 @@ def list_value(value: Any, name: str) -> list[Any]:
     if not isinstance(value, list):
         raise ValueError(f"{name} must be an array")
     return value
+
+
+def string_list_value(value: Any, name: str) -> list[str]:
+    items = list_value(value, name)
+    if not all(isinstance(item, str) and item for item in items):
+        raise ValueError(f"{name} must contain non-empty strings")
+    return items
 
 
 def string_value(value: Mapping[str, Any], name: str) -> str:
@@ -411,6 +581,7 @@ function matchesType(value, expected) {{
     (type === "object" && value !== null && typeof value === "object" && !Array.isArray(value)) ||
     (type === "array" && Array.isArray(value)) ||
     (type === "string" && typeof value === "string") ||
+    (type === "null" && value === null) ||
     (type === "integer" && Number.isInteger(value))
   ));
 }}
@@ -494,15 +665,16 @@ function offerCard(offer) {{
   facts.className = "facts";
   facts.append(
     factRow("Leasingform", offer.supportedLeasingForm, formLabel),
-    factRow("Annonceret månedlig ydelse", offer.advertisedMonthlyPayment, money),
-    factRow("Kontant behov ved start", offer.upfrontCashRequirement, money),
-    factRow("Nominelt basisudlæg", offer.nominalBaseOutlay, money),
-    factRow("Nominelt månedligt gennemsnit", offer.nominalMonthlyEquivalent, money),
+    factRow("Annonceret månedlig ydelse", offer.advertisedMonthlyPayment, money, "Oplyst af udbyderen"),
+    factRow("Kontant behov ved start", offer.upfrontCashRequirement, money, "Beregnet af tjenesten"),
+    factRow("Nominelt basisudlæg", offer.nominalBaseOutlay, money, "Beregnet af tjenesten"),
+    factRow("Nominelt månedligt gennemsnit", offer.nominalMonthlyEquivalent, money, "Beregnet af tjenesten"),
     factRow("Fuld løbetid", offer.termMonths, (value) => `${{value}} måneder`),
     factRow("Kilometer om året", offer.annualMileageKm, (value) => `${{formatNumber(value)}} km`),
     factRow("Normal afslutning", offer.normalEndMechanism, String),
   );
   card.append(facts);
+  if (offer.cashFlowBreakdown && offer.cashFlowBreakdown.length > 0) card.append(cashFlowBreakdown(offer.cashFlowBreakdown, offer));
   return card;
 }}
 
@@ -514,12 +686,13 @@ function endSentence(fact) {{
   return fact.state === "known" ? fact.value : `Normal afslutning: ${{factLabels[fact.state]}}.`;
 }}
 
-function factRow(label, fact, formatter) {{
+function factRow(label, fact, formatter, origin = "Oplyst af udbyderen") {{
   const row = document.createElement("div");
   const title = document.createElement("dt");
   title.textContent = label;
   const value = document.createElement("dd");
-  value.textContent = fact.state === "known" ? formatter(fact.valueDkk ?? fact.value) : factLabels[fact.state];
+  value.textContent = fact.state === "known" ? formatter(fact.valueDkk ?? fact.value) : unavailableFactText(fact);
+  const originLabel = text("p", origin, "fact-origin");
   const evidence = document.createElement("details");
   const summary = document.createElement("summary");
   summary.textContent = `Kilde for ${{label}}`;
@@ -529,8 +702,100 @@ function factRow(label, fact, formatter) {{
   link.textContent = "Åbn udpeget førstehåndskilde";
   link.rel = "noreferrer";
   evidence.append(summary, wording, link);
-  row.append(title, value, evidence);
+  row.append(title, value, originLabel, evidence);
   return row;
+}}
+
+function unavailableFactText(fact) {{
+  const blockers = (fact.blockingFacts || []).map(blockingFactLabel);
+  const stateLabel = factLabels[fact.state] || "Ikke oplyst";
+  return blockers.length ? `${{stateLabel}} — mangler: ${{blockers.join(", ")}}` : stateLabel;
+}}
+
+function blockingFactLabel(value) {{
+  const labels = {{
+    baseCashFlowStream: "en fuldstændig betalingsstrøm",
+    termMonths: "fuld løbetid",
+    advertisedMonthlyPayment: "annonceret månedlig ydelse",
+    upfrontPayment: "udbetaling",
+    normalEndMechanism: "normal afslutningsmekanisme",
+  }};
+  return labels[value] || value;
+}}
+
+function cashFlowBreakdown(events, offer) {{
+  const section = document.createElement("details");
+  section.className = "cash-flow-breakdown";
+  const summary = document.createElement("summary");
+  summary.textContent = "Betalingsstrøm bag beregningerne";
+  const intro = text("p", "Hver linje indgår én gang i de viste beregninger. Beløb er nominelle og forudsætter normal afslutning.");
+  const list = document.createElement("ul");
+  events.forEach((event) => {{
+    const item = document.createElement("li");
+    const amount = event.amountDkk === null ? unavailableFactText(event) : money(event.amountDkk);
+    const recurrence = event.recurrenceCount === null
+      ? unavailableFactText(event)
+      : event.recurrenceCount === 1 ? "én gang" : `${{event.recurrenceCount}} gange`;
+    item.append(`[${{events.indexOf(event) + 1}}] ${{event.meaning}}: ${{cashFlowDirection(event.direction)}} ${{amount}} (${{amountBasisLabel(event.amountBasis)}}) · ${{recurrence}} · ${{cashFlowTiming(event.timing)}}. `);
+    const source = document.createElement("a");
+    source.href = event.evidence.sourceUrl;
+    source.textContent = "Kildetekst";
+    source.rel = "noreferrer";
+    source.title = event.evidence.wording;
+    item.append(source);
+    list.append(item);
+  }});
+  section.append(summary, intro, list, calculationEquations(events, offer));
+  return section;
+}}
+
+function calculationEquations(events, offer) {{
+  const section = document.createElement("section");
+  section.className = "calculation-equations";
+  section.append(heading("Regnestykker", 4));
+  const equations = document.createElement("ul");
+  const upfrontReferences = eventReferences(events, (event) => event.direction === "payment" && event.timing === "acceptance_to_handover");
+  appendEquation(equations, "Kontant behov ved start", upfrontReferences, offer.upfrontCashRequirement);
+  const nominalReferences = eventReferences(events, () => true, true);
+  appendEquation(equations, "Nominelt basisudlæg", nominalReferences, offer.nominalBaseOutlay);
+  if (offer.nominalMonthlyEquivalent.state === "known" && offer.nominalBaseOutlay.state === "known" && offer.termMonths.state === "known") {{
+    equations.append(text("li", `Nominelt månedligt gennemsnit = ${{money(offer.nominalBaseOutlay.valueDkk)}} / ${{offer.termMonths.value}} måneder = ${{money(offer.nominalMonthlyEquivalent.valueDkk)}} (afrundet til nærmeste kr.).`));
+  }} else {{
+    equations.append(text("li", `Nominelt månedligt gennemsnit: ${{unavailableFactText(offer.nominalMonthlyEquivalent)}}.`));
+  }}
+  section.append(equations);
+  return section;
+}}
+
+function eventReferences(events, predicate, signed = false) {{
+  return events
+    .map((event, index) => ({{ event, index }}))
+    .filter((entry) => entry.event.amountDkk !== null && entry.event.recurrenceCount !== null && predicate(entry.event))
+    .map((entry) => `${{signed && entry.event.direction === "receipt" ? "−" : "+"}}[${{entry.index + 1}}]`)
+    .join(" ")
+    .replace(/^\\+/, "") || "ingen dokumenterede poster";
+}}
+
+function appendEquation(list, label, references, value) {{
+  const result = value.state === "known" ? money(value.valueDkk) : unavailableFactText(value);
+  list.append(text("li", `${{label}} = ${{references}} = ${{result}}.`));
+}}
+
+function cashFlowDirection(value) {{
+  return value === "receipt" ? "forventet modtagelse" : value === "payment" ? "betaling" : "uafklaret betaling eller modtagelse";
+}}
+
+function amountBasisLabel(value) {{
+  return value === "including_vat" ? "inkl. moms" : value === "excluding_vat" ? "ekskl. moms" : "ukendt beløbsgrundlag";
+}}
+
+function cashFlowTiming(value) {{
+  const labels = {{
+    acceptance_to_handover: "fra accept til udlevering",
+    recurring: "løbende i perioden",
+    normal_completion_end: "ved normal afslutning",
+  }};
+  return labels[value] || value;
 }}
 
 function coverage(coverage) {{
@@ -601,8 +866,14 @@ h3 { font-size: 1.45rem; }
 .facts > div { border-top: 1px solid #e7ebe6; padding-top: .75rem; }
 dt { color: #52645b; font-size: .9rem; }
 dd { margin: .25rem 0 .4rem; font-weight: 700; }
+.fact-origin { margin: -.15rem 0 .45rem; color: #52645b; font-size: .78rem; }
 details { font-size: .875rem; color: #52645b; }
 details p { margin: .5rem 0; }
+.cash-flow-breakdown { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid #e7ebe6; }
+.cash-flow-breakdown ul { margin: .65rem 0 0; padding-left: 1.2rem; }
+.cash-flow-breakdown li + li { margin-top: .45rem; }
+.calculation-equations { margin-top: 1rem; }
+.calculation-equations h4 { margin: 0; }
 a { color: #195c49; }
 .coverage { margin-top: 2rem; padding: 1rem 1.25rem; background: #e8f0e8; border-radius: .75rem; }
 footer { margin-top: 2rem; font-size: .875rem; }

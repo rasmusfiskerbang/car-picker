@@ -70,27 +70,27 @@ class BuildSiteTest(unittest.TestCase):
                     },
                 },
                 "upfrontCashRequirement": {
-                    "state": "known",
-                    "valueDkk": 15990,
+                    "state": "not_stated",
+                    "blockingFacts": ["baseCashFlowStream"],
                     "evidence": {
                         "sourceUrl": "https://example.test/ioniq-5",
-                        "wording": "Førstegangsydelse 15.990 kr.",
+                        "wording": "Beregnet af tjenesten fra betalingsstrømmen.",
                     },
                 },
                 "nominalBaseOutlay": {
-                    "state": "known",
-                    "valueDkk": 152610,
+                    "state": "not_stated",
+                    "blockingFacts": ["baseCashFlowStream"],
                     "evidence": {
                         "sourceUrl": "https://example.test/ioniq-5",
-                        "wording": "36 betalinger og førstegangsydelse.",
+                        "wording": "Beregnet af tjenesten fra betalingsstrømmen.",
                     },
                 },
                 "nominalMonthlyEquivalent": {
-                    "state": "known",
-                    "valueDkk": 4239,
+                    "state": "not_stated",
+                    "blockingFacts": ["baseCashFlowStream"],
                     "evidence": {
                         "sourceUrl": "https://example.test/ioniq-5",
-                        "wording": "152.610 kr. fordelt over 36 måneder.",
+                        "wording": "Beregnet af tjenesten fra betalingsstrømmen.",
                     },
                 },
                 "termMonths": {
@@ -180,6 +180,126 @@ class BuildSiteTest(unittest.TestCase):
             [offer["offerIdentity"] for offer in projection["offers"]],
             ["terminalen:ioniq-5:essential-84"],
         )
+
+    def test_build_site_derives_values_and_one_cash_flow_breakdown(self) -> None:
+        """The public site build exposes service-derived totals from sourced events."""
+        dataset = json.loads(FIXTURE_DATASET.read_text(encoding="utf-8"))
+        offer = dataset["catalogueOffers"][0]
+        offer["canonicalOfferUrl"] = "https://example.test/ioniq-5"
+        offer["termMonths"] = known_value_fact(12, "Løbetid 12 måneder.")
+        offer["baseCashFlowStream"] = [
+            cash_flow_event("Førstegangsydelse", "payment", 12000, "acceptance_to_handover"),
+            cash_flow_event("Depositum", "payment", 4000, "acceptance_to_handover", "refundable"),
+            cash_flow_event("Månedlig ydelse", "payment", 1000, "recurring", recurrence_count=12),
+            cash_flow_event("Tilbagebetaling af depositum", "receipt", 4000, "normal_completion_end", "refundable"),
+            cash_flow_event("Obligatorisk slutbetaling", "payment", 6000, "normal_completion_end"),
+        ]
+        missing_monthly_offer = json.loads(json.dumps(offer))
+        missing_monthly_offer["offerIdentity"] = "terminalen:ioniq-5:missing-monthly"
+        missing_monthly_offer["baseCashFlowStream"][2]["amountDkk"] = None
+        missing_monthly_offer["baseCashFlowStream"][2]["blockingFacts"] = ["advertisedMonthlyPayment"]
+        dataset["catalogueOffers"].append(missing_monthly_offer)
+        malformed_stream_offer = json.loads(json.dumps(offer))
+        malformed_stream_offer["offerIdentity"] = "terminalen:ioniq-5:malformed-stream"
+        del malformed_stream_offer["baseCashFlowStream"][0]["evidence"]
+        dataset["catalogueOffers"].append(malformed_stream_offer)
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_path = Path(temporary_directory)
+            dataset_path = temporary_path / "catalogue-dataset.json"
+            site_path = temporary_path / "site"
+            dataset_path.write_text(json.dumps(dataset), encoding="utf-8")
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "car_picker",
+                    "build-site",
+                    "--dataset",
+                    str(dataset_path),
+                    "--output",
+                    str(site_path),
+                ],
+                cwd=REPOSITORY_ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            projection = json.loads((site_path / "projection.json").read_text(encoding="utf-8"))
+            app_source = (site_path / "app.js").read_text(encoding="utf-8")
+
+        rendered_offer = projection["offers"][0]
+        self.assertEqual(rendered_offer["upfrontCashRequirement"]["valueDkk"], 16000)
+        self.assertEqual(rendered_offer["nominalBaseOutlay"]["valueDkk"], 30000)
+        self.assertEqual(rendered_offer["nominalMonthlyEquivalent"]["valueDkk"], 2500)
+        self.assertEqual(
+            rendered_offer["nominalBaseOutlay"]["evidence"]["wording"],
+            "Beregnet af tjenesten fra betalingsstrømmen.",
+        )
+        self.assertIn("Oplyst af udbyderen", app_source)
+        self.assertIn("Beregnet af tjenesten", app_source)
+        self.assertIn("Betalingsstrøm bag beregningerne", app_source)
+        self.assertIn("normal afslutningsmekanisme", app_source)
+        self.assertEqual(
+            [event["meaning"] for event in rendered_offer["cashFlowBreakdown"]],
+            [
+                "Førstegangsydelse",
+                "Depositum",
+                "Månedlig ydelse",
+                "Tilbagebetaling af depositum",
+                "Obligatorisk slutbetaling",
+            ],
+        )
+        rendered_missing_monthly_offer = projection["offers"][1]
+        self.assertEqual(rendered_missing_monthly_offer["upfrontCashRequirement"]["valueDkk"], 16000)
+        self.assertEqual(
+            rendered_missing_monthly_offer["nominalBaseOutlay"]["blockingFacts"],
+            ["advertisedMonthlyPayment"],
+        )
+        self.assertEqual(
+            rendered_missing_monthly_offer["nominalMonthlyEquivalent"]["blockingFacts"],
+            ["advertisedMonthlyPayment"],
+        )
+        self.assertIsNone(rendered_missing_monthly_offer["cashFlowBreakdown"][2]["amountDkk"])
+        rendered_malformed_stream_offer = projection["offers"][2]
+        self.assertEqual(
+            rendered_malformed_stream_offer["upfrontCashRequirement"]["blockingFacts"],
+            ["baseCashFlowStream"],
+        )
+        self.assertNotIn("cashFlowBreakdown", rendered_malformed_stream_offer)
+
+
+def known_value_fact(value: int, wording: str) -> dict[str, object]:
+    return {
+        "state": "known",
+        "value": value,
+        "evidence": {"sourceUrl": "https://example.test/ioniq-5", "wording": wording},
+    }
+
+
+def cash_flow_event(
+    meaning: str,
+    direction: str,
+    amount_dkk: int,
+    timing: str,
+    refundability: str = "not_refundable",
+    recurrence_count: int = 1,
+) -> dict[str, object]:
+    return {
+        "meaning": meaning,
+        "direction": direction,
+        "amountDkk": amount_dkk,
+        "amountBasis": "including_vat",
+        "timing": timing,
+        "refundability": refundability,
+        "recurrenceCount": recurrence_count,
+        "includedInBase": True,
+        "evidence": {
+            "sourceUrl": "https://example.test/ioniq-5",
+            "wording": f"{meaning}: {amount_dkk} kr.",
+        },
+    }
 
 
 if __name__ == "__main__":

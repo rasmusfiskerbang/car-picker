@@ -10,6 +10,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
+from car_picker.comparison import calculate_comparison_values
 from car_picker.fleasing import FleasingAdapter, StructuralSourceError, catalogue_detail_urls
 
 
@@ -64,6 +65,44 @@ class FleasingAdapterTest(unittest.TestCase):
         candidate = candidates[0]
         self.assertEqual(candidate["advertisedMonthlyPayment"]["valueDkk"], 15865)
         self.assertEqual(candidate["termMonths"]["value"], 12)
+        self.assertEqual(candidate["baseCashFlowBlockers"], ["normalEndMechanism"])
+        self.assertEqual(
+            calculate_comparison_values(candidate)["nominalBaseOutlay"],
+            {"state": "not_stated", "blockingFacts": ["normalEndMechanism"]},
+        )
+        self.assertEqual(
+            candidate["baseCashFlowStream"],
+            [
+                {
+                    "meaning": "Udbetaling",
+                    "direction": "payment",
+                    "amountDkk": 142813,
+                    "amountBasis": "including_vat",
+                    "timing": "acceptance_to_handover",
+                    "recurrenceCount": 1,
+                    "refundability": "not_refundable",
+                    "includedInBase": True,
+                    "evidence": {
+                        "sourceUrl": DETAIL_URL,
+                        "wording": "Udbetaling 142.813 kr. /inkl. moms",
+                    },
+                },
+                {
+                    "meaning": "Ydelse pr. måned",
+                    "direction": "payment",
+                    "amountDkk": 15865,
+                    "amountBasis": "including_vat",
+                    "timing": "recurring",
+                    "recurrenceCount": 12,
+                    "refundability": "not_refundable",
+                    "includedInBase": True,
+                    "evidence": {
+                        "sourceUrl": DETAIL_URL,
+                        "wording": "Ydelse pr. måned 15.865 kr. /inkl. moms; Leasingperiode 12",
+                    },
+                },
+            ],
+        )
         self.assertEqual(candidate["vehicleSpecification"]["value"], {
             "make": "Aston Martin",
             "model": "DB9",
@@ -92,6 +131,11 @@ class FleasingAdapterTest(unittest.TestCase):
                 {"fact": "supportedLeasingForm", "state": "unclear"},
                 {"fact": "advertisedMonthlyPayment", "state": "not_stated"},
             ],
+        )
+        self.assertEqual(candidates[1]["baseCashFlowStream"][1]["amountDkk"], None)
+        self.assertEqual(
+            candidates[1]["baseCashFlowStream"][1]["blockingFacts"],
+            ["advertisedMonthlyPayment"],
         )
 
     def test_detects_a_detail_page_that_loses_the_private_configuration_structure(self) -> None:

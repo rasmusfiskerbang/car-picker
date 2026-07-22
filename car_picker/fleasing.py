@@ -111,6 +111,7 @@ def map_detail_page(
     vehicle = vehicle_specification(detail, discovered_offer.url)
     monthly_payment = money_fact(detail.private_terms, "Ydelse pr. måned", discovered_offer.url)
     term_months = months_fact(detail.private_terms, "Leasingperiode", discovered_offer.url)
+    upfront_payment = money_fact(detail.private_terms, "Udbetaling", discovered_offer.url)
     configuration_key = configuration_key_from_private_terms(detail.private_terms)
     candidate = {
         "offerIdentity": f"fleasing:{source_id}:{configuration_key}",
@@ -125,6 +126,8 @@ def map_detail_page(
         "supportedLeasingForm": financial_leasing_fact(detail.private_terms, discovered_offer.url),
         "advertisedMonthlyPayment": monthly_payment,
         "termMonths": term_months,
+        "baseCashFlowStream": base_cash_flow_stream(upfront_payment, monthly_payment, term_months),
+        "baseCashFlowBlockers": ["normalEndMechanism"],
         "upfrontCashRequirement": not_stated_fact(discovered_offer.url, detail.private_tab_fragment),
         "nominalBaseOutlay": not_stated_fact(discovered_offer.url, detail.private_tab_fragment),
         "nominalMonthlyEquivalent": not_stated_fact(discovered_offer.url, detail.private_tab_fragment),
@@ -137,6 +140,69 @@ def map_detail_page(
     if reasons:
         candidate["quarantineReasons"] = reasons
     return candidate
+
+
+def base_cash_flow_stream(
+    upfront_payment: Mapping[str, Any],
+    monthly_payment: Mapping[str, Any],
+    term_months: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    """Preserve only evidenced lessee cash flows; residual value stays an external exposure."""
+    return [
+        payment_event("Udbetaling", upfront_payment, "acceptance_to_handover"),
+        payment_event("Ydelse pr. måned", monthly_payment, "recurring", term_months),
+    ]
+
+
+def payment_event(
+    meaning: str,
+    amount_fact: Mapping[str, Any],
+    timing: str,
+    recurrence_fact: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    blockers: list[str] = []
+    amount = amount_fact.get("valueDkk") if amount_fact.get("state") == "known" else None
+    if amount is None:
+        blockers.append("upfrontPayment" if timing == "acceptance_to_handover" else "advertisedMonthlyPayment")
+
+    recurrence_count = 1
+    amount_evidence = evidence_value(amount_fact)
+    wording = amount_evidence["wording"]
+    if recurrence_fact is not None:
+        recurrence_count = recurrence_fact.get("value") if recurrence_fact.get("state") == "known" else None
+        if recurrence_count is None:
+            blockers.append("termMonths")
+        recurrence_wording = evidence_value(recurrence_fact)["wording"]
+        wording = f"{wording}; {recurrence_wording}"
+
+    event: dict[str, Any] = {
+        "meaning": meaning,
+        "direction": "payment",
+        "amountDkk": amount,
+        "amountBasis": "including_vat" if amount is not None else "not_stated",
+        "timing": timing,
+        "recurrenceCount": recurrence_count,
+        "refundability": "not_refundable",
+        "includedInBase": True,
+        "evidence": {
+            "sourceUrl": amount_evidence["sourceUrl"],
+            "wording": wording,
+        },
+    }
+    if blockers:
+        event["blockingFacts"] = blockers
+    return event
+
+
+def evidence_value(fact: Mapping[str, Any]) -> dict[str, str]:
+    value = fact.get("evidence")
+    if not isinstance(value, Mapping):
+        raise ValueError("payment fact must include evidence")
+    source_url = value.get("sourceUrl")
+    wording = value.get("wording")
+    if not isinstance(source_url, str) or not isinstance(wording, str):
+        raise ValueError("payment evidence must include sourceUrl and wording")
+    return {"sourceUrl": source_url, "wording": wording}
 
 
 def vehicle_specification(detail: "FleasingDetailParser", source_url: str) -> dict[str, Any]:
