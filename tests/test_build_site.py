@@ -360,6 +360,11 @@ class BuildSiteTest(unittest.TestCase):
             "Køretøj",
             "Ingen tilbud matcher dine filtre",
             "Filtrering er ikke personlig rangering",
+            "Sammenlign valgte tilbud",
+            "Sammenlign tilbud",
+            "comparison-scroll",
+            "#compare=",
+            "#offer=",
         ):
             self.assertIn(control, app_source)
 

@@ -659,7 +659,8 @@ async function start() {{
     const projection = await response.json();
     validateProjection(projection, presentationSchema, "$", presentationSchema);
     validateKnownFactValues(projection);
-    renderCatalogue(projection);
+    window.addEventListener("hashchange", () => renderApplication(projection));
+    renderApplication(projection);
   }} catch (error) {{
     root.replaceChildren(message("Kataloget kan ikke vises", "Katalogdata bestod ikke den nødvendige kontrol."));
     console.error(error);
@@ -719,6 +720,13 @@ function validateKnownFactValues(projection) {{
   }}
 }}
 
+function renderApplication(projection) {{
+  const route = location.hash.slice(1);
+  if (route.startsWith("compare=")) return renderComparison(projection, route.slice(8).split(",").filter(Boolean));
+  if (route.startsWith("offer=")) return renderDetailRoute(projection, route.slice(6));
+  renderCatalogue(projection);
+}}
+
 function renderCatalogue(projection) {{
   const catalogue = document.createElement("section");
   catalogue.className = "catalogue";
@@ -728,9 +736,12 @@ function renderCatalogue(projection) {{
   catalogue.append(header, heading("Filtre og tilbud", 2), filterNote());
   const offers = document.createElement("div");
   offers.className = "offer-list";
-  const filters = filterControls(projection.offers, (filters) => renderOffers(offers, projection.offers, filters));
-  catalogue.append(filters, offers, coverage(projection.coverage), footer());
-  renderOffers(offers, projection.offers, initialFilters());
+  const selected = new Set();
+  const comparison = comparisonControl(selected);
+  const refreshComparison = () => {{}};
+  const filters = filterControls(projection.offers, (filters) => renderOffers(offers, projection.offers, filters, selected, refreshComparison));
+  catalogue.append(filters, comparison, offers, coverage(projection.coverage), footer());
+  renderOffers(offers, projection.offers, initialFilters(), selected, refreshComparison);
   root.replaceChildren(catalogue);
 }}
 
@@ -835,9 +846,9 @@ function registrationTaxLabel(value) {{
   return value === "full" ? "Betalt fuldt" : value === "proportional" ? "Betales forholdsmæssigt" : value;
 }}
 
-function renderOffers(container, offers, filters) {{
+function renderOffers(container, offers, filters, selected = new Set(), onSelectionChange = () => {{}}) {{
   const visibleOffers = offers.filter((offer) => matchesFilters(offer, filters));
-  container.replaceChildren(...visibleOffers.map(offerCard));
+  container.replaceChildren(...visibleOffers.map((offer) => offerCard(offer, selected, onSelectionChange)));
   if (visibleOffers.length === 0) container.append(emptyState());
 }}
 
@@ -873,10 +884,66 @@ function emptyState() {{
   return section;
 }}
 
-function offerCard(offer) {{
+function comparisonControl(selected) {{
+  const section = document.createElement("section"); section.className = "comparison-control";
+  const link = document.createElement("a");
+  link.href = "#compare=";
+  link.textContent = "Sammenlign valgte tilbud";
+  link.addEventListener("click", (event) => {{
+    if (selected.size < 2) {{ event.preventDefault(); section.append(text("p", "Vælg mindst to tilbud for at sammenligne dem.")); return; }}
+    event.preventDefault(); location.hash = `compare=${{[...selected].map(encodeURIComponent).join(",")}}`;
+  }});
+  section.append(link);
+  return section;
+}}
+
+function renderDetailRoute(projection, identity) {{
+  const offer = projection.offers.find((row) => row.offerIdentity === decodeURIComponent(identity));
+  if (!offer) return root.replaceChildren(message("Tilbuddet kan ikke vises", "Tilbuddet findes ikke i dette katalog."));
+  const page = document.createElement("section"); page.className = "catalogue";
+  const back = document.createElement("a"); back.href = "#"; back.textContent = "Tilbage til kataloget";
+  page.append(back, offerCard(offer)); root.replaceChildren(page);
+}}
+
+function renderComparison(projection, identities) {{
+  const offers = identities.map(decodeURIComponent).map((identity) => projection.offers.find((offer) => offer.offerIdentity === identity)).filter(Boolean);
+  if (offers.length < 2) return root.replaceChildren(message("Sammenligning kan ikke vises", "Vælg mindst to tilbud fra kataloget."));
+  const page = document.createElement("section"); page.className = "catalogue";
+  const back = document.createElement("a"); back.href = "#"; back.textContent = "Tilbage til kataloget";
+  page.append(back, heading("Sammenlign tilbud", 1), comparisonTable(offers)); root.replaceChildren(page);
+}}
+
+function comparisonTable(offers) {{
+  const fields = [
+    ["Køretøj", "vehicleSpecification", vehicleLabel], ["Kontant behov ved start", "upfrontCashRequirement", money],
+    ["Nominelt basisudlæg", "nominalBaseOutlay", money], ["Nominelt månedligt gennemsnit", "nominalMonthlyEquivalent", money],
+    ["Annonceret månedlig ydelse", "advertisedMonthlyPayment", money], ["Fuld løbetid", "termMonths", (v) => `${{v}} måneder`],
+    ["Kilometer om året", "annualMileageKm", (v) => `${{formatNumber(v)}} km`], ["Normal afslutning", "normalEndMechanism", endMechanismLabel],
+    ["Restværdirisiko", "residualRiskAllocation", residualRiskLabel], ["Registreringsafgift", "registrationTaxTreatment", registrationTaxLabel],
+    ["Udbyderens formbetegnelse", "providerFormLabel", String], ["Serviceordninger", "serviceArrangements", serviceListValue],
+    ["Udelukket eller eksternt", "exclusions", serviceListValue], ["Betingede eksponeringer", "exposureScenarios", exposureListValue],
+  ];
+  const wrap = document.createElement("div"); wrap.className = "comparison-scroll";
+  const table = document.createElement("table"); table.className = "comparison-table";
+  const header = document.createElement("tr"); header.append(document.createElement("th")); offers.forEach((offer) => header.append(text("th", `${{offer.provider}} · ${{vehicleLabel(offer.vehicleSpecification)}} · ${{offer.offerIdentity}}`))); table.append(header);
+  fields.forEach(([label, key, formatter]) => {{ const row = document.createElement("tr"); row.append(text("th", label)); offers.forEach((offer) => row.append(comparisonValue(offer[key], formatter))); table.append(row); }});
+  wrap.append(table); return wrap;
+}}
+
+function serviceListValue(value) {{ return value.map(serviceArrangementText).join(" · "); }}
+function exposureListValue(value) {{ return value.map(exposureText).join(" · "); }}
+function comparisonValue(fact, formatter) {{ const cell = document.createElement("td"); cell.append(text("p", fact.state === "known" ? formatter(fact.valueDkk ?? fact.value) : unavailableFactText(fact)), evidenceDetails("sammenligningsfelt", fact)); return cell; }}
+
+function offerCard(offer, selected = new Set(), onSelectionChange = () => {{}}) {{
   const card = document.createElement("article");
   card.className = "offer-card";
-  card.append(heading(vehicleLabel(offer.vehicleSpecification), 3), text("p", offer.provider, "provider"), text("p", endSentence(offer.normalEndMechanism), "end-mechanism"));
+  const selection = document.createElement("label");
+  const checkbox = document.createElement("input");
+  checkbox.type = "checkbox"; checkbox.checked = selected.has(offer.offerIdentity);
+  checkbox.addEventListener("change", () => {{ checkbox.checked ? selected.add(offer.offerIdentity) : selected.delete(offer.offerIdentity); onSelectionChange(); }});
+  selection.append(checkbox, " Vælg til sammenligning");
+  const detailLink = document.createElement("a"); detailLink.href = `#offer=${{encodeURIComponent(offer.offerIdentity)}}`; detailLink.textContent = "Åbn detaljevisning";
+  card.append(heading(vehicleLabel(offer.vehicleSpecification), 3), text("p", offer.provider, "provider"), selection, text("p", endSentence(offer.normalEndMechanism), "end-mechanism"), detailLink);
   const facts = document.createElement("dl");
   facts.className = "facts";
   facts.append(
@@ -1175,6 +1242,11 @@ details p { margin: .5rem 0; }
 .offer-detail section { margin-top: 1rem; }
 .offer-detail h4, .offer-detail h5 { margin: 1rem 0 .4rem; }
 .detail-fact ul { margin: .35rem 0; padding-left: 1.2rem; }
+.comparison-control { margin: 1rem 0; font-weight: 700; }
+.comparison-scroll { overflow-x: auto; max-width: 100%; }
+.comparison-table { border-collapse: separate; border-spacing: 0; min-width: max-content; width: 100%; }
+.comparison-table th, .comparison-table td { min-width: 15rem; padding: .75rem; vertical-align: top; text-align: left; border-bottom: 1px solid #dfe4df; background: #fff; }
+.comparison-table th:first-child { position: sticky; left: 0; z-index: 1; min-width: 12rem; background: #e8f0e8; }
 .cash-flow-breakdown ul { margin: .65rem 0 0; padding-left: 1.2rem; }
 .cash-flow-breakdown li + li { margin-top: .45rem; }
 .calculation-equations { margin-top: 1rem; }
