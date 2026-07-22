@@ -35,6 +35,14 @@
           "wording": "Privatleasing med aflevering ved udløb."
         }
       },
+      "residualRiskAllocation": {
+        "state": "known",
+        "value": "provider",
+        "evidence": {
+          "sourceUrl": "https://example.test/ioniq-5",
+          "wording": "Udbyderen bærer værditabet."
+        }
+      },
       "advertisedMonthlyPayment": {
         "state": "known",
         "valueDkk": 3795,

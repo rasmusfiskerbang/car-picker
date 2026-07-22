@@ -53,6 +53,7 @@ PRESENTATION_SCHEMA: dict[str, Any] = {
                     "provider",
                     "vehicleSpecification",
                     "supportedLeasingForm",
+                    "residualRiskAllocation",
                     "advertisedMonthlyPayment",
                     "upfrontCashRequirement",
                     "nominalBaseOutlay",
@@ -66,6 +67,7 @@ PRESENTATION_SCHEMA: dict[str, Any] = {
                     "provider": {"type": "string"},
                     "vehicleSpecification": {"$ref": "#/$defs/valueFact"},
                     "supportedLeasingForm": {"$ref": "#/$defs/valueFact"},
+                    "residualRiskAllocation": {"$ref": "#/$defs/valueFact"},
                     "advertisedMonthlyPayment": {"$ref": "#/$defs/moneyFact"},
                     "upfrontCashRequirement": {"$ref": "#/$defs/moneyFact"},
                     "nominalBaseOutlay": {"$ref": "#/$defs/moneyFact"},
@@ -187,6 +189,7 @@ def project_offer(offer: Mapping[str, Any]) -> dict[str, Any]:
         "provider": string_value(offer, "provider"),
         "vehicleSpecification": project_vehicle_specification(offer.get("vehicleSpecification")),
         "supportedLeasingForm": project_value_fact(offer.get("supportedLeasingForm")),
+        "residualRiskAllocation": project_value_fact(offer.get("residualRiskAllocation")),
         "advertisedMonthlyPayment": project_money_fact(offer.get("advertisedMonthlyPayment")),
         "upfrontCashRequirement": project_derived_money_fact(comparison_values["upfrontCashRequirement"], offer),
         "nominalBaseOutlay": project_derived_money_fact(comparison_values["nominalBaseOutlay"], offer),
@@ -400,7 +403,7 @@ def validate_presentation_projection(projection: Mapping[str, Any]) -> None:
         projection_offer = object_value(offer, "presentation offer")
         for field_name in ("offerIdentity", "provider"):
             string_value(projection_offer, field_name)
-        for field_name in ("vehicleSpecification", "supportedLeasingForm"):
+        for field_name in ("vehicleSpecification", "supportedLeasingForm", "residualRiskAllocation"):
             validate_projected_fact(projection_offer.get(field_name), "value")
         for field_name in (
             "advertisedMonthlyPayment",
@@ -609,9 +612,9 @@ function renderCatalogue(projection) {{
   catalogue.append(header, heading("Filtre og tilbud", 2), filterNote());
   const offers = document.createElement("div");
   offers.className = "offer-list";
-  const filters = filterControls(projection.offers, (selectedForm) => renderOffers(offers, projection.offers, selectedForm));
+  const filters = filterControls(projection.offers, (filters) => renderOffers(offers, projection.offers, filters));
   catalogue.append(filters, offers, coverage(projection.coverage), footer());
-  renderOffers(offers, projection.offers, "all");
+  renderOffers(offers, projection.offers, initialFilters());
   root.replaceChildren(catalogue);
 }}
 
@@ -622,21 +625,79 @@ function filterNote() {{
   return note;
 }}
 
-function filterControls(offers, onFormChange) {{
+function initialFilters() {{
+  return {{ search: "", form: "all", residualRisk: "all", vehicle: "all", upfrontMaximum: "", termMaximum: "", mileageMaximum: "" }};
+}}
+
+function filterControls(offers, onChange) {{
   const controls = document.createElement("div");
   controls.className = "filters";
-  const label = document.createElement("label");
-  label.textContent = "Leasingform";
-  const select = document.createElement("select");
-  select.name = "leasing-form";
-  const forms = [...new Set(offers
-    .filter((offer) => offer.supportedLeasingForm.state === "known")
-    .map((offer) => offer.supportedLeasingForm.value))];
-  select.append(option("all", "Alle former"), ...forms.map((form) => option(form, formLabel(form))));
-  select.addEventListener("change", () => onFormChange(select.value));
-  label.append(select);
-  controls.append(label);
+  const filters = initialFilters();
+  const update = () => onChange(filters);
+  const selectFilters = [
+    {{ label: "Leasingform", id: "leasing-form", allLabel: "Alle former", field: "supportedLeasingForm", key: "form", formatter: formLabel }},
+    {{ label: "Restværdirisiko", id: "residual-risk", allLabel: "Alle fordelinger", field: "residualRiskAllocation", key: "residualRisk", formatter: residualRiskLabel }},
+    {{ label: "Køretøj", id: "vehicle", allLabel: "Alle køretøjer", field: "vehicleSpecification", key: "vehicle", formatter: String }},
+  ];
+  controls.append(
+    textFilter(filters, update),
+    ...selectFilters.map((specification) => selectFilter(specification, offers, filters, update)),
+    maximumFilter("Højeste kontante behov ved start", "upfront-maximum", filters, "upfrontMaximum", update),
+    maximumFilter("Højeste fulde løbetid", "term-maximum", filters, "termMaximum", update, "måneder"),
+    maximumFilter("Højeste kilometer om året", "mileage-maximum", filters, "mileageMaximum", update, "km"),
+  );
   return controls;
+}}
+
+function textFilter(filters, update) {{
+  const label = controlLabel("Søg efter bil eller udbyder", "catalogue-search");
+  const input = document.createElement("input");
+  input.id = "catalogue-search";
+  input.name = "search";
+  input.type = "search";
+  input.placeholder = "Fx Hyundai eller Terminalen";
+  input.addEventListener("input", () => {{ filters.search = input.value; update(); }});
+  label.append(input);
+  return label;
+}}
+
+function selectFilter(specification, offers, filters, update) {{
+  const label = controlLabel(specification.label, specification.id);
+  const select = document.createElement("select");
+  select.id = specification.id;
+  select.name = specification.id;
+  select.append(option("all", specification.allLabel), ...knownValues(offers, specification.field).map((value) => option(value, specification.formatter(value))));
+  select.addEventListener("change", () => {{ filters[specification.key] = select.value; update(); }});
+  label.append(select);
+  return label;
+}}
+
+function maximumFilter(labelText, name, filters, key, update, suffix = "kr.") {{
+  const label = controlLabel(labelText, name);
+  const input = document.createElement("input");
+  input.id = name;
+  input.name = name;
+  input.type = "number";
+  input.min = "0";
+  input.step = "1";
+  input.inputMode = "numeric";
+  input.placeholder = suffix;
+  input.addEventListener("input", () => {{ filters[key] = input.value; update(); }});
+  label.append(input);
+  return label;
+}}
+
+function controlLabel(labelText, controlId) {{
+  const label = document.createElement("label");
+  label.htmlFor = controlId;
+  label.textContent = labelText;
+  return label;
+}}
+
+function knownValues(offers, field) {{
+  return [...new Set(offers
+    .filter((offer) => offer[field].state === "known")
+    .map((offer) => offer[field].value))];
 }}
 
 function option(value, label) {{
@@ -650,11 +711,46 @@ function formLabel(value) {{
   return value === "operational" ? "Operationel" : value === "financial" ? "Finansiel" : value;
 }}
 
-function renderOffers(container, offers, selectedForm) {{
-  const visibleOffers = selectedForm === "all"
-    ? offers
-    : offers.filter((offer) => offer.supportedLeasingForm.state === "known" && offer.supportedLeasingForm.value === selectedForm);
+function residualRiskLabel(value) {{
+  return value === "provider" ? "Udbyderen bærer risikoen" : value === "lessee" ? "Den kommende leasingtager bærer risikoen" : value;
+}}
+
+function renderOffers(container, offers, filters) {{
+  const visibleOffers = offers.filter((offer) => matchesFilters(offer, filters));
   container.replaceChildren(...visibleOffers.map(offerCard));
+  if (visibleOffers.length === 0) container.append(emptyState());
+}}
+
+function matchesFilters(offer, filters) {{
+  const query = filters.search.trim().toLocaleLowerCase("da-DK");
+  return (
+    (!query || searchableOfferText(offer).toLocaleLowerCase("da-DK").includes(query)) &&
+    matchesKnownValue(offer.supportedLeasingForm, filters.form) &&
+    matchesKnownValue(offer.residualRiskAllocation, filters.residualRisk) &&
+    matchesKnownValue(offer.vehicleSpecification, filters.vehicle) &&
+    matchesMaximum(offer.upfrontCashRequirement, filters.upfrontMaximum) &&
+    matchesMaximum(offer.termMonths, filters.termMaximum) &&
+    matchesMaximum(offer.annualMileageKm, filters.mileageMaximum)
+  );
+}}
+
+function searchableOfferText(offer) {{
+  return `${{offer.provider}} ${{offer.vehicleSpecification.state === "known" ? offer.vehicleSpecification.value : ""}}`;
+}}
+
+function matchesKnownValue(fact, selectedValue) {{
+  return selectedValue === "all" || (fact.state === "known" && fact.value === selectedValue);
+}}
+
+function matchesMaximum(fact, maximum) {{
+  return maximum === "" || (fact.state === "known" && fact.valueDkk !== undefined && fact.valueDkk <= Number(maximum)) || (fact.state === "known" && fact.value !== undefined && fact.value <= Number(maximum));
+}}
+
+function emptyState() {{
+  const section = document.createElement("section");
+  section.className = "empty-state";
+  section.append(heading("Ingen tilbud matcher dine filtre", 3), text("p", "Prøv at ændre eller fjerne et filter. Kataloget dækker ikke nødvendigvis hele det danske marked."));
+  return section;
 }}
 
 function offerCard(offer) {{
@@ -665,6 +761,7 @@ function offerCard(offer) {{
   facts.className = "facts";
   facts.append(
     factRow("Leasingform", offer.supportedLeasingForm, formLabel),
+    factRow("Restværdirisiko", offer.residualRiskAllocation, residualRiskLabel),
     factRow("Annonceret månedlig ydelse", offer.advertisedMonthlyPayment, money, "Oplyst af udbyderen"),
     factRow("Kontant behov ved start", offer.upfrontCashRequirement, money, "Beregnet af tjenesten"),
     factRow("Nominelt basisudlæg", offer.nominalBaseOutlay, money, "Beregnet af tjenesten"),
@@ -807,7 +904,7 @@ function coverage(coverage) {{
 }}
 
 function footer() {{
-  return text("footer", "Tilbud kan være ændret eller udløbet siden data blev indsamlet. Kataloget er ikke en personlig rangering.");
+  return text("footer", "Tilbud kan være ændret eller udløbet siden data blev indsamlet. Filtrering er ikke personlig rangering.");
 }}
 
 function message(title, detail) {{
@@ -847,7 +944,7 @@ def stylesheet() -> str:
 
 :root { color: #21322c; background: #f6f5f0; font-family: "DM Sans", sans-serif; }
 * { box-sizing: border-box; }
-body { margin: 0; }
+body { margin: 0; overflow-x: hidden; }
 .catalogue, .message { width: min(100% - 2rem, 72rem); margin: 0 auto; padding: 2.5rem 0; }
 .site-header { display: flex; justify-content: space-between; gap: 1rem; align-items: baseline; border-bottom: 1px solid #ced6cf; padding-bottom: 1.25rem; }
 h1, h2, h3 { font-family: Fraunces, serif; margin: 0; color: #183128; }
@@ -855,10 +952,11 @@ h1 { font-size: clamp(2rem, 6vw, 3.5rem); }
 h2 { margin-top: 2.5rem; font-size: 1.4rem; }
 h3 { font-size: 1.45rem; }
 .filter-note, footer { color: #52645b; }
-.filters { margin: 1rem 0; padding: .9rem 1rem; background: #e8f0e8; border-radius: .75rem; }
-.filters label { display: grid; gap: .35rem; width: min(100%, 18rem); font-weight: 700; }
-.filters select { border: 1px solid #9db9a4; border-radius: .35rem; padding: .55rem; color: #21322c; background: #fff; font: inherit; }
+.filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); gap: .8rem; margin: 1rem 0; padding: .9rem 1rem; background: #e8f0e8; border-radius: .75rem; }
+.filters label { display: grid; gap: .35rem; min-width: 0; font-weight: 700; }
+.filters input, .filters select { width: 100%; min-width: 0; border: 1px solid #9db9a4; border-radius: .35rem; padding: .55rem; color: #21322c; background: #fff; font: inherit; }
 .offer-list { display: grid; gap: 1rem; margin-top: 1rem; }
+.empty-state { padding: 1.5rem; border: 1px dashed #9db9a4; border-radius: .75rem; background: #fff; }
 .offer-card { background: #fff; border: 1px solid #dfe4df; border-radius: 1rem; padding: clamp(1.25rem, 3vw, 2rem); box-shadow: 0 10px 30px #26372b0b; }
 .provider { color: #52645b; font-weight: 700; margin: .5rem 0 1rem; }
 .end-mechanism { border-left: .25rem solid #9db9a4; padding-left: .75rem; font-weight: 500; }

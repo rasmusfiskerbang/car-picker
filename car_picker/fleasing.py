@@ -133,6 +133,7 @@ def map_detail_page(
         "nominalMonthlyEquivalent": not_stated_fact(discovered_offer.url, detail.private_tab_fragment),
         "annualMileageKm": not_stated_fact(discovered_offer.url, detail.private_tab_fragment),
         "normalEndMechanism": not_stated_fact(discovered_offer.url, detail.private_tab_fragment),
+        "residualRiskAllocation": residual_risk_allocation_fact(detail.private_terms, discovered_offer.url),
         "sourceMetadata": source_metadata,
     }
     reasons = admission_reasons(candidate)
@@ -220,6 +221,14 @@ def passenger_car_fact(detail: "FleasingDetailParser", source_url: str) -> dict[
 
 
 def financial_leasing_fact(private_terms: Mapping[str, str], source_url: str) -> dict[str, Any]:
+    return residual_value_fact(private_terms, source_url)
+
+
+def residual_risk_allocation_fact(private_terms: Mapping[str, str], source_url: str) -> dict[str, Any]:
+    return residual_value_fact(private_terms, source_url)
+
+
+def residual_value_fact(private_terms: Mapping[str, str], source_url: str) -> dict[str, Any]:
     residual_value = private_terms.get("Restværdi")
     if residual_value is None:
         return not_stated_fact(source_url, 'id="privat"')

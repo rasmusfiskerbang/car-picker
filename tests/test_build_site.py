@@ -61,6 +61,14 @@ class BuildSiteTest(unittest.TestCase):
                         "wording": "Privatleasing med aflevering ved udløb.",
                     },
                 },
+                "residualRiskAllocation": {
+                    "state": "known",
+                    "value": "provider",
+                    "evidence": {
+                        "sourceUrl": "https://example.test/ioniq-5",
+                        "wording": "Udbyderen bærer værditabet.",
+                    },
+                },
                 "advertisedMonthlyPayment": {
                     "state": "known",
                     "valueDkk": 3795,
@@ -269,11 +277,77 @@ class BuildSiteTest(unittest.TestCase):
         )
         self.assertNotIn("cashFlowBreakdown", rendered_malformed_stream_offer)
 
+    def test_build_site_exposes_filterable_offer_facts_without_changing_source_order(self) -> None:
+        """The public catalogue contract keeps the facts needed to narrow offers."""
+        dataset = json.loads(FIXTURE_DATASET.read_text(encoding="utf-8"))
+        first_offer = dataset["catalogueOffers"][0]
+        first_offer["residualRiskAllocation"] = known_value_fact("provider", "Udbyderen bærer værditabet.")
+        second_offer = json.loads(json.dumps(first_offer))
+        second_offer["offerIdentity"] = "fleasing:i4:private-36"
+        second_offer["provider"] = "Fleasing"
+        second_offer["vehicleSpecification"]["value"] = {"make": "BMW", "model": "i4", "trim": "eDrive35"}
+        second_offer["supportedLeasingForm"] = known_value_fact("financial", "Finansiel leasing.")
+        second_offer["residualRiskAllocation"] = known_value_fact("lessee", "Lessee bærer restværdirisikoen.")
+        second_offer["upfrontCashRequirement"] = known_money_fact(8000, "Udbetaling 8.000 kr.")
+        second_offer["termMonths"] = known_value_fact(24, "Løbetid 24 måneder.")
+        second_offer["annualMileageKm"] = known_value_fact(15000, "15.000 km om året.")
+        dataset["catalogueOffers"].append(second_offer)
 
-def known_value_fact(value: int, wording: str) -> dict[str, object]:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_path = Path(temporary_directory)
+            dataset_path = temporary_path / "catalogue-dataset.json"
+            site_path = temporary_path / "site"
+            dataset_path.write_text(json.dumps(dataset), encoding="utf-8")
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "car_picker",
+                    "build-site",
+                    "--dataset",
+                    str(dataset_path),
+                    "--output",
+                    str(site_path),
+                ],
+                cwd=REPOSITORY_ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            projection = json.loads((site_path / "projection.json").read_text(encoding="utf-8"))
+            app_source = (site_path / "app.js").read_text(encoding="utf-8")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            [offer["offerIdentity"] for offer in projection["offers"]],
+            ["terminalen:ioniq-5:essential-84", "fleasing:i4:private-36"],
+        )
+        self.assertEqual(projection["offers"][1]["residualRiskAllocation"]["value"], "lessee")
+        for control in (
+            "Søg efter bil eller udbyder",
+            "Restværdirisiko",
+            "Højeste kontante behov ved start",
+            "Højeste fulde løbetid",
+            "Højeste kilometer om året",
+            "Køretøj",
+            "Ingen tilbud matcher dine filtre",
+            "Filtrering er ikke personlig rangering",
+        ):
+            self.assertIn(control, app_source)
+
+
+def known_value_fact(value: object, wording: str) -> dict[str, object]:
     return {
         "state": "known",
         "value": value,
+        "evidence": {"sourceUrl": "https://example.test/ioniq-5", "wording": wording},
+    }
+
+
+def known_money_fact(value: int, wording: str) -> dict[str, object]:
+    return {
+        "state": "known",
+        "valueDkk": value,
         "evidence": {"sourceUrl": "https://example.test/ioniq-5", "wording": wording},
     }
 
