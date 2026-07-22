@@ -285,6 +285,20 @@ function rankingNote() {
     </div>`;
 }
 
+function catalogueDisclaimer() {
+  return `
+    <footer class="catalogue-disclaimer">
+      <div>
+        <strong>Om rækkefølgen</strong>
+        <p>Filtre indsnævrer kun kataloget. Den faste rækkefølge er ikke en personlig anbefaling, og ukendte beløb regnes aldrig som 0 kr.</p>
+      </div>
+      <div>
+        <strong>Om demo-datasættet</strong>
+        <p>Illustrative tilbud fra 3 dækkede udbyderkilder · genereret samlet 22. juli 2026 kl. 06.40 på 18 sek.</p>
+      </div>
+    </footer>`;
+}
+
 function riskPill(offer) {
   const className = offer.risk === "lessee" ? "status-pill--risk" : "status-pill--known";
   return `<span class="status-pill ${className}">${offer.risk === "lessee" ? "Din restværdirisiko" : "Udbyders restværdirisiko"}</span>`;
@@ -346,14 +360,6 @@ function catalogueA() {
   const list = filteredOffers();
   return `
     <main>
-      <section class="hero">
-        <p class="eyebrow">Privatleasing med vilkårene fremme</p>
-        <h1 class="hero-title">Se hele betalingen.<br />Og det, der kan komme bagefter.</h1>
-        <div class="hero__meta">
-          <p class="lead">Sammenlign dokumenterede pengestrømme, pligter ved udløb og det, udbyderen ikke har oplyst.</p>
-          <div class="hero__note">${rankingNote()}</div>
-        </div>
-      </section>
       <section class="catalogue-layout">
         <aside class="filter-rail">${filters()}</aside>
         <div>
@@ -364,6 +370,7 @@ function catalogueA() {
           ${list.length ? `<div class="offer-grid">${list.map(offerCardA).join("")}</div>` : emptyState()}
         </div>
       </section>
+      ${catalogueDisclaimer()}
     </main>`;
 }
 

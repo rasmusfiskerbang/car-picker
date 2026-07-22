@@ -3,18 +3,22 @@
 This prototype tests three different information hierarchies against the same in-memory state
 and illustrative leasing offers. It does not validate commercial data or production code.
 
-## Provisional design answer
+## Owner-validated design answer
 
-Use **A — Roligt overblik** as the catalogue shell. It gives a prospective lessee the best
-mobile-friendly path from filtering to scanning without turning the page into a price ranking.
-Carry two ideas from the other variants into a production design:
+On 22 July 2026, the owner selected **A — Roligt overblik** as the catalogue direction with two
+corrections validated in the prototype:
+
+- remove the oversized introductory hero so filters and catalogue offers begin immediately;
+- move the no-personal-ranking explanation from a prominent callout to a quiet footer disclaimer.
+
+The selected direction gives a prospective lessee the clearest mobile-friendly path from filtering
+to scanning without turning the page into a price ranking. For production, retain two ideas already
+present in the shared detail and comparison flows:
 
 - use C's plain-language, end-of-term obligation sentence as the first explanatory fact on every
   offer; provider labels such as “flexleasing” remain secondary;
 - use B's dense row structure for the side-by-side comparison, where repeated field alignment is
   more useful than editorial cards.
-
-This recommendation still needs the owner's explicit selection before the issue is closed.
 
 ## Decisions supported by all three variants
 
@@ -33,9 +37,8 @@ This recommendation still needs the owner's explicit selection before the issue 
 - On mobile, replace the dense catalogue table with stacked rows, but keep comparison truly
   side-by-side inside a horizontally scrollable region with the row labels pinned.
 
-## Deliberately unresolved
+## Outside this prototype
 
-- Final tone and density require owner feedback after switching between A, B, and C.
 - The prototype uses illustrative cash flows and source excerpts. Production copy must come from
   the active catalogue dataset and its source evidence.
 - Search, filters, and selection are in memory. The prototype does not test persistence, data

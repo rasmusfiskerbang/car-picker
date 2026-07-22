@@ -5,7 +5,8 @@
 Three structurally different Danish catalogue and comparison experiences, switchable with
 `?variant=A`, `?variant=B`, or `?variant=C` on the same route:
 
-- **A — Roligt overblik:** catalogue-first cards with a persistent filter rail.
+- **A — Roligt overblik:** the selected catalogue-first direction, starting immediately with
+  filters and offers and keeping the no-ranking disclaimer in the footer.
 - **B — Kontroltabel:** dense, scan-friendly table with compact controls.
 - **C — Beslutningsnotat:** difference-first reading flow centred on obligations and evidence.
 
