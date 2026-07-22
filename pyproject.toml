@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "car-picker"
+version = "0.1.0"
+description = "Evidence-backed Danish private-leasing catalogue"
+requires-python = ">=3.14"
+
+[project.scripts]
+car-picker = "car_picker.__main__:main"
+
+[tool.setuptools]
+packages = ["car_picker"]
