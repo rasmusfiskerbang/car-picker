@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 
 from car_picker.collection import FLEASING_CATALOGUE_URL, PROVIDER_NAMES, TERMINALEN_CATALOGUE_URL, refresh_all_providers
 from car_picker.comparison import reconcile_provider_advertised_aggregate
+from car_picker.owner_operations import validate_owner_checkout
 from car_picker.provider_withdrawal import (
     DEFAULT_PROVIDER_CONTROL,
     active_provider_names,
@@ -45,6 +46,10 @@ def parse_arguments() -> argparse.Namespace:
     diagnose = subcommands.add_parser("diagnose-aggregates", help="Diagnose provider aggregate reconciliation.")
     diagnose.add_argument("--dataset", required=True, type=Path, help="Canonical catalogue dataset JSON.")
     diagnose.add_argument("--offer", help="One offer identity to diagnose; omit for every offer.")
+    validate = subcommands.add_parser("validate", help="Validate schemas and generated-content boundaries.")
+    validate.add_argument("--dataset", required=True, type=Path, help="Canonical catalogue dataset JSON.")
+    validate.add_argument("--repository", default=Path("."), type=Path, help="Git checkout to inspect.")
+    validate.add_argument("--provider-control", default=DEFAULT_PROVIDER_CONTROL, type=Path)
     serve = subcommands.add_parser("serve-site", help="Serve a completed static site on the local network.")
     serve.add_argument("--site", required=True, type=Path, help="Completed static site directory.")
     serve.add_argument("--port", type=int, default=4173, help="TCP port to serve (default: 4173).")
@@ -81,6 +86,12 @@ def main() -> None:
         )
     elif arguments.command == "diagnose-aggregates":
         print(json.dumps(aggregate_diagnostics(arguments.dataset, arguments.offer), ensure_ascii=False))
+    elif arguments.command == "validate":
+        validate_owner_checkout_or_exit(
+            arguments.dataset,
+            arguments.repository,
+            arguments.provider_control,
+        )
     elif arguments.command == "serve-site":
         serve_site(arguments.site, arguments.port)
 
@@ -90,6 +101,18 @@ def read_provider_control_or_exit(path: Path) -> dict[str, object]:
         return read_provider_control(path)
     except (OSError, ValueError) as error:
         raise SystemExit(str(error)) from error
+
+
+def validate_owner_checkout_or_exit(
+    dataset_path: Path,
+    repository_path: Path,
+    provider_control_path: Path,
+) -> None:
+    try:
+        validate_owner_checkout(dataset_path, repository_path, provider_control_path)
+    except (OSError, ValueError) as error:
+        raise SystemExit(str(error)) from error
+    print("Catalogue schema and Git-history validation passed.")
 
 
 def validate_dataset_for_withdrawals_or_exit(dataset_path: Path, control: dict[str, object]) -> None:

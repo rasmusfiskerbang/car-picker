@@ -10,11 +10,36 @@
       }
     ]
   },
+  "coverageEnded": [],
   "catalogueOffers": [
     {
       "offerIdentity": "terminalen:ioniq-5:essential-84",
       "admissionStatus": "admitted",
       "provider": "Terminalen",
+      "privateConsumerEligibility": {
+        "state": "known",
+        "value": true,
+        "evidence": {
+          "sourceUrl": "https://example.test/ioniq-5",
+          "wording": "Tilbuddet gælder privatkunder."
+        }
+      },
+      "passengerCarScope": {
+        "state": "known",
+        "value": true,
+        "evidence": {
+          "sourceUrl": "https://example.test/ioniq-5",
+          "wording": "Hyundai IONIQ 5 personbil."
+        }
+      },
+      "currentAvailability": {
+        "state": "known",
+        "value": true,
+        "evidence": {
+          "sourceUrl": "https://example.test/ioniq-5",
+          "wording": "Aktuelt privatleasingtilbud."
+        }
+      },
       "vehicleSpecification": {
         "state": "known",
         "value": {
@@ -121,6 +146,18 @@
           "sourceUrl": "https://example.test/ioniq-5",
           "wording": "Bilen afleveres ved leasingperiodens udløb."
         }
+      },
+      "baseCashFlowStream": [
+        {
+          "meaning": "Fixturebetaling med ufuldstændig beløbsdokumentation."
+        }
+      ],
+      "sourceMetadata": {
+        "documents": [
+          {
+            "sourceUrl": "https://example.test/ioniq-5"
+          }
+        ]
       }
     }
   ]
