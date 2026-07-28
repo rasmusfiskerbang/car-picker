@@ -12,6 +12,7 @@ dependencies = ["pydantic>=2.12,<3"]
 [dependency-groups]
 dev = [
     "prek>=0.4.11",
+    "pytest>=9.1.1",
     "ruff>=0.16.0",
     "ty>=0.0.64",
 ]
@@ -21,6 +22,10 @@ car-picker = "car_picker.__main__:main"
 
 [tool.setuptools]
 packages = ["car_picker"]
+
+[tool.pytest.ini_options]
+addopts = ["-ra", "--strict-config", "--strict-markers"]
+testpaths = ["tests"]
 
 [tool.ruff]
 target-version = "py314"

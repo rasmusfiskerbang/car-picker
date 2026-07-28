@@ -35,5 +35,5 @@ uv run ty check car_picker tests
 Run the full test suite with:
 
 ```console
-uv run python -m unittest -v
+uv run pytest
 ```

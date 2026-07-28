@@ -14,7 +14,7 @@ python3 -m car_picker validate \
   --dataset tests/fixtures/one-offer-catalogue-dataset.json \
   --repository .
 python3 -m compileall -q car_picker tests
-python3 -m unittest -v
+uv run pytest
 python3 -m car_picker build-site \
   --dataset tests/fixtures/one-offer-catalogue-dataset.json \
   --output var/site
