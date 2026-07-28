@@ -740,7 +740,7 @@ function renderCatalogue(projection) {{
   const comparison = comparisonControl(selected);
   const refreshComparison = () => {{}};
   const filters = filterControls(projection.offers, (filters) => renderOffers(offers, projection.offers, filters, selected, refreshComparison));
-  catalogue.append(filters, comparison, offers, coverage(projection.coverage), footer());
+  catalogue.append(filters, comparison, offers, coverage(projection.coverage, projection.generatedAt), footer());
   renderOffers(offers, projection.offers, initialFilters(), selected, refreshComparison);
   root.replaceChildren(catalogue);
 }}
@@ -1286,11 +1286,19 @@ function cashFlowTiming(value) {{
   return labels[value] || value;
 }}
 
-function coverage(coverage) {{
+function coverage(coverage, generatedAt) {{
   const section = document.createElement("section");
   section.className = "coverage";
-  section.append(heading("Dækning", 2));
-  coverage.providers.forEach((provider) => section.append(text("p", `${{provider.name}} · ${{provider.designatedSource}} · ${{provider.quarantinedCandidateCount}} i karantæne`)));
+  section.append(
+    heading("Katalogets dækning", 2),
+    text("p", `Katalogdatasættet blev genereret ${{formatDate(generatedAt)}}.`),
+    text("p", "Dækkede udbydere og deres udpegede tilbudskilder i neutral kildeorden:"),
+  );
+  coverage.providers.forEach((provider) => section.append(text("p", `${{provider.name}} · ${{provider.designatedSource}} · ${{provider.quarantinedCandidateCount}} kandidater holdt tilbage.`)));
+  section.append(
+    text("p", "Kataloget dækker muligvis ikke hele det danske marked."),
+    text("p", "Dette viser aktiv katalogdækning, ikke vurderingen af andre udbydere."),
+  );
   return section;
 }}
 

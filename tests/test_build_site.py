@@ -217,6 +217,63 @@ class BuildSiteTest(unittest.TestCase):
             ["terminalen:ioniq-5:essential-84"],
         )
 
+    def test_build_site_explains_coverage_without_claiming_the_whole_market(self) -> None:
+        """The public coverage register describes one complete catalogue dataset."""
+        dataset = json.loads(FIXTURE_DATASET.read_text(encoding="utf-8"))
+        dataset["coverage"]["providers"] = [
+            {
+                "name": "Fleasing",
+                "designatedSource": "Fleasing private-offer catalogue and linked details",
+                "quarantinedCandidateCount": 2,
+            },
+            {
+                "name": "Terminalen",
+                "designatedSource": "Terminalen model price page",
+                "quarantinedCandidateCount": 1,
+            },
+        ]
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_path = Path(temporary_directory)
+            dataset_path = temporary_path / "catalogue-dataset.json"
+            site_path = temporary_path / "site"
+            dataset_path.write_text(json.dumps(dataset), encoding="utf-8")
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "car_picker",
+                    "build-site",
+                    "--dataset",
+                    str(dataset_path),
+                    "--output",
+                    str(site_path),
+                ],
+                cwd=REPOSITORY_ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            projection = json.loads((site_path / "projection.json").read_text(encoding="utf-8"))
+            app_source = (site_path / "app.js").read_text(encoding="utf-8")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(projection["generatedAt"], "2026-07-22T12:00:00Z")
+        self.assertEqual(
+            projection["coverage"]["providers"],
+            dataset["coverage"]["providers"],
+        )
+        for copy in (
+            "Katalogets dækning",
+            "Katalogdatasættet blev genereret",
+            "Kataloget dækker muligvis ikke hele det danske marked.",
+            "kandidater holdt tilbage",
+            "Tilbud kan være ændret eller udløbet siden data blev indsamlet.",
+        ):
+            self.assertIn(copy, app_source)
+        for hidden_detail in ("quarantineReasons", "parserMetadata", "hash"):
+            self.assertNotIn(hidden_detail, json.dumps(projection["coverage"]))
+
     def test_build_site_derives_values_and_one_cash_flow_breakdown(self) -> None:
         """The public site build exposes service-derived totals from sourced events."""
         dataset = json.loads(FIXTURE_DATASET.read_text(encoding="utf-8"))
