@@ -995,7 +995,7 @@ function offerDetail(offer) {{
     listFact("Serviceordninger", offer.serviceArrangements, serviceArrangementText),
     listFact("Udelukket eller eksternt", offer.exclusions, serviceArrangementText),
     heading("Betingede eksponeringer", 4),
-    listFact("Mulige betalinger", offer.exposureScenarios, exposureText),
+    exposureScenarioListFact(offer.exposureScenarios),
     providerSource(offer),
   );
   detail.append(content);
@@ -1024,12 +1024,133 @@ function serviceArrangementText(item) {{
 
 function exposureText(item) {{
   const values = [];
-  if (item.formula) values.push(item.formula);
+  if (item.formula) values.push(scenarioFormulaLabel(item.formula));
   if (item.rateDkk !== undefined) values.push(`${{money(item.rateDkk)}} pr. enhed`);
   if (item.capDkk !== undefined) values.push(`loft ${{money(item.capDkk)}}`);
   if (item.amountDkk !== undefined) values.push(`fast beløb ${{money(item.amountDkk)}}`);
   const inputs = item.requiredInputs.length ? ` Kræver: ${{item.requiredInputs.join(", ")}}.` : " Beløb er ikke oplyst.";
   return `${{item.kind}}: ${{item.trigger}}${{inputs}}${{values.length ? ` Regel: ${{values.join(", ")}}.` : ""}}`;
+}}
+
+function scenarioFormulaLabel(value) {{
+  const labels = {{
+    rate_times_input: "sats × input",
+    residual_value_minus_sale_proceeds: "max(0, aftalt restværdi − salgsprovenu)",
+    fixed_amount: "fast beløb",
+  }};
+  return labels[value] || value;
+}}
+
+function exposureScenarioListFact(fact) {{
+  const section = document.createElement("section");
+  section.className = "detail-fact exposure-scenarios";
+  section.append(heading("Mulige betalinger", 5));
+  if (fact.state === "known") {{
+    fact.value.forEach((scenario, index) => {{
+      const item = document.createElement("section");
+      item.className = "exposure-scenario";
+      item.append(text("p", exposureText(scenario)), scenarioCalculationExample(scenario, index));
+      section.append(item);
+    }});
+  }} else {{
+    section.append(text("p", unavailableFactText(fact)));
+  }}
+  section.append(evidenceDetails("Mulige betalinger", fact));
+  return section;
+}}
+
+function scenarioCalculationExample(scenario, scenarioIndex) {{
+  const section = document.createElement("section");
+  section.className = "scenario-calculation";
+  const calculation = standardizedScenarioCalculation(scenario);
+  if (calculation === null || !scenarioCanBeCalculated(scenario, calculation)) {{
+    section.append(text("p", `${{scenario.kind}} kan ikke beregnes uden en dokumenteret regel og alle nødvendige input.`));
+    return section;
+  }}
+  section.append(
+    heading("Dit beregningseksempel", 6),
+    text("p", "Dette er den kommende leasingtagers beregningseksempel, ikke en prognose."),
+    text("p", "Beregningen ændrer ikke tilbudets viste basisbeløb eller rækkefølge."),
+  );
+  const result = document.createElement("output");
+  result.className = "scenario-result";
+  if (calculation.formula === "fixed_amount") {{
+    renderScenarioResult(result, scenario, calculation, []);
+    section.append(result);
+    return section;
+  }}
+  const inputs = scenario.requiredInputs.map((inputName, inputIndex) => {{
+    const identifier = `scenario-${{scenarioIndex}}-${{inputIndex}}`;
+    const inputLabel = controlLabel(inputName, identifier);
+    const input = document.createElement("input");
+    input.id = identifier;
+    input.type = "number";
+    input.min = "0";
+    input.step = "1";
+    input.inputMode = "numeric";
+    inputLabel.append(input);
+    section.append(inputLabel);
+    return input;
+  }});
+  const refreshResult = () => renderScenarioResult(result, scenario, calculation, inputs.map((input) => input.value));
+  inputs.forEach((input) => input.addEventListener("input", refreshResult));
+  section.append(result);
+  refreshResult();
+  return section;
+}}
+
+function standardizedScenarioCalculation(scenario) {{
+  const definitions = {{
+    excess_mileage: {{
+      formula: "rate_times_input", requiredInputCount: 1, requiresRate: true,
+      calculate: (scenario, inputs) => inputs[0] * scenario.rateDkk,
+      arithmetic: (scenario, inputs) => `${{scenario.requiredInputs[0]}} (${{formatNumber(inputs[0])}}) × ${{money(scenario.rateDkk)}}`,
+    }},
+    residual_shortfall: {{
+      formula: "residual_value_minus_sale_proceeds", requiredInputCount: 2, requiresFormula: true,
+      requiredInputNames: ["Aftalt restværdi", "Salgsprovenu"],
+      calculate: (_scenario, inputs) => Math.max(0, inputs[0] - inputs[1]),
+      arithmetic: (scenario, inputs) => `max(0, ${{scenario.requiredInputs[0]}} (${{formatNumber(inputs[0])}}) − ${{scenario.requiredInputs[1]}} (${{formatNumber(inputs[1])}}))`,
+    }},
+    fixed_fee: {{
+      formula: "fixed_amount", requiredInputCount: 0, requiresAmount: true,
+      calculate: (scenario) => scenario.amountDkk,
+      arithmetic: (scenario) => `fast beløb ${{money(scenario.amountDkk)}}`,
+    }},
+  }};
+  const definition = definitions[scenario.kind];
+  if (definition === undefined || (definition.requiresFormula && scenario.formula !== definition.formula)) return null;
+  return !scenario.formula || scenario.formula === definition.formula ? definition : null;
+}}
+
+function scenarioCanBeCalculated(scenario, calculation) {{
+  return scenario.requiredInputs.length === calculation.requiredInputCount
+    && (!calculation.requiredInputNames || calculation.requiredInputNames.every((name, index) => scenario.requiredInputs[index] === name))
+    && (!calculation.requiresRate || Number.isInteger(scenario.rateDkk))
+    && (!calculation.requiresAmount || Number.isInteger(scenario.amountDkk));
+}}
+
+function renderScenarioResult(result, scenario, calculation, rawInputs) {{
+  const inputs = rawInputs.map((value) => Number(value));
+  if (rawInputs.length && (!rawInputs.every((value) => value !== "" && Number.isInteger(Number(value)) && Number(value) >= 0))) {{
+    result.textContent = "Udfyld alle nødvendige input med hele, ikke-negative tal for at se eksemplet.";
+    return;
+  }}
+  const amount = calculateScenarioExample(scenario, calculation, inputs);
+  const arithmetic = scenarioArithmetic(scenario, calculation, inputs);
+  const cappedArithmetic = Number.isInteger(scenario.capDkk)
+    ? `min(${{arithmetic}}, loft ${{money(scenario.capDkk)}})`
+    : arithmetic;
+  result.textContent = `Regnestykke: ${{cappedArithmetic}} = ${{money(amount)}}.`;
+}}
+
+function calculateScenarioExample(scenario, calculation, inputs) {{
+  const uncappedAmount = calculation.calculate(scenario, inputs);
+  return Number.isInteger(scenario.capDkk) ? Math.min(uncappedAmount, scenario.capDkk) : uncappedAmount;
+}}
+
+function scenarioArithmetic(scenario, calculation, inputs) {{
+  return calculation.arithmetic(scenario, inputs);
 }}
 
 function providerSource(offer) {{
@@ -1251,6 +1372,14 @@ details p { margin: .5rem 0; }
 .cash-flow-breakdown li + li { margin-top: .45rem; }
 .calculation-equations { margin-top: 1rem; }
 .calculation-equations h4 { margin: 0; }
+.exposure-scenario { margin: .75rem 0; padding: .75rem; border-left: 3px solid #9bbda5; background: #f6faf6; }
+.exposure-scenario > p { margin-top: 0; }
+.scenario-calculation { margin-top: .6rem; }
+.scenario-calculation h6 { margin: 0 0 .35rem; font-size: 1rem; }
+.scenario-calculation p { margin: .35rem 0; }
+.scenario-calculation label { display: grid; gap: .25rem; max-width: 16rem; }
+.scenario-calculation input { padding: .4rem; font: inherit; }
+.scenario-result { display: block; margin-top: .6rem; font-weight: 700; }
 a { color: #195c49; }
 .coverage { margin-top: 2rem; padding: 1rem 1.25rem; background: #e8f0e8; border-radius: .75rem; }
 footer { margin-top: 2rem; font-size: .875rem; }

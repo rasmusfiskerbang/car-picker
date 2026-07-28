@@ -368,6 +368,53 @@ class BuildSiteTest(unittest.TestCase):
         ):
             self.assertIn(control, app_source)
 
+    def test_build_site_exposes_only_auditable_calculation_examples_for_supported_exposures(self) -> None:
+        """A prospective lessee can calculate a sourced example without changing offer values."""
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            site_path = Path(temporary_directory) / "site"
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "car_picker",
+                    "build-site",
+                    "--dataset",
+                    str(FIXTURE_DATASET),
+                    "--output",
+                    str(site_path),
+                ],
+                cwd=REPOSITORY_ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            projection = json.loads((site_path / "projection.json").read_text(encoding="utf-8"))
+            app_source = (site_path / "app.js").read_text(encoding="utf-8")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            projection["offers"][0]["exposureScenarios"]["value"],
+            [
+                {"kind": "excess_mileage", "trigger": "Hvis kilometergrænsen overskrides.", "requiredInputs": ["Ekstra kilometer"], "rateDkk": 2},
+                {"kind": "damage", "trigger": "Hvis bilen afleveres med skader ud over normal slitage.", "requiredInputs": []},
+            ],
+        )
+        for control in (
+            "Dit beregningseksempel",
+            "Dette er den kommende leasingtagers beregningseksempel, ikke en prognose.",
+            "Beregningen ændrer ikke tilbudets viste basisbeløb eller rækkefølge.",
+            "kan ikke beregnes uden en dokumenteret regel og alle nødvendige input",
+            "standardizedScenarioCalculation",
+            "residual_value_minus_sale_proceeds",
+            "residual_shortfall",
+            "requiredInputNames",
+            "Aftalt restværdi",
+            "Salgsprovenu",
+            "scenarioCanBeCalculated",
+            "calculateScenarioExample",
+        ):
+            self.assertIn(control, app_source)
+
 
 def known_value_fact(value: object, wording: str) -> dict[str, object]:
     return {
