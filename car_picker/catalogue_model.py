@@ -84,6 +84,10 @@ LeasingFormFact = Annotated[
     KnownFact[Literal["financial", "flex", "operational", "hybrid"]] | UnavailableFact,
     Field(discriminator="state"),
 ]
+TextFact = Annotated[
+    KnownFact[NonEmptyString] | UnavailableFact,
+    Field(discriminator="state"),
+]
 PositiveInteger = Annotated[int, Field(gt=0)]
 PositiveIntegerFact = Annotated[
     KnownFact[PositiveInteger] | UnavailableFact,
@@ -192,6 +196,7 @@ class CatalogueCandidate(CatalogueModel):
     passenger_car_scope: BooleanFact
     current_availability: BooleanFact
     supported_leasing_form: LeasingFormFact
+    provider_form_label: TextFact | None = None
     advertised_monthly_payment: MoneyFact
     term_months: PositiveIntegerFact
     base_cash_flow_stream: Annotated[list[CashFlowEvent], Field(min_length=1)]

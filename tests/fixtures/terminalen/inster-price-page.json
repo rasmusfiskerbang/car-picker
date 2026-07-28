@@ -2,7 +2,8 @@
   "url": "/nye-biler/hyundai/hyundai-inster/pris-og-udstyr",
   "template": "modelSubpage",
   "pimModelId": "HY_INSTER",
-  "vehicleData": {"brand": "Hyundai", "model": "INSTER"},
+  "vehicleData": {"brand": "Hyundai", "model": "INSTER", "vehicleType": "Personbil"},
+  "isCurrent": true,
   "grid": [{"content": [
     {"alias": "anchor", "anchorId": "privatleasing"},
     {"alias": "headline", "title": "Privatlease INSTER"},

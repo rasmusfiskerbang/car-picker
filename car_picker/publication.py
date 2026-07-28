@@ -173,6 +173,8 @@ def project_canonical_vehicle(offer: CatalogueOffer) -> dict[str, Any]:
 
 
 def project_canonical_provider_form_label(offer: CatalogueOffer) -> dict[str, Any]:
+    if offer.provider_form_label is not None:
+        return serialize_fact(offer.provider_form_label)
     fact = serialize_fact(offer.supported_leasing_form)
     if fact["state"] == "known":
         fact["value"] = offer.supported_leasing_form.evidence.wording

@@ -110,9 +110,15 @@ def map_model_page(
     brand = required_string(vehicle, "brand")
     model = required_string(vehicle, "model")
     vehicle_wording = json.dumps(vehicle, ensure_ascii=False, separators=(",", ":"))
-    rows, private_eligibility_wording, legal_wording, end_wording = private_lease_rows(
-        payload
-    )
+    passenger_car_scope = passenger_car_fact(api_url, vehicle)
+    current_availability = availability_fact(api_url, payload)
+    (
+        rows,
+        private_eligibility_wording,
+        provider_form_wording,
+        legal_wording,
+        end_wording,
+    ) = private_lease_rows(payload)
     if not rows:
         raise StructuralSourceError(
             "Terminalen model-price API contains no private lease offers"
@@ -131,7 +137,10 @@ def map_model_page(
             brand=brand,
             model=model,
             vehicle_wording=vehicle_wording,
+            passenger_car_scope=passenger_car_scope,
+            current_availability=current_availability,
             private_eligibility_wording=private_eligibility_wording,
+            provider_form_wording=provider_form_wording,
             end_wording=end_wording,
             legal_wording=legal_wording,
             documents=documents,
@@ -149,7 +158,10 @@ def map_configuration(
     brand: str,
     model: str,
     vehicle_wording: str,
+    passenger_car_scope: dict[str, Any],
+    current_availability: dict[str, Any],
     private_eligibility_wording: str,
+    provider_form_wording: str,
     end_wording: str,
     legal_wording: str,
     documents: list[dict[str, str]],
@@ -203,9 +215,13 @@ def map_configuration(
             True,
             {"sourceUrl": api_url, "wording": private_eligibility_wording},
         ),
-        "passengerCarScope": not_stated(api_url, wording),
-        "currentAvailability": not_stated(api_url, wording),
+        "passengerCarScope": passenger_car_scope,
+        "currentAvailability": current_availability,
         "supportedLeasingForm": operational_form_fact(api_url, end_wording),
+        "providerFormLabel": known(
+            provider_form_wording,
+            {"sourceUrl": api_url, "wording": provider_form_wording},
+        ),
         "advertisedMonthlyPayment": money(monthly, payment_evidence),
         "providerAdvertisedAggregate": {
             **money(aggregate, card_evidence),
@@ -221,9 +237,19 @@ def map_configuration(
         "exclusions": exclusions_fact(api_url, legal_wording),
         "exposureScenarios": not_stated(api_url, legal_wording),
         "sourceMetadata": {"parserVersion": PARSER_VERSION, "documents": documents},
-        "admissionStatus": "quarantined",
     }
-    candidate["quarantineReasons"] = admission_reasons(candidate)
+    reasons = admission_reasons(candidate)
+    if vat_basis != "including_vat":
+        reasons.append(
+            {
+                "fact": "baseCashFlowStream",
+                "state": "not_stated",
+                "code": "vat_basis_not_established",
+            }
+        )
+    candidate["admissionStatus"] = "quarantined" if reasons else "admitted"
+    if reasons:
+        candidate["quarantineReasons"] = reasons
     return candidate
 
 
@@ -265,10 +291,11 @@ def not_stated(source_url: str, wording: str) -> dict[str, Any]:
 
 def private_lease_rows(
     payload: Mapping[str, Any],
-) -> tuple[list[dict[str, Any]], str, str, str]:
+) -> tuple[list[dict[str, Any]], str, str, str, str]:
     grid = list_value(payload.get("grid"), "Terminalen grid")
     rows: list[dict[str, Any]] = []
     private_eligibility_wording = ""
+    provider_form_wording = ""
     legal_wording = ""
     end_wording = ""
     in_private_leasing = False
@@ -282,6 +309,7 @@ def private_lease_rows(
             if block.get("alias") == "anchor":
                 in_private_leasing = block.get("anchorId") == "privatleasing"
                 if in_private_leasing:
+                    provider_form_wording = "Privatleasing"
                     private_eligibility_wording = json.dumps(
                         {"alias": "anchor", "anchorId": "privatleasing"},
                         ensure_ascii=False,
@@ -316,7 +344,13 @@ def private_lease_rows(
                 text = html_text(required_string(block, "text"))
                 if "Samlet betaling" in text:
                     legal_wording = text
-    return rows, private_eligibility_wording, legal_wording, end_wording
+    return (
+        rows,
+        private_eligibility_wording,
+        provider_form_wording,
+        legal_wording,
+        end_wording,
+    )
 
 
 def lease_row(title: str, text: str) -> dict[str, Any]:
@@ -383,6 +417,52 @@ def mileage_fact(source_url: str, legal_wording: str) -> dict[str, Any]:
         int(match.group(1).replace(".", "")),
         {"sourceUrl": source_url, "wording": match.group(0)},
     )
+
+
+def passenger_car_fact(
+    source_url: str, vehicle: Mapping[str, Any]
+) -> dict[str, Any]:
+    vehicle_type = vehicle.get("vehicleType")
+    if vehicle_type is None:
+        return not_stated(source_url, json.dumps(vehicle, ensure_ascii=False))
+    if not isinstance(vehicle_type, str):
+        return unclear(source_url, json.dumps({"vehicleType": vehicle_type}))
+    if vehicle_type.casefold() == "personbil":
+        return known(
+            True,
+            {
+                "sourceUrl": source_url,
+                "wording": json.dumps(
+                    {"vehicleType": vehicle_type},
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ),
+            },
+        )
+    return unclear(source_url, vehicle_type)
+
+
+def availability_fact(
+    source_url: str, payload: Mapping[str, Any]
+) -> dict[str, Any]:
+    is_current = payload.get("isCurrent")
+    wording = json.dumps(
+        {"isCurrent": is_current},
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    if is_current is None:
+        return not_stated(source_url, wording)
+    if is_current is True:
+        return known(True, {"sourceUrl": source_url, "wording": wording})
+    return unclear(source_url, wording)
+
+
+def unclear(source_url: str, wording: str) -> dict[str, Any]:
+    return {
+        "state": "unclear",
+        "evidence": {"sourceUrl": source_url, "wording": wording},
+    }
 
 
 def inspection_fee(legal_wording: str) -> int | None:

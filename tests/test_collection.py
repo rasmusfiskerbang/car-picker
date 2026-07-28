@@ -136,7 +136,7 @@ class CollectionTest(unittest.TestCase):
         )
         self.assertIn("terminalen:HY_INSTER:", result.stdout)
 
-    def test_complete_fixture_refresh_carries_admitted_fleasing_offers_into_static_catalogue(
+    def test_complete_fixture_refresh_carries_admitted_catalogue_offers_into_static_catalogue(
         self,
     ) -> None:
         fleasing_detail_path = "/bil/?porsche-taycan&vid=982451736"
@@ -246,6 +246,47 @@ class CollectionTest(unittest.TestCase):
         self.assertEqual(
             fleasing_offers[0]["advertisedMonthlyPayment"]["evidence"]["wording"],
             "Ydelse pr. måned 9.995 kr. /inkl. moms",
+        )
+        terminalen_candidates = [
+            candidate
+            for candidate in dataset["catalogueOffers"]
+            if candidate["provider"] == "Terminalen"
+        ]
+        self.assertEqual(len(terminalen_candidates), 2)
+        self.assertTrue(
+            all(
+                candidate["admissionStatus"] == "admitted"
+                for candidate in terminalen_candidates
+            )
+        )
+        self.assertEqual(
+            terminalen_candidates[0]["providerAdvertisedAggregate"]["valueDkk"],
+            117195,
+        )
+        terminalen_offers = [
+            offer
+            for offer in projection["offers"]
+            if offer["provider"] == "Terminalen"
+        ]
+        self.assertEqual(len(terminalen_offers), 2)
+        self.assertEqual(
+            terminalen_offers[0]["advertisedMonthlyPayment"]["valueDkk"], 3095
+        )
+        self.assertEqual(
+            terminalen_offers[0]["providerFormLabel"]["value"], "Privatleasing"
+        )
+        self.assertEqual(
+            terminalen_offers[0]["nominalBaseOutlay"]["state"], "not_stated"
+        )
+        self.assertIn(
+            "providerAdvertisedAggregateMismatch",
+            terminalen_offers[0]["nominalBaseOutlay"]["blockingFacts"],
+        )
+        self.assertEqual(
+            terminalen_offers[0]["advertisedMonthlyPayment"]["evidence"]["sourceUrl"],
+            f"http://127.0.0.1:{server.server_port}"
+            "/api/page/url?url=/nye-biler/hyundai/hyundai-inster/pris-og-udstyr"
+            "&culture=da-DK",
         )
 
     def test_retries_each_provider_at_most_twice_and_publishes_one_complete_generation(

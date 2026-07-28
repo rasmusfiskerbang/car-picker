@@ -57,7 +57,17 @@ class TerminalenAdapterTest(unittest.TestCase):
         )
         self.assertEqual(
             [candidate["admissionStatus"] for candidate in candidates],
-            ["quarantined", "quarantined"],
+            ["admitted", "admitted"],
+        )
+        self.assertTrue(candidates[0]["passengerCarScope"]["value"])
+        self.assertTrue(candidates[0]["currentAvailability"]["value"])
+        self.assertEqual(
+            candidates[0]["supportedLeasingForm"]["value"], "operational"
+        )
+        self.assertEqual(candidates[0]["providerFormLabel"]["value"], "Privatleasing")
+        self.assertNotEqual(
+            candidates[0]["providerFormLabel"]["evidence"],
+            candidates[0]["supportedLeasingForm"]["evidence"],
         )
         self.assertEqual(candidates[0]["advertisedMonthlyPayment"]["valueDkk"], 3095)
         self.assertEqual(candidates[0]["annualMileageKm"]["value"], 10000)
@@ -100,6 +110,37 @@ class TerminalenAdapterTest(unittest.TestCase):
         )
         self.assertEqual(
             candidates[0]["sourceMetadata"]["documents"][2]["sourceUrl"], API_URL
+        )
+        self.assertNotIn("quarantineReasons", candidates[0])
+
+    def test_quarantines_a_configuration_when_admission_evidence_is_missing(
+        self,
+    ) -> None:
+        payload = json.loads(
+            (FIXTURES / "inster-price-page.json").read_text(encoding="utf-8")
+        )
+        del payload["vehicleData"]["vehicleType"]
+        client = FixtureHttpClient(
+            {
+                CATALOGUE_URL: (FIXTURES / "catalogue.html").read_text(
+                    encoding="utf-8"
+                ),
+                PRICE_URL: (FIXTURES / "inster-price-page.html").read_text(
+                    encoding="utf-8"
+                ),
+                API_URL: json.dumps(payload),
+            }
+        )
+
+        candidate = TerminalenAdapter(
+            client, retrieved_at="2026-07-22T12:00:00Z"
+        ).collect(CATALOGUE_URL)[0]
+
+        self.assertEqual(candidate["admissionStatus"], "quarantined")
+        self.assertEqual(candidate["passengerCarScope"]["state"], "not_stated")
+        self.assertEqual(
+            candidate["quarantineReasons"],
+            [{"fact": "passengerCarScope", "state": "not_stated"}],
         )
 
     def test_rejects_an_api_response_for_another_model_path(self) -> None:
@@ -154,6 +195,46 @@ class TerminalenAdapterTest(unittest.TestCase):
                 event["amountBasis"] == "not_stated"
                 for event in candidate["baseCashFlowStream"]
             )
+        )
+        self.assertEqual(candidate["admissionStatus"], "quarantined")
+        self.assertIn(
+            {
+                "fact": "baseCashFlowStream",
+                "state": "not_stated",
+                "code": "vat_basis_not_established",
+            },
+            candidate["quarantineReasons"],
+        )
+
+    def test_quarantines_structurally_invalid_admission_evidence(self) -> None:
+        payload = json.loads(
+            (FIXTURES / "inster-price-page.json").read_text(encoding="utf-8")
+        )
+        payload["vehicleData"]["vehicleType"] = ["Personbil"]
+        payload["isCurrent"] = "yes"
+        client = FixtureHttpClient(
+            {
+                CATALOGUE_URL: (FIXTURES / "catalogue.html").read_text(
+                    encoding="utf-8"
+                ),
+                PRICE_URL: (FIXTURES / "inster-price-page.html").read_text(
+                    encoding="utf-8"
+                ),
+                API_URL: json.dumps(payload),
+            }
+        )
+
+        candidate = TerminalenAdapter(
+            client, retrieved_at="2026-07-22T12:00:00Z"
+        ).collect(CATALOGUE_URL)[0]
+
+        self.assertEqual(candidate["admissionStatus"], "quarantined")
+        self.assertEqual(
+            candidate["quarantineReasons"],
+            [
+                {"fact": "passengerCarScope", "state": "unclear"},
+                {"fact": "currentAvailability", "state": "unclear"},
+            ],
         )
 
     def test_distinguishes_cards_with_the_same_title_using_selected_source_values(
