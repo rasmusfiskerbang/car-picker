@@ -13,7 +13,9 @@ FIXTURE_DATASET = REPOSITORY_ROOT / "tests/fixtures/one-offer-catalogue-dataset.
 
 
 class OwnerOperationsTest(unittest.TestCase):
-    def test_validate_checks_schemas_and_rejects_generated_artifacts_in_git_history(self) -> None:
+    def test_validate_checks_schemas_and_rejects_generated_artifacts_in_git_history(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             repository = Path(temporary_directory)
             run_git(repository, "init")
@@ -51,10 +53,14 @@ class OwnerOperationsTest(unittest.TestCase):
             )
             site_path = repository / "site"
             site_path.mkdir()
-            (site_path / "index.html").write_text("<p>Generated site</p>", encoding="utf-8")
+            (site_path / "index.html").write_text(
+                "<p>Generated site</p>", encoding="utf-8"
+            )
             generated_data_path = repository / "var/catalogue-dataset.json"
             generated_data_path.parent.mkdir()
-            generated_data_path.write_text('{"providerOfferData":true}', encoding="utf-8")
+            generated_data_path.write_text(
+                '{"providerOfferData":true}', encoding="utf-8"
+            )
             run_git(repository, "add", "site/index.html", "var/catalogue-dataset.json")
             run_git(
                 repository,
@@ -77,10 +83,17 @@ class OwnerOperationsTest(unittest.TestCase):
                 str(legal_record_path),
             )
 
-        self.assertEqual(valid_checkout_result.returncode, 0, valid_checkout_result.stderr)
-        self.assertIn("schema and Git-history validation passed", valid_checkout_result.stdout)
+        self.assertEqual(
+            valid_checkout_result.returncode, 0, valid_checkout_result.stderr
+        )
+        self.assertIn(
+            "schema and Git-history validation passed", valid_checkout_result.stdout
+        )
         self.assertNotEqual(generated_artifact_result.returncode, 0)
-        self.assertIn("generated provider content or built artifacts", generated_artifact_result.stderr)
+        self.assertIn(
+            "generated provider content or built artifacts",
+            generated_artifact_result.stderr,
+        )
         self.assertIn("site/index.html", generated_artifact_result.stderr)
         self.assertIn("var/catalogue-dataset.json", generated_artifact_result.stderr)
 

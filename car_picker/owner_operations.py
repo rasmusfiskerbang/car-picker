@@ -12,7 +12,9 @@ from car_picker.publication import (
 )
 
 
-def validate_owner_checkout(dataset_path: Path, repository_path: Path, provider_control_path: Path) -> None:
+def validate_owner_checkout(
+    dataset_path: Path, repository_path: Path, provider_control_path: Path
+) -> None:
     """Validate data contracts and the generated-content boundary for an owner checkout."""
     dataset = dict(read_json(dataset_path))
     validate_complete_catalogue_dataset(dataset)
@@ -38,9 +40,7 @@ def generated_paths_in_history(repository_path: Path) -> list[str]:
         detail = result.stderr.strip() or "not a readable Git repository"
         raise ValueError(f"Cannot inspect Git history at {repository_path}: {detail}")
     paths = (
-        line.split(" ", 1)[1]
-        for line in result.stdout.splitlines()
-        if " " in line
+        line.split(" ", 1)[1] for line in result.stdout.splitlines() if " " in line
     )
     return sorted({path for path in paths if is_generated_path(path)})
 
@@ -50,7 +50,9 @@ def validate_version_controlled_file(repository_path: Path, file_path: Path) -> 
     try:
         relative_path = file_path.resolve().relative_to(repository).as_posix()
     except ValueError as error:
-        raise ValueError(f"{file_path} must be inside the validated Git checkout") from error
+        raise ValueError(
+            f"{file_path} must be inside the validated Git checkout"
+        ) from error
     committed = subprocess.run(
         ["git", "-C", str(repository), "cat-file", "-e", f"HEAD:{relative_path}"],
         capture_output=True,
@@ -64,16 +66,13 @@ def validate_version_controlled_file(repository_path: Path, file_path: Path) -> 
         check=False,
     )
     if committed.returncode != 0 or unchanged.returncode != 0:
-        raise ValueError(f"{relative_path} must be committed without local changes before release validation")
+        raise ValueError(
+            f"{relative_path} must be committed without local changes before release validation"
+        )
 
 
 def is_generated_path(path: str) -> bool:
     parts = PurePosixPath(path).parts
-    return (
-        bool(parts)
-        and (
-            parts[0] == "var"
-            or "site" in parts
-            or parts[-1] == "catalogue-dataset.json"
-        )
+    return bool(parts) and (
+        parts[0] == "var" or "site" in parts or parts[-1] == "catalogue-dataset.json"
     )

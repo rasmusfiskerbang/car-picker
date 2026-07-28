@@ -19,41 +19,81 @@ FIXTURE_DATASET = REPOSITORY_ROOT / "tests/fixtures/one-offer-catalogue-dataset.
 
 
 class StaticArtifactTest(unittest.TestCase):
-    def test_build_exports_a_minimized_verified_artifact_and_preserves_the_prior_artifact_on_failure(self) -> None:
+    def test_build_exports_a_minimized_verified_artifact_and_preserves_the_prior_artifact_on_failure(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             temporary_path = Path(temporary_directory)
             site_path = temporary_path / "site"
-            first_build = run_cli("build-site", "--dataset", str(FIXTURE_DATASET), "--output", str(site_path))
+            first_build = run_cli(
+                "build-site",
+                "--dataset",
+                str(FIXTURE_DATASET),
+                "--output",
+                str(site_path),
+            )
             initial_projection = (site_path / "projection.json").read_bytes()
             initial_files = sorted(path.name for path in site_path.iterdir())
             malformed_dataset = json.loads(FIXTURE_DATASET.read_text(encoding="utf-8"))
-            malformed_dataset["catalogueOffers"][0]["vehicleSpecification"] = {"state": "known", "evidence": {"sourceUrl": "https://example.test", "wording": "Missing value"}}
+            malformed_dataset["catalogueOffers"][0]["vehicleSpecification"] = {
+                "state": "known",
+                "evidence": {
+                    "sourceUrl": "https://example.test",
+                    "wording": "Missing value",
+                },
+            }
             malformed_path = temporary_path / "catalogue-dataset.json"
             malformed_path.write_text(json.dumps(malformed_dataset), encoding="utf-8")
-            failed_build = run_cli("build-site", "--dataset", str(malformed_path), "--output", str(site_path))
+            failed_build = run_cli(
+                "build-site",
+                "--dataset",
+                str(malformed_path),
+                "--output",
+                str(site_path),
+            )
 
             projection = json.loads(initial_projection)
-            schema = json.loads((site_path / "projection-schema.json").read_text(encoding="utf-8"))
+            schema = json.loads(
+                (site_path / "projection-schema.json").read_text(encoding="utf-8")
+            )
             final_projection = (site_path / "projection.json").read_bytes()
 
         self.assertEqual(first_build.returncode, 0, first_build.stderr)
-        self.assertEqual(initial_files, ["app.js", "index.html", "projection-schema.json", "projection.json", "styles.css"])
-        self.assertEqual(schema["$id"], "https://car-picker.local/schemas/catalogue-presentation-v1.json")
-        self.assertEqual(projection["schemaVersion"], schema["properties"]["schemaVersion"]["const"])
+        self.assertEqual(
+            initial_files,
+            [
+                "app.js",
+                "index.html",
+                "projection-schema.json",
+                "projection.json",
+                "styles.css",
+            ],
+        )
+        self.assertEqual(
+            schema["$id"],
+            "https://car-picker.local/schemas/catalogue-presentation-v1.json",
+        )
+        self.assertEqual(
+            projection["schemaVersion"], schema["properties"]["schemaVersion"]["const"]
+        )
         self.assertNotIn("sourceMetadata", json.dumps(projection))
         self.assertNotIn("quarantineReasons", json.dumps(projection))
         self.assertNotIn("contentSha256", json.dumps(projection))
         self.assertNotEqual(failed_build.returncode, 0)
         self.assertEqual(final_projection, initial_projection)
 
-    def test_failed_browser_output_does_not_replace_the_completed_artifact(self) -> None:
+    def test_failed_browser_output_does_not_replace_the_completed_artifact(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             site_path = Path(temporary_directory) / "site"
             build_site(FIXTURE_DATASET, site_path)
             initial_app = (site_path / "app.js").read_bytes()
             malformed_browser_app = 'fetch("projection.json"); window.addEventListener("hashchange", () => {;'
 
-            with patch("car_picker.publication.browser_app", return_value=malformed_browser_app):
+            with patch(
+                "car_picker.publication.browser_app", return_value=malformed_browser_app
+            ):
                 with self.assertRaisesRegex(ValueError, "unclosed syntax delimiters"):
                     build_site(FIXTURE_DATASET, site_path)
 
@@ -65,10 +105,25 @@ class StaticArtifactTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary_directory:
             temporary_path = Path(temporary_directory)
             site_path = temporary_path / "site"
-            build = run_cli("build-site", "--dataset", str(FIXTURE_DATASET), "--output", str(site_path))
+            build = run_cli(
+                "build-site",
+                "--dataset",
+                str(FIXTURE_DATASET),
+                "--output",
+                str(site_path),
+            )
             port = free_port()
             server = subprocess.Popen(
-                [sys.executable, "-m", "car_picker", "serve-site", "--site", str(site_path), "--port", str(port)],
+                [
+                    sys.executable,
+                    "-m",
+                    "car_picker",
+                    "serve-site",
+                    "--site",
+                    str(site_path),
+                    "--port",
+                    str(port),
+                ],
                 cwd=REPOSITORY_ROOT,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,

@@ -21,14 +21,22 @@ def validate_legal_release(
     validate_version_controlled_file(repository_path, record_path)
     record = read_legal_record(record_path)
     if set(record) != {"schemaVersion", "changeHorizon", "revalidation"}:
-        raise ValueError("consumer-credit legal review has unexpected or missing fields")
+        raise ValueError(
+            "consumer-credit legal review has unexpected or missing fields"
+        )
     if record.get("schemaVersion") != "consumer-credit-legal-review/v1":
-        raise ValueError("consumer-credit legal review has an unsupported schemaVersion")
+        raise ValueError(
+            "consumer-credit legal review has an unsupported schemaVersion"
+        )
     if record.get("changeHorizon") != CHANGE_HORIZON.isoformat():
-        raise ValueError("consumer-credit legal review must record the 2026-11-20 change horizon")
+        raise ValueError(
+            "consumer-credit legal review must record the 2026-11-20 change horizon"
+        )
     if release_date < CHANGE_HORIZON:
         if record.get("revalidation") is not None:
-            raise ValueError("pre-transition validation cannot claim post-transition revalidation")
+            raise ValueError(
+                "pre-transition validation cannot claim post-transition revalidation"
+            )
         return (
             f"Legal gate: change horizon {CHANGE_HORIZON.isoformat()}; "
             "post-transition revalidation is pending."
@@ -51,7 +59,9 @@ def read_legal_record(path: Path) -> dict[str, Any]:
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
-        raise ValueError(f"Cannot read consumer-credit legal review at {path}: {error}") from error
+        raise ValueError(
+            f"Cannot read consumer-credit legal review at {path}: {error}"
+        ) from error
     if not isinstance(value, dict):
         raise ValueError("consumer-credit legal review must be an object")
     return value
@@ -75,16 +85,24 @@ def validate_revalidation(value: Any, release_date: date) -> tuple[str, str, str
         "implementationImpact",
         "ownerSignOff",
     }:
-        raise ValueError("completed consumer-credit revalidation has unexpected or missing fields")
+        raise ValueError(
+            "completed consumer-credit revalidation has unexpected or missing fields"
+        )
     reviewed_on = parse_date(value["reviewedOn"], "revalidation reviewedOn")
     if not CHANGE_HORIZON <= reviewed_on <= release_date:
-        raise ValueError("revalidation reviewedOn must be on or after the change horizon and no later than release")
+        raise ValueError(
+            "revalidation reviewedOn must be on or after the change horizon and no later than release"
+        )
     sources = value["sources"]
     if not isinstance(sources, list) or not sources:
-        raise ValueError("completed consumer-credit revalidation requires official sources")
+        raise ValueError(
+            "completed consumer-credit revalidation requires official sources"
+        )
     source_kinds = {validate_source(source, reviewed_on) for source in sources}
     if not {"official_law", "official_guidance"}.issubset(source_kinds):
-        raise ValueError("revalidation sources must cover then-current official law and official guidance")
+        raise ValueError(
+            "revalidation sources must cover then-current official law and official guidance"
+        )
     for field_name in (
         "consumerCreditClassificationConclusion",
         "disclosureRulesConclusion",
@@ -97,7 +115,9 @@ def validate_revalidation(value: Any, release_date: date) -> tuple[str, str, str
     owner_name = require_non_empty_string(sign_off.get("name"), "ownerSignOff.name")
     signed_on = parse_date(sign_off.get("signedOn"), "ownerSignOff.signedOn")
     if not reviewed_on <= signed_on <= release_date:
-        raise ValueError("owner sign-off must be on or after review and no later than release")
+        raise ValueError(
+            "owner sign-off must be on or after review and no later than release"
+        )
     return reviewed_on.isoformat(), owner_name, signed_on.isoformat()
 
 
@@ -114,7 +134,9 @@ def validate_source(value: Any, reviewed_on: date) -> str:
         raise ValueError("consumer-credit source has unexpected or missing fields")
     kind = value.get("kind")
     if kind not in {"official_law", "official_guidance"}:
-        raise ValueError("consumer-credit source kind must be official_law or official_guidance")
+        raise ValueError(
+            "consumer-credit source kind must be official_law or official_guidance"
+        )
     require_non_empty_string(value.get("title"), "source.title")
     require_non_empty_string(value.get("publisher"), "source.publisher")
     source_url = require_non_empty_string(value.get("url"), "source.url")
@@ -123,7 +145,9 @@ def validate_source(value: Any, reviewed_on: date) -> str:
         raise ValueError("consumer-credit official source URL must use HTTPS")
     checked_on = parse_date(value.get("checkedOn"), "source.checkedOn")
     if not CHANGE_HORIZON <= checked_on <= reviewed_on:
-        raise ValueError("official sources must be checked after the change horizon and no later than review")
+        raise ValueError(
+            "official sources must be checked after the change horizon and no later than review"
+        )
     effective_from = parse_date(value.get("effectiveFrom"), "source.effectiveFrom")
     effective_to_value = value.get("effectiveTo")
     effective_to: date | None = None
@@ -131,8 +155,12 @@ def validate_source(value: Any, reviewed_on: date) -> str:
         effective_to = parse_date(effective_to_value, "source.effectiveTo")
         if effective_to < effective_from:
             raise ValueError("source effectiveTo cannot precede effectiveFrom")
-    if effective_from > reviewed_on or (effective_to is not None and effective_to < reviewed_on):
-        raise ValueError("consumer-credit official sources must be effective on the review date")
+    if effective_from > reviewed_on or (
+        effective_to is not None and effective_to < reviewed_on
+    ):
+        raise ValueError(
+            "consumer-credit official sources must be effective on the review date"
+        )
     return kind
 
 

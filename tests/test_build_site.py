@@ -38,125 +38,170 @@ class BuildSiteTest(unittest.TestCase):
             self.assertTrue((site_path / "index.html").is_file())
             self.assertTrue((site_path / "app.js").is_file())
             self.assertTrue((site_path / "styles.css").is_file())
-            projection = json.loads((site_path / "projection.json").read_text(encoding="utf-8"))
+            projection = json.loads(
+                (site_path / "projection.json").read_text(encoding="utf-8")
+            )
 
         self.assertEqual(projection["schemaVersion"], "catalogue-presentation/v1")
-        self.assertEqual(projection["offers"], [
-            {
-                "offerIdentity": "terminalen:ioniq-5:essential-84",
-                "provider": "Terminalen",
-                "providerSourceUrl": "https://example.test/ioniq-5",
-                "vehicleSpecification": {
-                    "state": "known",
-                    "value": "Hyundai IONIQ 5 Essential 84 kWh",
-                    "evidence": {
-                        "sourceUrl": "https://example.test/ioniq-5",
-                        "wording": "Hyundai IONIQ 5 Essential 84 kWh.",
+        self.assertEqual(
+            projection["offers"],
+            [
+                {
+                    "offerIdentity": "terminalen:ioniq-5:essential-84",
+                    "provider": "Terminalen",
+                    "providerSourceUrl": "https://example.test/ioniq-5",
+                    "vehicleSpecification": {
+                        "state": "known",
+                        "value": "Hyundai IONIQ 5 Essential 84 kWh",
+                        "evidence": {
+                            "sourceUrl": "https://example.test/ioniq-5",
+                            "wording": "Hyundai IONIQ 5 Essential 84 kWh.",
+                        },
                     },
-                },
-                "supportedLeasingForm": {
-                    "state": "known",
-                    "value": "operational",
-                    "evidence": {
-                        "sourceUrl": "https://example.test/ioniq-5",
-                        "wording": "Privatleasing med aflevering ved udløb.",
+                    "supportedLeasingForm": {
+                        "state": "known",
+                        "value": "operational",
+                        "evidence": {
+                            "sourceUrl": "https://example.test/ioniq-5",
+                            "wording": "Privatleasing med aflevering ved udløb.",
+                        },
                     },
-                },
-                "providerFormLabel": {
-                    "state": "known",
-                    "value": "Privatleasing med aflevering ved udløb.",
-                    "evidence": {
-                        "sourceUrl": "https://example.test/ioniq-5",
-                        "wording": "Privatleasing med aflevering ved udløb.",
+                    "providerFormLabel": {
+                        "state": "known",
+                        "value": "Privatleasing med aflevering ved udløb.",
+                        "evidence": {
+                            "sourceUrl": "https://example.test/ioniq-5",
+                            "wording": "Privatleasing med aflevering ved udløb.",
+                        },
                     },
-                },
-                "residualRiskAllocation": {
-                    "state": "known",
-                    "value": "provider",
-                    "evidence": {
-                        "sourceUrl": "https://example.test/ioniq-5",
-                        "wording": "Udbyderen bærer værditabet.",
+                    "residualRiskAllocation": {
+                        "state": "known",
+                        "value": "provider",
+                        "evidence": {
+                            "sourceUrl": "https://example.test/ioniq-5",
+                            "wording": "Udbyderen bærer værditabet.",
+                        },
                     },
-                },
-                "registrationTaxTreatment": {
-                    "state": "known", "value": "full",
-                    "evidence": {"sourceUrl": "https://example.test/ioniq-5", "wording": "Registreringsafgiften er betalt fuldt."},
-                },
-                "serviceArrangements": {
-                    "state": "known", "value": [{"category": "service", "treatment": "included", "scope": "Alle fabriksanbefalede services."}],
-                    "evidence": {"sourceUrl": "https://example.test/ioniq-5", "wording": "Inkl. alle fabriksanbefalede services."},
-                },
-                "exclusions": {
-                    "state": "known", "value": [{"category": "insurance", "treatment": "required_external", "scope": "Forsikring aftales og betales særskilt."}],
-                    "evidence": {"sourceUrl": "https://example.test/ioniq-5", "wording": "Forsikring er ikke inkluderet."},
-                },
-                "exposureScenarios": {
-                    "state": "known", "value": [
-                        {"kind": "excess_mileage", "trigger": "Hvis kilometergrænsen overskrides.", "requiredInputs": ["Ekstra kilometer"], "inputKinds": ["excess_distance_km"], "rateDkk": 2},
-                        {"kind": "damage", "trigger": "Hvis bilen afleveres med skader ud over normal slitage.", "requiredInputs": []},
-                    ],
-                    "evidence": {"sourceUrl": "https://example.test/ioniq-5", "wording": "Overkørte kilometer afregnes med 2 kr. pr. km; skader kan medføre betaling."},
-                },
-                "advertisedMonthlyPayment": {
-                    "state": "known",
-                    "valueDkk": 3795,
-                    "evidence": {
-                        "sourceUrl": "https://example.test/ioniq-5",
-                        "wording": "Månedlig ydelse 3.795 kr.",
+                    "registrationTaxTreatment": {
+                        "state": "known",
+                        "value": "full",
+                        "evidence": {
+                            "sourceUrl": "https://example.test/ioniq-5",
+                            "wording": "Registreringsafgiften er betalt fuldt.",
+                        },
                     },
-                },
-                "upfrontCashRequirement": {
-                    "state": "not_stated",
-                    "blockingFacts": ["baseCashFlowStream"],
-                    "evidence": {
-                        "sourceUrl": "https://example.test/ioniq-5",
-                        "wording": "Beregnet af tjenesten fra betalingsstrømmen.",
+                    "serviceArrangements": {
+                        "state": "known",
+                        "value": [
+                            {
+                                "category": "service",
+                                "treatment": "included",
+                                "scope": "Alle fabriksanbefalede services.",
+                            }
+                        ],
+                        "evidence": {
+                            "sourceUrl": "https://example.test/ioniq-5",
+                            "wording": "Inkl. alle fabriksanbefalede services.",
+                        },
                     },
-                },
-                "nominalBaseOutlay": {
-                    "state": "not_stated",
-                    "blockingFacts": ["baseCashFlowStream"],
-                    "evidence": {
-                        "sourceUrl": "https://example.test/ioniq-5",
-                        "wording": "Beregnet af tjenesten fra betalingsstrømmen.",
+                    "exclusions": {
+                        "state": "known",
+                        "value": [
+                            {
+                                "category": "insurance",
+                                "treatment": "required_external",
+                                "scope": "Forsikring aftales og betales særskilt.",
+                            }
+                        ],
+                        "evidence": {
+                            "sourceUrl": "https://example.test/ioniq-5",
+                            "wording": "Forsikring er ikke inkluderet.",
+                        },
                     },
-                },
-                "nominalMonthlyEquivalent": {
-                    "state": "not_stated",
-                    "blockingFacts": ["baseCashFlowStream"],
-                    "evidence": {
-                        "sourceUrl": "https://example.test/ioniq-5",
-                        "wording": "Beregnet af tjenesten fra betalingsstrømmen.",
+                    "exposureScenarios": {
+                        "state": "known",
+                        "value": [
+                            {
+                                "kind": "excess_mileage",
+                                "trigger": "Hvis kilometergrænsen overskrides.",
+                                "requiredInputs": ["Ekstra kilometer"],
+                                "inputKinds": ["excess_distance_km"],
+                                "rateDkk": 2,
+                            },
+                            {
+                                "kind": "damage",
+                                "trigger": "Hvis bilen afleveres med skader ud over normal slitage.",
+                                "requiredInputs": [],
+                            },
+                        ],
+                        "evidence": {
+                            "sourceUrl": "https://example.test/ioniq-5",
+                            "wording": "Overkørte kilometer afregnes med 2 kr. pr. km; skader kan medføre betaling.",
+                        },
                     },
-                },
-                "termMonths": {
-                    "state": "known",
-                    "value": 36,
-                    "evidence": {
-                        "sourceUrl": "https://example.test/ioniq-5",
-                        "wording": "Løbetid 36 måneder.",
+                    "advertisedMonthlyPayment": {
+                        "state": "known",
+                        "valueDkk": 3795,
+                        "evidence": {
+                            "sourceUrl": "https://example.test/ioniq-5",
+                            "wording": "Månedlig ydelse 3.795 kr.",
+                        },
                     },
-                },
-                "annualMileageKm": {
-                    "state": "known",
-                    "value": 10000,
-                    "evidence": {
-                        "sourceUrl": "https://example.test/ioniq-5",
-                        "wording": "10.000 km om året.",
+                    "upfrontCashRequirement": {
+                        "state": "not_stated",
+                        "blockingFacts": ["baseCashFlowStream"],
+                        "evidence": {
+                            "sourceUrl": "https://example.test/ioniq-5",
+                            "wording": "Beregnet af tjenesten fra betalingsstrømmen.",
+                        },
                     },
-                },
-                "normalEndMechanism": {
-                    "state": "known",
-                    "value": "return_to_provider",
-                    "evidence": {
-                        "sourceUrl": "https://example.test/ioniq-5",
-                        "wording": "Bilen afleveres ved leasingperiodens udløb.",
+                    "nominalBaseOutlay": {
+                        "state": "not_stated",
+                        "blockingFacts": ["baseCashFlowStream"],
+                        "evidence": {
+                            "sourceUrl": "https://example.test/ioniq-5",
+                            "wording": "Beregnet af tjenesten fra betalingsstrømmen.",
+                        },
                     },
-                },
-            }
-        ])
+                    "nominalMonthlyEquivalent": {
+                        "state": "not_stated",
+                        "blockingFacts": ["baseCashFlowStream"],
+                        "evidence": {
+                            "sourceUrl": "https://example.test/ioniq-5",
+                            "wording": "Beregnet af tjenesten fra betalingsstrømmen.",
+                        },
+                    },
+                    "termMonths": {
+                        "state": "known",
+                        "value": 36,
+                        "evidence": {
+                            "sourceUrl": "https://example.test/ioniq-5",
+                            "wording": "Løbetid 36 måneder.",
+                        },
+                    },
+                    "annualMileageKm": {
+                        "state": "known",
+                        "value": 10000,
+                        "evidence": {
+                            "sourceUrl": "https://example.test/ioniq-5",
+                            "wording": "10.000 km om året.",
+                        },
+                    },
+                    "normalEndMechanism": {
+                        "state": "known",
+                        "value": "return_to_provider",
+                        "evidence": {
+                            "sourceUrl": "https://example.test/ioniq-5",
+                            "wording": "Bilen afleveres ved leasingperiodens udløb.",
+                        },
+                    },
+                }
+            ],
+        )
 
-    def test_build_site_refuses_an_output_outside_the_ignored_site_boundary(self) -> None:
+    def test_build_site_refuses_an_output_outside_the_ignored_site_boundary(
+        self,
+    ) -> None:
         """The CLI keeps generated site artifacts in an ignored `site` directory."""
         with tempfile.TemporaryDirectory() as temporary_directory:
             output_path = Path(temporary_directory) / "dist"
@@ -180,7 +225,9 @@ class BuildSiteTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("must name a site directory", result.stderr)
 
-    def test_build_site_withholds_quarantined_candidates_from_the_active_catalogue(self) -> None:
+    def test_build_site_withholds_quarantined_candidates_from_the_active_catalogue(
+        self,
+    ) -> None:
         """A quarantined offer remains in the dataset but cannot enter the static catalogue."""
         dataset = json.loads(FIXTURE_DATASET.read_text(encoding="utf-8"))
         quarantined_offer = dataset["catalogueOffers"][0].copy()
@@ -209,7 +256,9 @@ class BuildSiteTest(unittest.TestCase):
                 text=True,
                 check=False,
             )
-            projection = json.loads((site_path / "projection.json").read_text(encoding="utf-8"))
+            projection = json.loads(
+                (site_path / "projection.json").read_text(encoding="utf-8")
+            )
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(
@@ -217,7 +266,9 @@ class BuildSiteTest(unittest.TestCase):
             ["terminalen:ioniq-5:essential-84"],
         )
 
-    def test_build_site_explains_coverage_without_claiming_the_whole_market(self) -> None:
+    def test_build_site_explains_coverage_without_claiming_the_whole_market(
+        self,
+    ) -> None:
         """The public coverage register describes one complete catalogue dataset."""
         dataset = json.loads(FIXTURE_DATASET.read_text(encoding="utf-8"))
         dataset["coverage"]["providers"] = [
@@ -254,7 +305,9 @@ class BuildSiteTest(unittest.TestCase):
                 text=True,
                 check=False,
             )
-            projection = json.loads((site_path / "projection.json").read_text(encoding="utf-8"))
+            projection = json.loads(
+                (site_path / "projection.json").read_text(encoding="utf-8")
+            )
             app_source = (site_path / "app.js").read_text(encoding="utf-8")
 
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -276,7 +329,7 @@ class BuildSiteTest(unittest.TestCase):
         for route in (
             "catalogue.append(filters, comparison, offers, coverage(projection.coverage, projection.coverageEnded, projection.generatedAt), footer(projection.generatedAt));",
             "page.append(back, offerCard(offer), footer(projection.generatedAt));",
-            "page.append(back, heading(\"Sammenlign tilbud\", 1), comparisonTable(offers), footer(projection.generatedAt));",
+            'page.append(back, heading("Sammenlign tilbud", 1), comparisonTable(offers), footer(projection.generatedAt));',
         ):
             self.assertIn(route, app_source)
 
@@ -287,16 +340,32 @@ class BuildSiteTest(unittest.TestCase):
         offer["canonicalOfferUrl"] = "https://example.test/ioniq-5"
         offer["termMonths"] = known_value_fact(12, "Løbetid 12 måneder.")
         offer["baseCashFlowStream"] = [
-            cash_flow_event("Førstegangsydelse", "payment", 12000, "acceptance_to_handover"),
-            cash_flow_event("Depositum", "payment", 4000, "acceptance_to_handover", "refundable"),
-            cash_flow_event("Månedlig ydelse", "payment", 1000, "recurring", recurrence_count=12),
-            cash_flow_event("Tilbagebetaling af depositum", "receipt", 4000, "normal_completion_end", "refundable"),
-            cash_flow_event("Obligatorisk slutbetaling", "payment", 6000, "normal_completion_end"),
+            cash_flow_event(
+                "Førstegangsydelse", "payment", 12000, "acceptance_to_handover"
+            ),
+            cash_flow_event(
+                "Depositum", "payment", 4000, "acceptance_to_handover", "refundable"
+            ),
+            cash_flow_event(
+                "Månedlig ydelse", "payment", 1000, "recurring", recurrence_count=12
+            ),
+            cash_flow_event(
+                "Tilbagebetaling af depositum",
+                "receipt",
+                4000,
+                "normal_completion_end",
+                "refundable",
+            ),
+            cash_flow_event(
+                "Obligatorisk slutbetaling", "payment", 6000, "normal_completion_end"
+            ),
         ]
         missing_monthly_offer = json.loads(json.dumps(offer))
         missing_monthly_offer["offerIdentity"] = "terminalen:ioniq-5:missing-monthly"
         missing_monthly_offer["baseCashFlowStream"][2]["amountDkk"] = None
-        missing_monthly_offer["baseCashFlowStream"][2]["blockingFacts"] = ["advertisedMonthlyPayment"]
+        missing_monthly_offer["baseCashFlowStream"][2]["blockingFacts"] = [
+            "advertisedMonthlyPayment"
+        ]
         dataset["catalogueOffers"].append(missing_monthly_offer)
         malformed_stream_offer = json.loads(json.dumps(offer))
         malformed_stream_offer["offerIdentity"] = "terminalen:ioniq-5:malformed-stream"
@@ -325,7 +394,9 @@ class BuildSiteTest(unittest.TestCase):
                 check=False,
             )
             self.assertEqual(result.returncode, 0, result.stderr)
-            projection = json.loads((site_path / "projection.json").read_text(encoding="utf-8"))
+            projection = json.loads(
+                (site_path / "projection.json").read_text(encoding="utf-8")
+            )
             app_source = (site_path / "app.js").read_text(encoding="utf-8")
 
         rendered_offer = projection["offers"][0]
@@ -351,7 +422,9 @@ class BuildSiteTest(unittest.TestCase):
             ],
         )
         rendered_missing_monthly_offer = projection["offers"][1]
-        self.assertEqual(rendered_missing_monthly_offer["upfrontCashRequirement"]["valueDkk"], 16000)
+        self.assertEqual(
+            rendered_missing_monthly_offer["upfrontCashRequirement"]["valueDkk"], 16000
+        )
         self.assertEqual(
             rendered_missing_monthly_offer["nominalBaseOutlay"]["blockingFacts"],
             ["advertisedMonthlyPayment"],
@@ -360,7 +433,9 @@ class BuildSiteTest(unittest.TestCase):
             rendered_missing_monthly_offer["nominalMonthlyEquivalent"]["blockingFacts"],
             ["advertisedMonthlyPayment"],
         )
-        self.assertIsNone(rendered_missing_monthly_offer["cashFlowBreakdown"][2]["amountDkk"])
+        self.assertIsNone(
+            rendered_missing_monthly_offer["cashFlowBreakdown"][2]["amountDkk"]
+        )
         rendered_malformed_stream_offer = projection["offers"][2]
         self.assertEqual(
             rendered_malformed_stream_offer["upfrontCashRequirement"]["blockingFacts"],
@@ -368,18 +443,32 @@ class BuildSiteTest(unittest.TestCase):
         )
         self.assertNotIn("cashFlowBreakdown", rendered_malformed_stream_offer)
 
-    def test_build_site_exposes_filterable_offer_facts_without_changing_source_order(self) -> None:
+    def test_build_site_exposes_filterable_offer_facts_without_changing_source_order(
+        self,
+    ) -> None:
         """The public catalogue contract keeps the facts needed to narrow offers."""
         dataset = json.loads(FIXTURE_DATASET.read_text(encoding="utf-8"))
         first_offer = dataset["catalogueOffers"][0]
-        first_offer["residualRiskAllocation"] = known_value_fact("provider", "Udbyderen bærer værditabet.")
+        first_offer["residualRiskAllocation"] = known_value_fact(
+            "provider", "Udbyderen bærer værditabet."
+        )
         second_offer = json.loads(json.dumps(first_offer))
         second_offer["offerIdentity"] = "fleasing:i4:private-36"
         second_offer["provider"] = "Fleasing"
-        second_offer["vehicleSpecification"]["value"] = {"make": "BMW", "model": "i4", "trim": "eDrive35"}
-        second_offer["supportedLeasingForm"] = known_value_fact("financial", "Finansiel leasing.")
-        second_offer["residualRiskAllocation"] = known_value_fact("lessee", "Lessee bærer restværdirisikoen.")
-        second_offer["upfrontCashRequirement"] = known_money_fact(8000, "Udbetaling 8.000 kr.")
+        second_offer["vehicleSpecification"]["value"] = {
+            "make": "BMW",
+            "model": "i4",
+            "trim": "eDrive35",
+        }
+        second_offer["supportedLeasingForm"] = known_value_fact(
+            "financial", "Finansiel leasing."
+        )
+        second_offer["residualRiskAllocation"] = known_value_fact(
+            "lessee", "Lessee bærer restværdirisikoen."
+        )
+        second_offer["upfrontCashRequirement"] = known_money_fact(
+            8000, "Udbetaling 8.000 kr."
+        )
         second_offer["termMonths"] = known_value_fact(24, "Løbetid 24 måneder.")
         second_offer["annualMileageKm"] = known_value_fact(15000, "15.000 km om året.")
         dataset["catalogueOffers"].append(second_offer)
@@ -405,7 +494,9 @@ class BuildSiteTest(unittest.TestCase):
                 text=True,
                 check=False,
             )
-            projection = json.loads((site_path / "projection.json").read_text(encoding="utf-8"))
+            projection = json.loads(
+                (site_path / "projection.json").read_text(encoding="utf-8")
+            )
             app_source = (site_path / "app.js").read_text(encoding="utf-8")
 
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -413,7 +504,9 @@ class BuildSiteTest(unittest.TestCase):
             [offer["offerIdentity"] for offer in projection["offers"]],
             ["terminalen:ioniq-5:essential-84", "fleasing:i4:private-36"],
         )
-        self.assertEqual(projection["offers"][1]["residualRiskAllocation"]["value"], "lessee")
+        self.assertEqual(
+            projection["offers"][1]["residualRiskAllocation"]["value"], "lessee"
+        )
         for control in (
             "Søg efter bil eller udbyder",
             "Restværdirisiko",
@@ -431,7 +524,9 @@ class BuildSiteTest(unittest.TestCase):
         ):
             self.assertIn(control, app_source)
 
-    def test_build_site_exposes_only_auditable_calculation_examples_for_supported_exposures(self) -> None:
+    def test_build_site_exposes_only_auditable_calculation_examples_for_supported_exposures(
+        self,
+    ) -> None:
         """A prospective lessee can calculate a sourced example without changing offer values."""
         with tempfile.TemporaryDirectory() as temporary_directory:
             site_path = Path(temporary_directory) / "site"
@@ -451,15 +546,27 @@ class BuildSiteTest(unittest.TestCase):
                 text=True,
                 check=False,
             )
-            projection = json.loads((site_path / "projection.json").read_text(encoding="utf-8"))
+            projection = json.loads(
+                (site_path / "projection.json").read_text(encoding="utf-8")
+            )
             app_source = (site_path / "app.js").read_text(encoding="utf-8")
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(
             projection["offers"][0]["exposureScenarios"]["value"],
             [
-                {"kind": "excess_mileage", "trigger": "Hvis kilometergrænsen overskrides.", "requiredInputs": ["Ekstra kilometer"], "inputKinds": ["excess_distance_km"], "rateDkk": 2},
-                {"kind": "damage", "trigger": "Hvis bilen afleveres med skader ud over normal slitage.", "requiredInputs": []},
+                {
+                    "kind": "excess_mileage",
+                    "trigger": "Hvis kilometergrænsen overskrides.",
+                    "requiredInputs": ["Ekstra kilometer"],
+                    "inputKinds": ["excess_distance_km"],
+                    "rateDkk": 2,
+                },
+                {
+                    "kind": "damage",
+                    "trigger": "Hvis bilen afleveres med skader ud over normal slitage.",
+                    "requiredInputs": [],
+                },
             ],
         )
         for control in (
@@ -479,7 +586,9 @@ class BuildSiteTest(unittest.TestCase):
             self.assertIn(control, app_source)
         self.assertNotIn("requiredInputNames", app_source)
 
-    def test_build_site_rejects_exposure_input_kinds_that_do_not_align_with_their_labels(self) -> None:
+    def test_build_site_rejects_exposure_input_kinds_that_do_not_align_with_their_labels(
+        self,
+    ) -> None:
         """Normalized input kinds must remain paired with the source labels shown to the prospective lessee."""
         with tempfile.TemporaryDirectory() as temporary_directory:
             dataset_path = Path(temporary_directory) / "catalogue-dataset.json"
@@ -505,7 +614,9 @@ class BuildSiteTest(unittest.TestCase):
             )
 
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("Known detail facts require supported structured values", result.stderr)
+        self.assertIn(
+            "Known detail facts require supported structured values", result.stderr
+        )
 
 
 def known_value_fact(value: object, wording: str) -> dict[str, object]:

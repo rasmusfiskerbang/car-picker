@@ -29,15 +29,23 @@ class CatalogueModelTest(unittest.TestCase):
         self.assertEqual(canonical.quarantined_offers, [])
         self.assertEqual(to_legacy_dataset(canonical), self.legacy_dataset)
 
-    def test_serialization_schema_is_generated_from_the_authoritative_model(self) -> None:
+    def test_serialization_schema_is_generated_from_the_authoritative_model(
+        self,
+    ) -> None:
         schema = catalogue_dataset_json_schema()
 
-        self.assertEqual(schema["properties"]["schemaVersion"]["const"], "catalogue-dataset/v1")
+        self.assertEqual(
+            schema["properties"]["schemaVersion"]["const"], "catalogue-dataset/v1"
+        )
         self.assertIn("catalogueOffers", schema["properties"])
         self.assertIn("quarantinedOffers", schema["properties"])
-        self.assertNotIn("admissionStatus", schema["$defs"]["CatalogueOffer"]["properties"])
+        self.assertNotIn(
+            "admissionStatus", schema["$defs"]["CatalogueOffer"]["properties"]
+        )
         self.assertEqual(
-            schema["$defs"]["CatalogueOffer"]["properties"]["admissionOutcome"]["const"],
+            schema["$defs"]["CatalogueOffer"]["properties"]["admissionOutcome"][
+                "const"
+            ],
             "admitted",
         )
         self.assertIn("ServiceArrangement", schema["$defs"])
@@ -68,7 +76,9 @@ class CatalogueModelTest(unittest.TestCase):
 
     def test_rejects_duplicate_or_malformed_offer_identities(self) -> None:
         duplicate = copy.deepcopy(self.legacy_dataset)
-        duplicate["catalogueOffers"].append(copy.deepcopy(duplicate["catalogueOffers"][0]))
+        duplicate["catalogueOffers"].append(
+            copy.deepcopy(duplicate["catalogueOffers"][0])
+        )
 
         with self.assertRaises(ValidationError):
             from_legacy_dataset(duplicate)

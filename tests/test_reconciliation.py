@@ -13,7 +13,9 @@ FIXTURE_DATASET = REPOSITORY_ROOT / "tests/fixtures/one-offer-catalogue-dataset.
 
 
 class ProviderAggregateReconciliationTest(unittest.TestCase):
-    def test_public_diagnostics_and_site_distinguish_matching_tolerated_and_mismatched_aggregates(self) -> None:
+    def test_public_diagnostics_and_site_distinguish_matching_tolerated_and_mismatched_aggregates(
+        self,
+    ) -> None:
         dataset = aggregate_dataset()
 
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -29,17 +31,28 @@ class ProviderAggregateReconciliationTest(unittest.TestCase):
                 "--offer",
                 "terminalen:ioniq-5:mismatch",
             )
-            build_result = run_cli("build-site", "--dataset", str(dataset_path), "--output", str(site_path))
-            projection = json.loads((site_path / "projection.json").read_text(encoding="utf-8"))
+            build_result = run_cli(
+                "build-site", "--dataset", str(dataset_path), "--output", str(site_path)
+            )
+            projection = json.loads(
+                (site_path / "projection.json").read_text(encoding="utf-8")
+            )
             app_source = (site_path / "app.js").read_text(encoding="utf-8")
 
         self.assertEqual(all_result.returncode, 0, all_result.stderr)
         diagnostics = json.loads(all_result.stdout)
         self.assertEqual(
-            [(row["offerIdentity"], row["status"], row["differenceDkk"]) for row in diagnostics["offers"]],
+            [
+                (row["offerIdentity"], row["status"], row["differenceDkk"])
+                for row in diagnostics["offers"]
+            ],
             [
                 ("terminalen:ioniq-5:matching", "matching", 0),
-                ("terminalen:ioniq-5:tolerated", "within_ordinary_rounding_tolerance", 1),
+                (
+                    "terminalen:ioniq-5:tolerated",
+                    "within_ordinary_rounding_tolerance",
+                    1,
+                ),
                 ("terminalen:ioniq-5:mismatch", "mismatch", 2),
             ],
         )
@@ -56,10 +69,17 @@ class ProviderAggregateReconciliationTest(unittest.TestCase):
         self.assertEqual(len(mismatch["evidenceReferences"]), 3)
         self.assertTrue(mismatch["investigationPrompts"])
         self.assertEqual(one_result.returncode, 0, one_result.stderr)
-        self.assertEqual([row["offerIdentity"] for row in json.loads(one_result.stdout)["offers"]], ["terminalen:ioniq-5:mismatch"])
+        self.assertEqual(
+            [row["offerIdentity"] for row in json.loads(one_result.stdout)["offers"]],
+            ["terminalen:ioniq-5:mismatch"],
+        )
         self.assertEqual(build_result.returncode, 0, build_result.stderr)
-        self.assertEqual(projection["offers"][0]["nominalBaseOutlay"]["valueDkk"], 24000)
-        self.assertEqual(projection["offers"][1]["nominalMonthlyEquivalent"]["valueDkk"], 2000)
+        self.assertEqual(
+            projection["offers"][0]["nominalBaseOutlay"]["valueDkk"], 24000
+        )
+        self.assertEqual(
+            projection["offers"][1]["nominalMonthlyEquivalent"]["valueDkk"], 2000
+        )
         self.assertEqual(
             projection["offers"][2]["nominalBaseOutlay"]["blockingFacts"],
             ["providerAdvertisedAggregateMismatch"],
@@ -75,7 +95,11 @@ def aggregate_dataset() -> dict[str, object]:
     dataset = json.loads(FIXTURE_DATASET.read_text(encoding="utf-8"))
     original = dataset["catalogueOffers"][0]
     offers = []
-    for suffix, aggregate in (("matching", 24000), ("tolerated", 24001), ("mismatch", 24002)):
+    for suffix, aggregate in (
+        ("matching", 24000),
+        ("tolerated", 24001),
+        ("mismatch", 24002),
+    ):
         offer = json.loads(json.dumps(original))
         offer["offerIdentity"] = f"terminalen:ioniq-5:{suffix}"
         offer["termMonths"] = known_value(12, "Løbetid 12 måneder.")
@@ -87,7 +111,10 @@ def aggregate_dataset() -> dict[str, object]:
             "state": "known",
             "valueDkk": aggregate,
             "scope": "normal_completion_base_cash_flows",
-            "evidence": {"sourceUrl": "https://example.test/ioniq-5", "wording": f"Samlet betaling {aggregate} kr."},
+            "evidence": {
+                "sourceUrl": "https://example.test/ioniq-5",
+                "wording": f"Samlet betaling {aggregate} kr.",
+            },
         }
         offers.append(offer)
     dataset["catalogueOffers"] = offers
@@ -102,7 +129,9 @@ def known_value(value: int, wording: str) -> dict[str, object]:
     }
 
 
-def event(meaning: str, amount_dkk: int, timing: str, recurrence_count: int) -> dict[str, object]:
+def event(
+    meaning: str, amount_dkk: int, timing: str, recurrence_count: int
+) -> dict[str, object]:
     return {
         "meaning": meaning,
         "direction": "payment",
@@ -112,7 +141,10 @@ def event(meaning: str, amount_dkk: int, timing: str, recurrence_count: int) -> 
         "recurrenceCount": recurrence_count,
         "refundability": "not_refundable",
         "includedInBase": True,
-        "evidence": {"sourceUrl": "https://example.test/ioniq-5", "wording": f"{meaning}: {amount_dkk} kr."},
+        "evidence": {
+            "sourceUrl": "https://example.test/ioniq-5",
+            "wording": f"{meaning}: {amount_dkk} kr.",
+        },
     }
 
 

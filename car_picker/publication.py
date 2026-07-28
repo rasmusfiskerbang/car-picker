@@ -21,7 +21,14 @@ STATIC_ARTIFACT_FILENAMES = {
     "projection.json",
     "styles.css",
 }
-FORBIDDEN_ARTIFACT_KEYS = {"contentSha256", "hash", "parserMetadata", "parserVersion", "quarantineReasons", "sourceMetadata"}
+FORBIDDEN_ARTIFACT_KEYS = {
+    "contentSha256",
+    "hash",
+    "parserMetadata",
+    "parserVersion",
+    "quarantineReasons",
+    "sourceMetadata",
+}
 
 PRESENTATION_SCHEMA: dict[str, Any] = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -42,11 +49,18 @@ PRESENTATION_SCHEMA: dict[str, Any] = {
                     "items": {
                         "type": "object",
                         "additionalProperties": False,
-                        "required": ["name", "designatedSource", "quarantinedCandidateCount"],
+                        "required": [
+                            "name",
+                            "designatedSource",
+                            "quarantinedCandidateCount",
+                        ],
                         "properties": {
                             "name": {"type": "string"},
                             "designatedSource": {"type": "string"},
-                            "quarantinedCandidateCount": {"type": "integer", "minimum": 0},
+                            "quarantinedCandidateCount": {
+                                "type": "integer",
+                                "minimum": 0,
+                            },
                         },
                     },
                 },
@@ -153,43 +167,66 @@ PRESENTATION_SCHEMA: dict[str, Any] = {
             "required": ["state", "evidence"],
             "properties": {
                 "state": {"enum": sorted(FACT_STATES)},
-                "value": {"type": "array", "items": {"$ref": "#/$defs/serviceArrangement"}},
+                "value": {
+                    "type": "array",
+                    "items": {"$ref": "#/$defs/serviceArrangement"},
+                },
                 "evidence": {"$ref": "#/$defs/evidence"},
             },
         },
         "serviceArrangement": {
-            "type": "object", "additionalProperties": False,
+            "type": "object",
+            "additionalProperties": False,
             "required": ["category", "treatment", "scope"],
             "properties": {
                 "category": {"type": "string"},
-                "treatment": {"enum": ["included", "optional", "required_external", "excluded"]},
+                "treatment": {
+                    "enum": ["included", "optional", "required_external", "excluded"]
+                },
                 "scope": {"type": "string"},
             },
         },
         "exposureListFact": {
-            "type": "object", "additionalProperties": False,
+            "type": "object",
+            "additionalProperties": False,
             "required": ["state", "evidence"],
             "properties": {
                 "state": {"enum": sorted(FACT_STATES)},
-                "value": {"type": "array", "items": {"$ref": "#/$defs/exposureScenario"}},
+                "value": {
+                    "type": "array",
+                    "items": {"$ref": "#/$defs/exposureScenario"},
+                },
                 "evidence": {"$ref": "#/$defs/evidence"},
             },
         },
         "exposureScenario": {
-            "type": "object", "additionalProperties": False,
+            "type": "object",
+            "additionalProperties": False,
             "required": ["kind", "trigger", "requiredInputs"],
             "properties": {
-                "kind": {"type": "string"}, "trigger": {"type": "string"},
+                "kind": {"type": "string"},
+                "trigger": {"type": "string"},
                 "requiredInputs": {"type": "array", "items": {"type": "string"}},
                 "inputKinds": {"type": "array", "items": {"type": "string"}},
-                "formula": {"type": "string"}, "amountDkk": {"type": "integer", "minimum": 0},
-                "rateDkk": {"type": "integer", "minimum": 0}, "capDkk": {"type": "integer", "minimum": 0},
+                "formula": {"type": "string"},
+                "amountDkk": {"type": "integer", "minimum": 0},
+                "rateDkk": {"type": "integer", "minimum": 0},
+                "capDkk": {"type": "integer", "minimum": 0},
             },
         },
         "cashFlowEvent": {
             "type": "object",
             "additionalProperties": False,
-            "required": ["meaning", "direction", "amountDkk", "amountBasis", "timing", "recurrenceCount", "refundability", "evidence"],
+            "required": [
+                "meaning",
+                "direction",
+                "amountDkk",
+                "amountBasis",
+                "timing",
+                "recurrenceCount",
+                "refundability",
+                "evidence",
+            ],
             "properties": {
                 "meaning": {"type": "string"},
                 "direction": {"type": "string"},
@@ -223,7 +260,9 @@ def read_json(path: Path) -> Mapping[str, Any]:
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
-        raise ValueError(f"Cannot read canonical catalogue dataset at {path}: {error}") from error
+        raise ValueError(
+            f"Cannot read canonical catalogue dataset at {path}: {error}"
+        ) from error
     return object_value(value, "canonical catalogue dataset")
 
 
@@ -232,7 +271,10 @@ def project_catalogue(dataset: Mapping[str, Any]) -> dict[str, Any]:
     generated_at = string_value(dataset, "generatedAt")
     coverage = object_value(dataset.get("coverage"), "coverage")
     provider_rows = list_value(coverage.get("providers"), "coverage.providers")
-    providers = [project_provider(object_value(row, "coverage provider")) for row in provider_rows]
+    providers = [
+        project_provider(object_value(row, "coverage provider"))
+        for row in provider_rows
+    ]
     ended_provider_rows = list_value(dataset.get("coverageEnded", []), "coverageEnded")
     ended_providers = [
         project_ended_provider(object_value(row, "ended coverage provider"))
@@ -256,7 +298,9 @@ def project_catalogue(dataset: Mapping[str, Any]) -> dict[str, Any]:
 def project_provider(provider: Mapping[str, Any]) -> dict[str, Any]:
     count = provider.get("quarantinedCandidateCount")
     if not isinstance(count, int) or isinstance(count, bool) or count < 0:
-        raise ValueError("coverage provider.quarantinedCandidateCount must be a non-negative integer")
+        raise ValueError(
+            "coverage provider.quarantinedCandidateCount must be a non-negative integer"
+        )
     return {
         "name": string_value(provider, "name"),
         "designatedSource": string_value(provider, "designatedSource"),
@@ -266,7 +310,9 @@ def project_provider(provider: Mapping[str, Any]) -> dict[str, Any]:
 
 def project_ended_provider(provider: Mapping[str, Any]) -> dict[str, str]:
     if set(provider) != {"name", "coverageEndedAt"}:
-        raise ValueError("ended provider coverage may retain only the provider name and end time")
+        raise ValueError(
+            "ended provider coverage may retain only the provider name and end time"
+        )
     return {
         "name": string_value(provider, "name"),
         "coverageEndedAt": string_value(provider, "coverageEndedAt"),
@@ -280,18 +326,40 @@ def project_offer(offer: Mapping[str, Any]) -> dict[str, Any]:
         "offerIdentity": string_value(offer, "offerIdentity"),
         "provider": string_value(offer, "provider"),
         "providerSourceUrl": derived_value_source_url(offer),
-        "vehicleSpecification": project_vehicle_specification(offer.get("vehicleSpecification")),
+        "vehicleSpecification": project_vehicle_specification(
+            offer.get("vehicleSpecification")
+        ),
         "supportedLeasingForm": project_value_fact(offer.get("supportedLeasingForm")),
-        "providerFormLabel": project_provider_form_label(offer.get("supportedLeasingForm")),
-        "residualRiskAllocation": project_value_fact(offer.get("residualRiskAllocation")),
-        "registrationTaxTreatment": project_registration_tax_fact(offer.get("registrationTaxTreatment")),
-        "serviceArrangements": project_list_fact(offer.get("serviceArrangements"), valid_service_arrangement),
-        "exclusions": project_list_fact(offer.get("exclusions"), valid_service_arrangement),
-        "exposureScenarios": project_list_fact(offer.get("exposureScenarios"), valid_exposure_scenario),
-        "advertisedMonthlyPayment": project_money_fact(offer.get("advertisedMonthlyPayment")),
-        "upfrontCashRequirement": project_derived_money_fact(comparison_values["upfrontCashRequirement"], offer),
-        "nominalBaseOutlay": project_derived_money_fact(comparison_values["nominalBaseOutlay"], offer),
-        "nominalMonthlyEquivalent": project_derived_money_fact(comparison_values["nominalMonthlyEquivalent"], offer),
+        "providerFormLabel": project_provider_form_label(
+            offer.get("supportedLeasingForm")
+        ),
+        "residualRiskAllocation": project_value_fact(
+            offer.get("residualRiskAllocation")
+        ),
+        "registrationTaxTreatment": project_registration_tax_fact(
+            offer.get("registrationTaxTreatment")
+        ),
+        "serviceArrangements": project_list_fact(
+            offer.get("serviceArrangements"), valid_service_arrangement
+        ),
+        "exclusions": project_list_fact(
+            offer.get("exclusions"), valid_service_arrangement
+        ),
+        "exposureScenarios": project_list_fact(
+            offer.get("exposureScenarios"), valid_exposure_scenario
+        ),
+        "advertisedMonthlyPayment": project_money_fact(
+            offer.get("advertisedMonthlyPayment")
+        ),
+        "upfrontCashRequirement": project_derived_money_fact(
+            comparison_values["upfrontCashRequirement"], offer
+        ),
+        "nominalBaseOutlay": project_derived_money_fact(
+            comparison_values["nominalBaseOutlay"], offer
+        ),
+        "nominalMonthlyEquivalent": project_derived_money_fact(
+            comparison_values["nominalMonthlyEquivalent"], offer
+        ),
         "termMonths": project_value_fact(offer.get("termMonths")),
         "annualMileageKm": project_value_fact(offer.get("annualMileageKm")),
         "normalEndMechanism": project_value_fact(offer.get("normalEndMechanism")),
@@ -303,14 +371,20 @@ def project_offer(offer: Mapping[str, Any]) -> dict[str, Any]:
     return projected_offer
 
 
-def project_derived_money_fact(value: Mapping[str, Any], offer: Mapping[str, Any]) -> dict[str, Any]:
+def project_derived_money_fact(
+    value: Mapping[str, Any], offer: Mapping[str, Any]
+) -> dict[str, Any]:
     evidence = {
         "sourceUrl": derived_value_source_url(offer),
         "wording": "Beregnet af tjenesten fra betalingsstrømmen.",
     }
     if value["state"] == "known":
         return {"state": "known", "valueDkk": value["valueDkk"], "evidence": evidence}
-    return {"state": "not_stated", "evidence": evidence, "blockingFacts": value["blockingFacts"]}
+    return {
+        "state": "not_stated",
+        "evidence": evidence,
+        "blockingFacts": value["blockingFacts"],
+    }
 
 
 def derived_value_source_url(offer: Mapping[str, Any]) -> str:
@@ -323,10 +397,16 @@ def derived_value_source_url(offer: Mapping[str, Any]) -> str:
             if not isinstance(event, Mapping):
                 continue
             evidence = event.get("evidence")
-            source_url = evidence.get("sourceUrl") if isinstance(evidence, Mapping) else None
+            source_url = (
+                evidence.get("sourceUrl") if isinstance(evidence, Mapping) else None
+            )
             if isinstance(source_url, str) and source_url:
                 return source_url
-    for field_name in ("upfrontCashRequirement", "nominalBaseOutlay", "nominalMonthlyEquivalent"):
+    for field_name in (
+        "upfrontCashRequirement",
+        "nominalBaseOutlay",
+        "nominalMonthlyEquivalent",
+    ):
         fact = offer.get(field_name)
         if isinstance(fact, Mapping):
             evidence = fact.get("evidence")
@@ -341,19 +421,27 @@ def project_cash_flow_breakdown(events: list[Any]) -> list[dict[str, Any]]:
     if not all(isinstance(event, Mapping) for event in events):
         return []
     event_rows = [event for event in events if isinstance(event, Mapping)]
-    if not is_time_ordered(event_rows) or not all(cash_flow_event_has_presentation_shape(event) for event in event_rows):
+    if not is_time_ordered(event_rows) or not all(
+        cash_flow_event_has_presentation_shape(event) for event in event_rows
+    ):
         return []
-    return [
-        project_cash_flow_event(event)
-        for event in event_rows
-    ]
+    return [project_cash_flow_event(event) for event in event_rows]
 
 
 def cash_flow_event_has_presentation_shape(event: Mapping[str, Any]) -> bool:
-    required_strings = ("meaning", "direction", "amountBasis", "timing", "refundability")
+    required_strings = (
+        "meaning",
+        "direction",
+        "amountBasis",
+        "timing",
+        "refundability",
+    )
     evidence = event.get("evidence")
     return (
-        all(isinstance(event.get(field), str) and event[field] for field in required_strings)
+        all(
+            isinstance(event.get(field), str) and event[field]
+            for field in required_strings
+        )
         and isinstance(evidence, Mapping)
         and isinstance(evidence.get("sourceUrl"), str)
         and bool(evidence["sourceUrl"])
@@ -372,11 +460,17 @@ def cash_flow_event_has_presentation_shape(event: Mapping[str, Any]) -> bool:
 
 
 def has_precise_blocking_facts(value: Any) -> bool:
-    return isinstance(value, list) and bool(value) and all(isinstance(item, str) and item for item in value)
+    return (
+        isinstance(value, list)
+        and bool(value)
+        and all(isinstance(item, str) and item for item in value)
+    )
 
 
 def project_cash_flow_event(event: Mapping[str, Any]) -> dict[str, Any]:
-    amount, recurrence_count, blocking_facts = checked_cash_flow_event_values(event, "base cash-flow event")
+    amount, recurrence_count, blocking_facts = checked_cash_flow_event_values(
+        event, "base cash-flow event"
+    )
     evidence_value = object_value(event.get("evidence"), "base cash-flow evidence")
     projected_event = {
         "meaning": string_value(event, "meaning"),
@@ -397,19 +491,29 @@ def project_cash_flow_event(event: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def valid_or_missing_cash_flow_number(value: Any) -> bool:
-    return value is None or (isinstance(value, int) and not isinstance(value, bool) and value >= 0)
+    return value is None or (
+        isinstance(value, int) and not isinstance(value, bool) and value >= 0
+    )
 
 
 def valid_or_missing_recurrence_count(value: Any) -> bool:
-    return value is None or (isinstance(value, int) and not isinstance(value, bool) and value >= 1)
+    return value is None or (
+        isinstance(value, int) and not isinstance(value, bool) and value >= 1
+    )
 
 
-def checked_cash_flow_event_values(event: Mapping[str, Any], context: str) -> tuple[Any, Any, list[str]]:
+def checked_cash_flow_event_values(
+    event: Mapping[str, Any], context: str
+) -> tuple[Any, Any, list[str]]:
     recurrence_count = event.get("recurrenceCount", 1)
     amount = event.get("amountDkk")
-    blocking_facts = string_list_value(event.get("blockingFacts", []), f"{context} blockingFacts")
+    blocking_facts = string_list_value(
+        event.get("blockingFacts", []), f"{context} blockingFacts"
+    )
     if not valid_or_missing_recurrence_count(recurrence_count):
-        raise ValueError(f"{context} recurrenceCount must be a positive integer or null")
+        raise ValueError(
+            f"{context} recurrenceCount must be a positive integer or null"
+        )
     if not valid_or_missing_cash_flow_number(amount):
         raise ValueError(f"{context} amountDkk must be a non-negative integer or null")
     if (amount is None or recurrence_count is None) and not blocking_facts:
@@ -420,7 +524,9 @@ def checked_cash_flow_event_values(event: Mapping[str, Any], context: str) -> tu
 def amount_basis(event: Mapping[str, Any]) -> str:
     basis = string_value(event, "amountBasis")
     if basis not in {"including_vat", "excluding_vat", "not_stated"}:
-        raise ValueError("base cash-flow event amountBasis must be a supported amount basis")
+        raise ValueError(
+            "base cash-flow event amountBasis must be a supported amount basis"
+        )
     return basis
 
 
@@ -434,9 +540,12 @@ def admission_status(offer: Mapping[str, Any]) -> str:
 def project_vehicle_specification(value: Any) -> dict[str, Any]:
     fact = project_fact(value)
     if fact["state"] == "known":
-        specification = object_value(object_value(value, "vehicle specification").get("value"), "vehicle value")
+        specification = object_value(
+            object_value(value, "vehicle specification").get("value"), "vehicle value"
+        )
         fact["value"] = " ".join(
-            string_value(specification, field_name) for field_name in ("make", "model", "trim")
+            string_value(specification, field_name)
+            for field_name in ("make", "model", "trim")
         )
     return fact
 
@@ -454,7 +563,9 @@ def project_value_fact(value: Any) -> dict[str, Any]:
     return project_known_value_fact(
         value,
         "value",
-        lambda known_value: isinstance(known_value, (str, int)) and not isinstance(known_value, bool),
+        lambda known_value: (
+            isinstance(known_value, (str, int)) and not isinstance(known_value, bool)
+        ),
         "Known value facts require a string or integer value",
     )
 
@@ -468,15 +579,21 @@ def project_provider_form_label(value: Any) -> dict[str, Any]:
 
 def project_registration_tax_fact(value: Any) -> dict[str, Any]:
     return project_known_value_fact(
-        value, "value", lambda known_value: known_value in {"full", "proportional"},
+        value,
+        "value",
+        lambda known_value: known_value in {"full", "proportional"},
         "Known registration-tax treatment must be full or proportional",
     )
 
 
-def project_list_fact(value: Any, valid_item: Callable[[Mapping[str, Any]], bool]) -> dict[str, Any]:
+def project_list_fact(
+    value: Any, valid_item: Callable[[Mapping[str, Any]], bool]
+) -> dict[str, Any]:
     fact = project_fact(value)
     if fact["state"] == "known":
-        items = list_value(object_value(value, "offer fact").get("value"), "offer fact value")
+        items = list_value(
+            object_value(value, "offer fact").get("value"), "offer fact value"
+        )
         if not all(isinstance(item, Mapping) and valid_item(item) for item in items):
             raise ValueError("Known detail facts require supported structured values")
         fact["value"] = [dict(item) for item in items]
@@ -484,17 +601,25 @@ def project_list_fact(value: Any, valid_item: Callable[[Mapping[str, Any]], bool
 
 
 def valid_service_arrangement(value: Mapping[str, Any]) -> bool:
-    return (
-        all(isinstance(value.get(field), str) and value[field] for field in ("category", "treatment", "scope"))
-        and value["treatment"] in {"included", "optional", "required_external", "excluded"}
-    )
+    return all(
+        isinstance(value.get(field), str) and value[field]
+        for field in ("category", "treatment", "scope")
+    ) and value["treatment"] in {
+        "included",
+        "optional",
+        "required_external",
+        "excluded",
+    }
 
 
 def valid_exposure_scenario(value: Mapping[str, Any]) -> bool:
     inputs = value.get("requiredInputs")
     input_kinds = value.get("inputKinds")
     return (
-        all(isinstance(value.get(field), str) and value[field] for field in ("kind", "trigger"))
+        all(
+            isinstance(value.get(field), str) and value[field]
+            for field in ("kind", "trigger")
+        )
         and isinstance(inputs, list)
         and all(isinstance(item, str) and item for item in inputs)
         and (
@@ -506,10 +631,18 @@ def valid_exposure_scenario(value: Mapping[str, Any]) -> bool:
             )
         )
         and all(
-            key not in value or (isinstance(value[key], int) and not isinstance(value[key], bool) and value[key] >= 0)
+            key not in value
+            or (
+                isinstance(value[key], int)
+                and not isinstance(value[key], bool)
+                and value[key] >= 0
+            )
             for key in ("amountDkk", "rateDkk", "capDkk")
         )
-        and ("formula" not in value or (isinstance(value["formula"], str) and value["formula"]))
+        and (
+            "formula" not in value
+            or (isinstance(value["formula"], str) and value["formula"])
+        )
     )
 
 
@@ -557,9 +690,16 @@ def validate_presentation_projection(projection: Mapping[str, Any]) -> None:
         projection_offer = object_value(offer, "presentation offer")
         for field_name in ("offerIdentity", "provider", "providerSourceUrl"):
             string_value(projection_offer, field_name)
-        for field_name in ("vehicleSpecification", "supportedLeasingForm", "providerFormLabel", "residualRiskAllocation"):
+        for field_name in (
+            "vehicleSpecification",
+            "supportedLeasingForm",
+            "providerFormLabel",
+            "residualRiskAllocation",
+        ):
             validate_projected_fact(projection_offer.get(field_name), "value")
-        validate_projected_fact(projection_offer.get("registrationTaxTreatment"), "value")
+        validate_projected_fact(
+            projection_offer.get("registrationTaxTreatment"), "value"
+        )
         for field_name in ("serviceArrangements", "exclusions", "exposureScenarios"):
             validate_projected_list_fact(projection_offer.get(field_name))
         for field_name in (
@@ -572,8 +712,12 @@ def validate_presentation_projection(projection: Mapping[str, Any]) -> None:
         for field_name in ("termMonths", "annualMileageKm", "normalEndMechanism"):
             validate_projected_fact(projection_offer.get(field_name), "value")
         if "cashFlowBreakdown" in projection_offer:
-            for event in list_value(projection_offer["cashFlowBreakdown"], "cashFlowBreakdown"):
-                validate_projected_cash_flow_event(object_value(event, "cash-flow event"))
+            for event in list_value(
+                projection_offer["cashFlowBreakdown"], "cashFlowBreakdown"
+            ):
+                validate_projected_cash_flow_event(
+                    object_value(event, "cash-flow event")
+                )
 
 
 def validate_projected_fact(value: Any, value_key: str) -> None:
@@ -613,14 +757,18 @@ def validate_projected_cash_flow_event(event: Mapping[str, Any]) -> None:
 def write_site_atomically(output_path: Path, projection: Mapping[str, Any]) -> None:
     output_path = output_path.resolve()
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix=".car-picker-site-", dir=output_path.parent) as staging_root:
+    with tempfile.TemporaryDirectory(
+        prefix=".car-picker-site-", dir=output_path.parent
+    ) as staging_root:
         staging_path = Path(staging_root) / "site"
         staging_path.mkdir()
         (staging_path / "projection.json").write_text(
-            json.dumps(projection, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
+            json.dumps(projection, ensure_ascii=False, separators=(",", ":")),
+            encoding="utf-8",
         )
         (staging_path / "projection-schema.json").write_text(
-            json.dumps(PRESENTATION_SCHEMA, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
+            json.dumps(PRESENTATION_SCHEMA, ensure_ascii=False, separators=(",", ":")),
+            encoding="utf-8",
         )
         (staging_path / "index.html").write_text(index_html(), encoding="utf-8")
         (staging_path / "app.js").write_text(browser_app(), encoding="utf-8")
@@ -641,12 +789,18 @@ def verify_static_artifact(site_path: Path) -> None:
     validate_presentation_projection(projection)
     schema = read_json(site_path / "projection-schema.json")
     if schema != PRESENTATION_SCHEMA:
-        raise ValueError("static artifact must export the presentation serialization schema")
+        raise ValueError(
+            "static artifact must export the presentation serialization schema"
+        )
     if contains_forbidden_artifact_key(projection):
         raise ValueError("static artifact projection contains internal metadata")
     app = (site_path / "app.js").read_text(encoding="utf-8")
     index = (site_path / "index.html").read_text(encoding="utf-8")
-    if 'fetch("projection.json"' not in app or "hashchange" not in app or 'src="app.js"' not in index:
+    if (
+        'fetch("projection.json"' not in app
+        or "hashchange" not in app
+        or 'src="app.js"' not in index
+    ):
         raise ValueError("static artifact browser application is incomplete")
     validate_javascript_delimiters(app)
 
@@ -680,22 +834,31 @@ def validate_javascript_delimiters(source: str) -> None:
         elif character == "/" and next_character == "*":
             comment_end = source.find("*/", index + 2)
             if comment_end == -1:
-                raise ValueError("static artifact browser application has an unclosed comment")
+                raise ValueError(
+                    "static artifact browser application has an unclosed comment"
+                )
             index = comment_end + 2
             continue
         elif character in closing_for:
             delimiters.append(character)
         elif character in closing_for.values():
             if not delimiters or closing_for[delimiters.pop()] != character:
-                raise ValueError("static artifact browser application has mismatched delimiters")
+                raise ValueError(
+                    "static artifact browser application has mismatched delimiters"
+                )
         index += 1
     if quote is not None or delimiters:
-        raise ValueError("static artifact browser application has unclosed syntax delimiters")
+        raise ValueError(
+            "static artifact browser application has unclosed syntax delimiters"
+        )
 
 
 def contains_forbidden_artifact_key(value: Any) -> bool:
     if isinstance(value, Mapping):
-        return any(key in FORBIDDEN_ARTIFACT_KEYS or contains_forbidden_artifact_key(item) for key, item in value.items())
+        return any(
+            key in FORBIDDEN_ARTIFACT_KEYS or contains_forbidden_artifact_key(item)
+            for key, item in value.items()
+        )
     if isinstance(value, list):
         return any(contains_forbidden_artifact_key(item) for item in value)
     return False

@@ -9,6 +9,7 @@ import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from datetime import date
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 from car_picker.__main__ import main
@@ -19,7 +20,9 @@ FIXTURE_DATASET = REPOSITORY_ROOT / "tests/fixtures/one-offer-catalogue-dataset.
 
 
 class LegalReleaseGateTest(unittest.TestCase):
-    def test_pre_transition_validation_records_the_horizon_without_claiming_revalidation(self) -> None:
+    def test_pre_transition_validation_records_the_horizon_without_claiming_revalidation(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             repository = Path(temporary_directory)
             legal_record_path = commit_legal_record(
@@ -96,7 +99,9 @@ class LegalReleaseGateTest(unittest.TestCase):
             result.stderr,
         )
 
-    def test_transition_release_accepts_a_complete_dated_official_revalidation(self) -> None:
+    def test_transition_release_accepts_a_complete_dated_official_revalidation(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             repository = Path(temporary_directory)
             legal_record_path = commit_legal_record(
@@ -119,13 +124,18 @@ class LegalReleaseGateTest(unittest.TestCase):
         self.assertIn("consumer-credit revalidation reviewed 2026-11-20", result.stdout)
         self.assertIn("owner sign-off Fixture Owner on 2026-11-20", result.stdout)
 
-    def test_transition_release_rejects_sources_not_effective_on_the_review_date(self) -> None:
+    def test_transition_release_rejects_sources_not_effective_on_the_review_date(
+        self,
+    ) -> None:
         ineffective_intervals = (
             ("future", "2030-01-01", None),
             ("expired", "2020-01-01", "2021-01-01"),
         )
         for description, effective_from, effective_to in ineffective_intervals:
-            with self.subTest(description=description), tempfile.TemporaryDirectory() as temporary_directory:
+            with (
+                self.subTest(description=description),
+                tempfile.TemporaryDirectory() as temporary_directory,
+            ):
                 repository = Path(temporary_directory)
                 record = completed_legal_record()
                 revalidation = record["revalidation"]
@@ -172,7 +182,7 @@ def commit_legal_record(repository: Path, record: dict[str, object]) -> Path:
     return legal_record_path
 
 
-def completed_legal_record() -> dict[str, object]:
+def completed_legal_record() -> dict[str, Any]:
     return {
         "schemaVersion": "consumer-credit-legal-review/v1",
         "changeHorizon": "2026-11-20",
@@ -209,7 +219,9 @@ def completed_legal_record() -> dict[str, object]:
     }
 
 
-def run_cli_on_date(validation_date: date, *arguments: str) -> subprocess.CompletedProcess[str]:
+def run_cli_on_date(
+    validation_date: date, *arguments: str
+) -> subprocess.CompletedProcess[str]:
     class FrozenDate(date):
         @classmethod
         def today(cls) -> date:

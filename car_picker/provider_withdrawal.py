@@ -47,9 +47,13 @@ def validate_provider_control(control: Mapping[str, Any]) -> None:
         if provider_name in withdrawn_names:
             raise ValueError("provider control has duplicate withdrawal records")
         withdrawn_names.add(provider_name)
-    disabled_names = {provider["name"] for provider in providers if not provider["retrievalEnabled"]}
+    disabled_names = {
+        provider["name"] for provider in providers if not provider["retrievalEnabled"]
+    }
     if withdrawn_names != disabled_names:
-        raise ValueError("every disabled covered provider requires exactly one withdrawal record")
+        raise ValueError(
+            "every disabled covered provider requires exactly one withdrawal record"
+        )
 
 
 def validate_withdrawal_record(value: Any) -> None:
@@ -63,21 +67,36 @@ def validate_withdrawal_record(value: Any) -> None:
         "deadlineAt",
     )
     if (
-        not all(isinstance(value.get(field), str) and value[field] for field in required_strings)
+        not all(
+            isinstance(value.get(field), str) and value[field]
+            for field in required_strings
+        )
         or value["provider"] not in PROVIDER_NAMES
     ):
         raise ValueError("withdrawal record is missing required operational facts")
-    for field in ("receivedAt", "retrievalDisabledAt", "deadlineAt", "refreshCompletedAt", "siteBuildCompletedAt"):
+    for field in (
+        "receivedAt",
+        "retrievalDisabledAt",
+        "deadlineAt",
+        "refreshCompletedAt",
+        "siteBuildCompletedAt",
+    ):
         if field in value:
             parse_timestamp(value[field], field)
-    if "completedWithinDeadline" in value and not isinstance(value["completedWithinDeadline"], bool):
+    if "completedWithinDeadline" in value and not isinstance(
+        value["completedWithinDeadline"], bool
+    ):
         raise ValueError("completedWithinDeadline must be a boolean")
     if ("siteBuildCompletedAt" in value) != ("completedWithinDeadline" in value):
         raise ValueError("site build completion requires a deadline result")
 
 
 def active_provider_names(control: Mapping[str, Any]) -> tuple[str, ...]:
-    return tuple(provider["name"] for provider in control["providers"] if provider["retrievalEnabled"])
+    return tuple(
+        provider["name"]
+        for provider in control["providers"]
+        if provider["retrievalEnabled"]
+    )
 
 
 def coverage_ended_facts(control: Mapping[str, Any]) -> list[dict[str, str]]:
@@ -130,8 +149,12 @@ def record_refresh_completion(path: Path, completed_at: str) -> None:
 
 def record_site_build_completion(path: Path, completed_at: str) -> None:
     control = read_provider_control(path)
-    if any("refreshCompletedAt" not in withdrawal for withdrawal in control["withdrawals"]):
-        raise ValueError("provider withdrawal requires a completed catalogue refresh before the site build")
+    if any(
+        "refreshCompletedAt" not in withdrawal for withdrawal in control["withdrawals"]
+    ):
+        raise ValueError(
+            "provider withdrawal requires a completed catalogue refresh before the site build"
+        )
     completed = parse_timestamp(completed_at, "siteBuildCompletedAt")
     missed_deadline = False
     changed = False
@@ -139,14 +162,18 @@ def record_site_build_completion(path: Path, completed_at: str) -> None:
         if "siteBuildCompletedAt" in withdrawal:
             continue
         withdrawal["siteBuildCompletedAt"] = completed_at
-        withdrawal["completedWithinDeadline"] = completed <= parse_timestamp(withdrawal["deadlineAt"], "deadlineAt")
+        withdrawal["completedWithinDeadline"] = completed <= parse_timestamp(
+            withdrawal["deadlineAt"], "deadlineAt"
+        )
         missed_deadline = missed_deadline or not withdrawal["completedWithinDeadline"]
         changed = True
     if changed:
         validate_provider_control(control)
         write_json_atomically(path, control)
     if missed_deadline:
-        raise ValueError("completed static site missed the 24-hour provider-withdrawal deadline")
+        raise ValueError(
+            "completed static site missed the 24-hour provider-withdrawal deadline"
+        )
 
 
 def record_completion(
@@ -168,31 +195,43 @@ def record_completion(
         write_json_atomically(path, control)
 
 
-def validate_dataset_for_withdrawals(dataset_path: Path, control: Mapping[str, Any]) -> None:
+def validate_dataset_for_withdrawals(
+    dataset_path: Path, control: Mapping[str, Any]
+) -> None:
     withdrawals = control["withdrawals"]
     if not withdrawals:
         return
     try:
         dataset = json.loads(dataset_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
-        raise ValueError(f"Cannot read canonical catalogue dataset at {dataset_path}: {error}") from error
+        raise ValueError(
+            f"Cannot read canonical catalogue dataset at {dataset_path}: {error}"
+        ) from error
     if not isinstance(dataset, dict):
         raise ValueError("canonical catalogue dataset must be an object")
     if any("refreshCompletedAt" not in withdrawal for withdrawal in withdrawals):
-        raise ValueError("provider withdrawal requires a completed catalogue refresh before the site build")
+        raise ValueError(
+            "provider withdrawal requires a completed catalogue refresh before the site build"
+        )
     pending_withdrawals = [
         withdrawal
         for withdrawal in withdrawals
         if "siteBuildCompletedAt" not in withdrawal
     ]
-    completed_generations = {withdrawal["refreshCompletedAt"] for withdrawal in pending_withdrawals}
+    completed_generations = {
+        withdrawal["refreshCompletedAt"] for withdrawal in pending_withdrawals
+    }
     if pending_withdrawals and (
         len(completed_generations) != 1
         or dataset.get("generatedAt") not in completed_generations
     ):
-        raise ValueError("site build dataset is not the completed catalogue refresh for the provider withdrawal")
+        raise ValueError(
+            "site build dataset is not the completed catalogue refresh for the provider withdrawal"
+        )
     if dataset.get("coverageEnded") != coverage_ended_facts(control):
-        raise ValueError("site build dataset does not retain the current ended-coverage facts")
+        raise ValueError(
+            "site build dataset does not retain the current ended-coverage facts"
+        )
     withdrawn_names = {withdrawal["provider"] for withdrawal in withdrawals}
     offers = dataset.get("catalogueOffers")
     coverage = dataset.get("coverage")
@@ -200,8 +239,14 @@ def validate_dataset_for_withdrawals(dataset_path: Path, control: Mapping[str, A
     if (
         not isinstance(offers, list)
         or not isinstance(providers, list)
-        or any(isinstance(offer, dict) and offer.get("provider") in withdrawn_names for offer in offers)
-        or any(isinstance(provider, dict) and provider.get("name") in withdrawn_names for provider in providers)
+        or any(
+            isinstance(offer, dict) and offer.get("provider") in withdrawn_names
+            for offer in offers
+        )
+        or any(
+            isinstance(provider, dict) and provider.get("name") in withdrawn_names
+            for provider in providers
+        )
     ):
         raise ValueError("site build dataset still contains a withdrawn provider")
 

@@ -4,7 +4,13 @@ import unittest
 from pathlib import Path
 
 from car_picker.comparison import calculate_comparison_values
-from car_picker.fleasing import FleasingAdapter, StructuralSourceError, catalogue_detail_offers, catalogue_detail_urls, map_detail_page
+from car_picker.fleasing import (
+    FleasingAdapter,
+    StructuralSourceError,
+    catalogue_detail_offers,
+    catalogue_detail_urls,
+    map_detail_page,
+)
 
 
 FIXTURE_DIRECTORY = Path(__file__).resolve().parent / "fixtures/fleasing"
@@ -35,20 +41,36 @@ class FleasingAdapterTest(unittest.TestCase):
 
         self.assertEqual(detail_urls, ["https://fleasing.dk/bil/?a&vid=442795427"])
 
-    def test_collects_each_private_vat_inclusive_configuration_with_evidence(self) -> None:
+    def test_collects_each_private_vat_inclusive_configuration_with_evidence(
+        self,
+    ) -> None:
         client = FixtureHttpClient(
             {
-                CATALOGUE_URL: (FIXTURE_DIRECTORY / "catalogue.html").read_text(encoding="utf-8"),
-                DETAIL_URL: (FIXTURE_DIRECTORY / "aston-martin-db9.html").read_text(encoding="utf-8"),
-                MISSING_MONTHLY_DETAIL_URL: (FIXTURE_DIRECTORY / "bmw-i4.html").read_text(encoding="utf-8"),
+                CATALOGUE_URL: (FIXTURE_DIRECTORY / "catalogue.html").read_text(
+                    encoding="utf-8"
+                ),
+                DETAIL_URL: (FIXTURE_DIRECTORY / "aston-martin-db9.html").read_text(
+                    encoding="utf-8"
+                ),
+                MISSING_MONTHLY_DETAIL_URL: (
+                    FIXTURE_DIRECTORY / "bmw-i4.html"
+                ).read_text(encoding="utf-8"),
             }
         )
 
-        candidates = FleasingAdapter(client, retrieved_at="2026-07-22T12:00:00Z").collect()
+        candidates = FleasingAdapter(
+            client, retrieved_at="2026-07-22T12:00:00Z"
+        ).collect()
 
-        self.assertEqual(client.requested_urls, [CATALOGUE_URL, DETAIL_URL, MISSING_MONTHLY_DETAIL_URL])
         self.assertEqual(
-            [(candidate["offerIdentity"], candidate["admissionStatus"]) for candidate in candidates],
+            client.requested_urls,
+            [CATALOGUE_URL, DETAIL_URL, MISSING_MONTHLY_DETAIL_URL],
+        )
+        self.assertEqual(
+            [
+                (candidate["offerIdentity"], candidate["admissionStatus"])
+                for candidate in candidates
+            ],
             [
                 ("fleasing:442795427:private-b3e29d362bda", "quarantined"),
                 ("fleasing:771869804:private-390493d196b5", "quarantined"),
@@ -95,11 +117,14 @@ class FleasingAdapterTest(unittest.TestCase):
                 },
             ],
         )
-        self.assertEqual(candidate["vehicleSpecification"]["value"], {
-            "make": "Aston Martin",
-            "model": "DB9",
-            "trim": "Volante aut.",
-        })
+        self.assertEqual(
+            candidate["vehicleSpecification"]["value"],
+            {
+                "make": "Aston Martin",
+                "model": "DB9",
+                "trim": "Volante aut.",
+            },
+        )
         self.assertEqual(
             candidate["advertisedMonthlyPayment"]["evidence"],
             {
@@ -107,8 +132,12 @@ class FleasingAdapterTest(unittest.TestCase):
                 "wording": "Ydelse pr. måned 15.865 kr. /inkl. moms",
             },
         )
-        self.assertEqual(candidate["sourceMetadata"]["parserVersion"], "fleasing-html-v2")
-        self.assertEqual(len(candidate["sourceMetadata"]["documents"][0]["contentSha256"]), 64)
+        self.assertEqual(
+            candidate["sourceMetadata"]["parserVersion"], "fleasing-html-v2"
+        )
+        self.assertEqual(
+            len(candidate["sourceMetadata"]["documents"][0]["contentSha256"]), 64
+        )
         self.assertEqual(
             candidate["quarantineReasons"],
             [
@@ -130,23 +159,37 @@ class FleasingAdapterTest(unittest.TestCase):
             ["advertisedMonthlyPayment"],
         )
 
-    def test_quarantines_a_catalogue_link_when_its_detail_page_loses_private_pricing(self) -> None:
+    def test_quarantines_a_catalogue_link_when_its_detail_page_loses_private_pricing(
+        self,
+    ) -> None:
         client = FixtureHttpClient(
             {
-                CATALOGUE_URL: (FIXTURE_DIRECTORY / "catalogue.html").read_text(encoding="utf-8"),
+                CATALOGUE_URL: (FIXTURE_DIRECTORY / "catalogue.html").read_text(
+                    encoding="utf-8"
+                ),
                 DETAIL_URL: """
                     <article data-offer-id="442795427" data-make="Aston Martin" data-model="DB9"
                     data-trim="Volante" data-passenger-car="true" data-availability="available"></article>
                 """,
-                MISSING_MONTHLY_DETAIL_URL: (FIXTURE_DIRECTORY / "bmw-i4.html").read_text(encoding="utf-8"),
+                MISSING_MONTHLY_DETAIL_URL: (
+                    FIXTURE_DIRECTORY / "bmw-i4.html"
+                ).read_text(encoding="utf-8"),
             }
         )
 
-        candidates = FleasingAdapter(client, retrieved_at="2026-07-22T12:00:00Z").collect()
+        candidates = FleasingAdapter(
+            client, retrieved_at="2026-07-22T12:00:00Z"
+        ).collect()
 
-        self.assertEqual(client.requested_urls, [CATALOGUE_URL, DETAIL_URL, MISSING_MONTHLY_DETAIL_URL])
         self.assertEqual(
-            [(candidate["offerIdentity"], candidate["admissionStatus"]) for candidate in candidates],
+            client.requested_urls,
+            [CATALOGUE_URL, DETAIL_URL, MISSING_MONTHLY_DETAIL_URL],
+        )
+        self.assertEqual(
+            [
+                (candidate["offerIdentity"], candidate["admissionStatus"])
+                for candidate in candidates
+            ],
             [
                 ("fleasing:442795427:detail-unavailable", "quarantined"),
                 ("fleasing:771869804:private-390493d196b5", "quarantined"),
@@ -155,7 +198,9 @@ class FleasingAdapterTest(unittest.TestCase):
         stale_candidate = candidates[0]
         self.assertEqual(stale_candidate["vehicleSpecification"]["state"], "not_stated")
         self.assertEqual(stale_candidate["currentAvailability"]["state"], "unclear")
-        self.assertEqual(stale_candidate["advertisedMonthlyPayment"]["state"], "not_stated")
+        self.assertEqual(
+            stale_candidate["advertisedMonthlyPayment"]["state"], "not_stated"
+        )
         self.assertEqual(stale_candidate["termMonths"]["state"], "not_stated")
         self.assertEqual(
             stale_candidate["quarantineReasons"],
@@ -170,8 +215,12 @@ class FleasingAdapterTest(unittest.TestCase):
             ],
         )
 
-    def test_detects_a_detail_page_that_loses_the_private_configuration_structure(self) -> None:
-        catalogue_html = (FIXTURE_DIRECTORY / "catalogue.html").read_text(encoding="utf-8")
+    def test_detects_a_detail_page_that_loses_the_private_configuration_structure(
+        self,
+    ) -> None:
+        catalogue_html = (FIXTURE_DIRECTORY / "catalogue.html").read_text(
+            encoding="utf-8"
+        )
         first_offer = catalogue_detail_offers(catalogue_html, CATALOGUE_URL)[0]
 
         with self.assertRaisesRegex(StructuralSourceError, "private-pricing tab"):
@@ -185,7 +234,6 @@ class FleasingAdapterTest(unittest.TestCase):
                 """,
                 retrieved_at="2026-07-22T12:00:00Z",
             )
-
 
 
 if __name__ == "__main__":

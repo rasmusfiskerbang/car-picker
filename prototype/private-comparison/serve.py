@@ -10,13 +10,15 @@ PORT = 4173
 
 
 class PrototypeHandler(SimpleHTTPRequestHandler):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, directory=ROOT, **kwargs)
 
 
 if __name__ == "__main__":
     server = ThreadingHTTPServer((HOST, PORT), PrototypeHandler)
-    print(f"Private comparison prototype: http://{HOST}:{PORT}/prototype/private-comparison/?variant=A")
+    print(
+        f"Private comparison prototype: http://{HOST}:{PORT}/prototype/private-comparison/?variant=A"
+    )
     try:
         server.serve_forever()
     except KeyboardInterrupt:

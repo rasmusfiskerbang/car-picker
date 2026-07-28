@@ -25,7 +25,9 @@ class TerminalenAdapter:
         catalogue_html = self._http_client.get_text(catalogue_url)
         price_urls = model_price_urls(catalogue_html, catalogue_url)
         if not price_urls:
-            raise StructuralSourceError("Terminalen catalogue contains no model price pages")
+            raise StructuralSourceError(
+                "Terminalen catalogue contains no model price pages"
+            )
         candidates: list[dict[str, Any]] = []
         for price_url in price_urls:
             page_html = self._http_client.get_text(price_url)
@@ -50,7 +52,11 @@ def model_price_urls(catalogue_html: str, catalogue_url: str) -> list[str]:
     parser.feed(catalogue_html)
     parser.close()
     origin = urlparse(catalogue_url)
-    scope_prefix = "/nye-biler/hyundai/" if origin.path == "/terminalen" else origin.path.rstrip("/") + "/"
+    scope_prefix = (
+        "/nye-biler/hyundai/"
+        if origin.path == "/terminalen"
+        else origin.path.rstrip("/") + "/"
+    )
     urls: list[str] = []
     for href in parser.hrefs:
         url = urljoin(catalogue_url, href)
@@ -87,9 +93,16 @@ def map_model_page(
     try:
         payload = json.loads(api_text)
     except json.JSONDecodeError as error:
-        raise StructuralSourceError(f"Terminalen page API at {api_url} did not return JSON") from error
-    if not isinstance(payload, Mapping) or payload.get("url") != urlparse(page_url).path:
-        raise StructuralSourceError("Terminalen page API does not match the same model-price path")
+        raise StructuralSourceError(
+            f"Terminalen page API at {api_url} did not return JSON"
+        ) from error
+    if (
+        not isinstance(payload, Mapping)
+        or payload.get("url") != urlparse(page_url).path
+    ):
+        raise StructuralSourceError(
+            "Terminalen page API does not match the same model-price path"
+        )
     if payload.get("template") != "modelSubpage":
         raise StructuralSourceError("Terminalen page API is not a model-price page")
     model_id = required_string(payload, "pimModelId")
@@ -97,9 +110,13 @@ def map_model_page(
     brand = required_string(vehicle, "brand")
     model = required_string(vehicle, "model")
     vehicle_wording = json.dumps(vehicle, ensure_ascii=False, separators=(",", ":"))
-    rows, private_eligibility_wording, legal_wording, end_wording = private_lease_rows(payload)
+    rows, private_eligibility_wording, legal_wording, end_wording = private_lease_rows(
+        payload
+    )
     if not rows:
-        raise StructuralSourceError("Terminalen model-price API contains no private lease offers")
+        raise StructuralSourceError(
+            "Terminalen model-price API contains no private lease offers"
+        )
     documents = [
         source_document(catalogue_url, catalogue_html, retrieved_at),
         source_document(page_url, page_html, retrieved_at),
@@ -150,8 +167,17 @@ def map_configuration(
     mileage = mileage_fact(api_url, legal_wording)
     end_fee = inspection_fee(legal_wording)
     events = [
-        event("Udbetaling", upfront, "acceptance_to_handover", 1, vat_basis, payment_evidence),
-        event("Månedlig ydelse", monthly, "recurring", term, vat_basis, payment_evidence),
+        event(
+            "Udbetaling",
+            upfront,
+            "acceptance_to_handover",
+            1,
+            vat_basis,
+            payment_evidence,
+        ),
+        event(
+            "Månedlig ydelse", monthly, "recurring", term, vat_basis, payment_evidence
+        ),
     ]
     if end_fee is not None:
         events.append(
@@ -170,7 +196,9 @@ def map_configuration(
         "providerSourceId": model_id,
         "canonicalOfferUrl": page_url,
         "sourceLocalConfigurationKey": configuration_id,
-        "vehicleSpecification": known({"make": brand, "model": model}, vehicle_evidence),
+        "vehicleSpecification": known(
+            {"make": brand, "model": model}, vehicle_evidence
+        ),
         "privateConsumerEligibility": known(
             True,
             {"sourceUrl": api_url, "wording": private_eligibility_wording},
@@ -208,9 +236,15 @@ def event(
     evidence: dict[str, str],
 ) -> dict[str, Any]:
     return {
-        "meaning": meaning, "direction": "payment", "amountDkk": amount,
-        "amountBasis": amount_basis, "timing": timing, "recurrenceCount": recurrence_count,
-        "refundability": "not_refundable", "includedInBase": True, "evidence": evidence,
+        "meaning": meaning,
+        "direction": "payment",
+        "amountDkk": amount,
+        "amountBasis": amount_basis,
+        "timing": timing,
+        "recurrenceCount": recurrence_count,
+        "refundability": "not_refundable",
+        "includedInBase": True,
+        "evidence": evidence,
     }
 
 
@@ -223,10 +257,15 @@ def money(value: int, evidence: dict[str, str]) -> dict[str, Any]:
 
 
 def not_stated(source_url: str, wording: str) -> dict[str, Any]:
-    return {"state": "not_stated", "evidence": {"sourceUrl": source_url, "wording": wording}}
+    return {
+        "state": "not_stated",
+        "evidence": {"sourceUrl": source_url, "wording": wording},
+    }
 
 
-def private_lease_rows(payload: Mapping[str, Any]) -> tuple[list[dict[str, Any]], str, str, str]:
+def private_lease_rows(
+    payload: Mapping[str, Any],
+) -> tuple[list[dict[str, Any]], str, str, str]:
     grid = list_value(payload.get("grid"), "Terminalen grid")
     rows: list[dict[str, Any]] = []
     private_eligibility_wording = ""
@@ -235,7 +274,10 @@ def private_lease_rows(payload: Mapping[str, Any]) -> tuple[list[dict[str, Any]]
     in_private_leasing = False
     price_block_found = False
     for section in grid:
-        for content in list_value(object_value(section, "Terminalen grid section").get("content"), "Terminalen grid content"):
+        for content in list_value(
+            object_value(section, "Terminalen grid section").get("content"),
+            "Terminalen grid content",
+        ):
             block = object_value(content, "Terminalen content block")
             if block.get("alias") == "anchor":
                 in_private_leasing = block.get("anchorId") == "privatleasing"
@@ -251,7 +293,9 @@ def private_lease_rows(payload: Mapping[str, Any]) -> tuple[list[dict[str, Any]]
             if block.get("alias") == "imagetextpicker":
                 columns = block.get("columns")
                 if not isinstance(columns, list):
-                    raise StructuralSourceError("Terminalen private lease card block requires columns")
+                    raise StructuralSourceError(
+                        "Terminalen private lease card block requires columns"
+                    )
                 if not price_block_found:
                     price_block_found = True
                     for column in columns:
@@ -299,43 +343,62 @@ def html_text(value: str) -> str:
 def money_in(value: str, pattern: str) -> int:
     match = re.search(pattern, value, flags=re.IGNORECASE)
     if match is None:
-        raise StructuralSourceError("Terminalen leasing card is missing an explicit DKK amount")
+        raise StructuralSourceError(
+            "Terminalen leasing card is missing an explicit DKK amount"
+        )
     return int(match.group(1).replace(".", ""))
 
 
 def integer_in(value: str, pattern: str) -> int:
     match = re.search(pattern, value, flags=re.IGNORECASE)
     if match is None:
-        raise StructuralSourceError("Terminalen leasing card is missing an explicit term")
+        raise StructuralSourceError(
+            "Terminalen leasing card is missing an explicit term"
+        )
     return int(match.group(1))
 
 
 def amount_basis(legal_wording: str) -> str:
-    return "including_vat" if re.search(r"inkl\.?\s*moms", legal_wording, flags=re.IGNORECASE) else "not_stated"
+    return (
+        "including_vat"
+        if re.search(r"inkl\.?\s*moms", legal_wording, flags=re.IGNORECASE)
+        else "not_stated"
+    )
 
 
-def combined_evidence(source_url: str, card_wording: str, legal_wording: str) -> dict[str, str]:
+def combined_evidence(
+    source_url: str, card_wording: str, legal_wording: str
+) -> dict[str, str]:
     wording = card_wording if not legal_wording else f"{card_wording}; {legal_wording}"
     return {"sourceUrl": source_url, "wording": wording}
 
 
 def mileage_fact(source_url: str, legal_wording: str) -> dict[str, Any]:
-    match = re.search(r"(\d{1,3}(?:\.\d{3})*)\s*km\s*/\s*år", legal_wording, flags=re.IGNORECASE)
+    match = re.search(
+        r"(\d{1,3}(?:\.\d{3})*)\s*km\s*/\s*år", legal_wording, flags=re.IGNORECASE
+    )
     if match is None:
         return not_stated(source_url, legal_wording)
-    return known(int(match.group(1).replace(".", "")), {"sourceUrl": source_url, "wording": match.group(0)})
+    return known(
+        int(match.group(1).replace(".", "")),
+        {"sourceUrl": source_url, "wording": match.group(0)},
+    )
 
 
 def inspection_fee(legal_wording: str) -> int | None:
     amount = re.search(r"gebyr på\s*([\d.]+)\s*kr", legal_wording, flags=re.IGNORECASE)
-    if amount is None or not re.search(r"Gebyret opkræves sammen med sidste ydelse", legal_wording, flags=re.IGNORECASE):
+    if amount is None or not re.search(
+        r"Gebyret opkræves sammen med sidste ydelse", legal_wording, flags=re.IGNORECASE
+    ):
         return None
     return int(amount.group(1).replace(".", ""))
 
 
 def normal_end_fact(source_url: str, end_wording: str) -> dict[str, Any]:
     if re.search(r"afleverer du bilen", end_wording, flags=re.IGNORECASE):
-        return known("return_to_provider", {"sourceUrl": source_url, "wording": end_wording})
+        return known(
+            "return_to_provider", {"sourceUrl": source_url, "wording": end_wording}
+        )
     return not_stated(source_url, end_wording)
 
 
@@ -354,17 +417,29 @@ def operational_form_fact(source_url: str, end_wording: str) -> dict[str, Any]:
 
 
 def service_arrangements_fact(source_url: str, legal_wording: str) -> dict[str, Any]:
-    match = re.search(r"inkl\.\s*(alle fabriksanbefalede services)", legal_wording, flags=re.IGNORECASE)
+    match = re.search(
+        r"inkl\.\s*(alle fabriksanbefalede services)",
+        legal_wording,
+        flags=re.IGNORECASE,
+    )
     if match is None:
         return not_stated(source_url, legal_wording)
     return known(
-        [{"category": "manufacturer_recommended_service", "treatment": "included", "scope": match.group(1)}],
+        [
+            {
+                "category": "manufacturer_recommended_service",
+                "treatment": "included",
+                "scope": match.group(1),
+            }
+        ],
         {"sourceUrl": source_url, "wording": match.group(0)},
     )
 
 
 def exclusions_fact(source_url: str, legal_wording: str) -> dict[str, Any]:
-    match = re.search(r"Prisen er ekskl\.\s*([^.]*)", legal_wording, flags=re.IGNORECASE)
+    match = re.search(
+        r"Prisen er ekskl\.\s*([^.]*)", legal_wording, flags=re.IGNORECASE
+    )
     if match is None:
         return not_stated(source_url, legal_wording)
     categories = (
@@ -400,7 +475,11 @@ def admission_reasons(candidate: Mapping[str, Any]) -> list[dict[str, str]]:
 
 
 def source_document(url: str, content: str, retrieved_at: str) -> dict[str, str]:
-    return {"sourceUrl": url, "contentSha256": hashlib.sha256(content.encode()).hexdigest(), "retrievedAt": retrieved_at}
+    return {
+        "sourceUrl": url,
+        "contentSha256": hashlib.sha256(content.encode()).hexdigest(),
+        "retrievedAt": retrieved_at,
+    }
 
 
 def required_string(value: Mapping[str, Any], key: str) -> str:
@@ -413,7 +492,9 @@ def required_string(value: Mapping[str, Any], key: str) -> str:
 def required_int(value: Mapping[str, Any], key: str) -> int:
     item = value.get(key)
     if not isinstance(item, int) or isinstance(item, bool) or item < 0:
-        raise StructuralSourceError(f"Terminalen API requires a non-negative integer {key}")
+        raise StructuralSourceError(
+            f"Terminalen API requires a non-negative integer {key}"
+        )
     return item
 
 

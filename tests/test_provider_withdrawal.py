@@ -29,12 +29,18 @@ class WithdrawalRun:
 
 
 class ProviderWithdrawalTest(unittest.TestCase):
-    def test_withdrawal_disables_retrieval_and_removes_provider_content_from_the_next_dataset_and_site(self) -> None:
+    def test_withdrawal_disables_retrieval_and_removes_provider_content_from_the_next_dataset_and_site(
+        self,
+    ) -> None:
         received_at = datetime.now(UTC) - timedelta(minutes=1)
         received_at_text = received_at.isoformat().replace("+00:00", "Z")
-        deadline_at_text = (received_at + timedelta(hours=24)).isoformat().replace("+00:00", "Z")
+        deadline_at_text = (
+            (received_at + timedelta(hours=24)).isoformat().replace("+00:00", "Z")
+        )
         responses = {
-            "/terminalen": (TERMINALEN_FIXTURES / "catalogue.html").read_text(encoding="utf-8"),
+            "/terminalen": (TERMINALEN_FIXTURES / "catalogue.html").read_text(
+                encoding="utf-8"
+            ),
             "/nye-biler/hyundai/hyundai-inster/pris-og-udstyr": (
                 TERMINALEN_FIXTURES / "inster-price-page.html"
             ).read_text(encoding="utf-8"),
@@ -50,26 +56,45 @@ class ProviderWithdrawalTest(unittest.TestCase):
             source_path="/terminalen",
         )
         dataset = json.loads(run.dataset_path.read_text(encoding="utf-8"))
-        projection = json.loads((run.site_path / "projection.json").read_text(encoding="utf-8"))
+        projection = json.loads(
+            (run.site_path / "projection.json").read_text(encoding="utf-8")
+        )
         control = json.loads(run.control_path.read_text(encoding="utf-8"))
 
         self.assertEqual(run.withdrawal.returncode, 0, run.withdrawal.stderr)
         self.assertEqual(run.refresh.returncode, 0, run.refresh.stderr)
         self.assertEqual(run.build.returncode, 0, run.build.stderr)
-        self.assertEqual({offer["provider"] for offer in dataset["catalogueOffers"]}, {"Terminalen"})
-        self.assertEqual([provider["name"] for provider in dataset["coverage"]["providers"]], ["Terminalen"])
-        self.assertEqual([provider["name"] for provider in projection["coverage"]["providers"]], ["Terminalen"])
+        self.assertEqual(
+            {offer["provider"] for offer in dataset["catalogueOffers"]}, {"Terminalen"}
+        )
+        self.assertEqual(
+            [provider["name"] for provider in dataset["coverage"]["providers"]],
+            ["Terminalen"],
+        )
+        self.assertEqual(
+            [provider["name"] for provider in projection["coverage"]["providers"]],
+            ["Terminalen"],
+        )
         self.assertEqual(
             dataset["coverageEnded"],
-            [{"name": "Fleasing", "coverageEndedAt": control["withdrawals"][0]["retrievalDisabledAt"]}],
+            [
+                {
+                    "name": "Fleasing",
+                    "coverageEndedAt": control["withdrawals"][0]["retrievalDisabledAt"],
+                }
+            ],
         )
         self.assertEqual(projection["coverageEnded"], dataset["coverageEnded"])
         self.assertNotIn("fleasing:", json.dumps(dataset).lower())
         self.assertNotIn("fleasing.dk", json.dumps(dataset).lower())
         self.assertNotIn("fleasing:", json.dumps(projection).lower())
         self.assertNotIn("fleasing.dk", json.dumps(projection).lower())
-        self.assertEqual(control["providers"][0], {"name": "Fleasing", "retrievalEnabled": False})
-        self.assertEqual(control["providers"][1], {"name": "Terminalen", "retrievalEnabled": True})
+        self.assertEqual(
+            control["providers"][0], {"name": "Fleasing", "retrievalEnabled": False}
+        )
+        self.assertEqual(
+            control["providers"][1], {"name": "Terminalen", "retrievalEnabled": True}
+        )
         withdrawal_record = control["withdrawals"][0]
         self.assertEqual(withdrawal_record["provider"], "Fleasing")
         self.assertEqual(withdrawal_record["receivedAt"], received_at_text)
@@ -103,7 +128,9 @@ class ProviderWithdrawalTest(unittest.TestCase):
             build = run_cli(
                 "build-site",
                 "--dataset",
-                str(REPOSITORY_ROOT / "tests/fixtures/one-offer-catalogue-dataset.json"),
+                str(
+                    REPOSITORY_ROOT / "tests/fixtures/one-offer-catalogue-dataset.json"
+                ),
                 "--output",
                 str(site_path),
                 "--provider-control",
@@ -117,25 +144,35 @@ class ProviderWithdrawalTest(unittest.TestCase):
 
     def test_terminalen_withdrawal_leaves_only_the_ended_coverage_fact(self) -> None:
         responses = {
-            "/biler/": (FLEASING_FIXTURES / "catalogue.html").read_text(encoding="utf-8"),
+            "/biler/": (FLEASING_FIXTURES / "catalogue.html").read_text(
+                encoding="utf-8"
+            ),
             "/bil/?aston-martin-db9-volante-aut&vid=442795427": (
                 FLEASING_FIXTURES / "aston-martin-db9.html"
             ).read_text(encoding="utf-8"),
-            "/bil/?bmw-i4&vid=771869804": (
-                FLEASING_FIXTURES / "bmw-i4.html"
-            ).read_text(encoding="utf-8"),
+            "/bil/?bmw-i4&vid=771869804": (FLEASING_FIXTURES / "bmw-i4.html").read_text(
+                encoding="utf-8"
+            ),
         }
         run = self.run_withdrawal_workflow(
             provider="Terminalen",
-            received_at=(datetime.now(UTC) - timedelta(minutes=1)).isoformat().replace("+00:00", "Z"),
+            received_at=(datetime.now(UTC) - timedelta(minutes=1))
+            .isoformat()
+            .replace("+00:00", "Z"),
             responses=responses,
             source_option="--fleasing-catalogue-url",
             source_path="/biler/",
         )
         dataset = json.loads(run.dataset_path.read_text(encoding="utf-8"))
-        projection = json.loads((run.site_path / "projection.json").read_text(encoding="utf-8"))
-        dataset_without_ended_fact = {key: value for key, value in dataset.items() if key != "coverageEnded"}
-        projection_without_ended_fact = {key: value for key, value in projection.items() if key != "coverageEnded"}
+        projection = json.loads(
+            (run.site_path / "projection.json").read_text(encoding="utf-8")
+        )
+        dataset_without_ended_fact = {
+            key: value for key, value in dataset.items() if key != "coverageEnded"
+        }
+        projection_without_ended_fact = {
+            key: value for key, value in projection.items() if key != "coverageEnded"
+        }
         other_artifact_content = "\n".join(
             path.read_text(encoding="utf-8")
             for path in run.site_path.iterdir()
@@ -148,12 +185,16 @@ class ProviderWithdrawalTest(unittest.TestCase):
         self.assertEqual(dataset["coverageEnded"][0]["name"], "Terminalen")
         self.assertEqual(projection["coverageEnded"], dataset["coverageEnded"])
         self.assertNotIn("terminalen", json.dumps(dataset_without_ended_fact).lower())
-        self.assertNotIn("terminalen", json.dumps(projection_without_ended_fact).lower())
+        self.assertNotIn(
+            "terminalen", json.dumps(projection_without_ended_fact).lower()
+        )
         self.assertNotIn("terminalen", other_artifact_content.lower())
 
     def test_late_site_build_records_the_missed_deadline(self) -> None:
         responses = {
-            "/terminalen": (TERMINALEN_FIXTURES / "catalogue.html").read_text(encoding="utf-8"),
+            "/terminalen": (TERMINALEN_FIXTURES / "catalogue.html").read_text(
+                encoding="utf-8"
+            ),
             "/nye-biler/hyundai/hyundai-inster/pris-og-udstyr": (
                 TERMINALEN_FIXTURES / "inster-price-page.html"
             ).read_text(encoding="utf-8"),
@@ -226,7 +267,9 @@ class ProviderWithdrawalTest(unittest.TestCase):
             "--provider-control",
             str(control_path),
         )
-        return WithdrawalRun(withdrawal, refresh, build, control_path, dataset_path, site_path)
+        return WithdrawalRun(
+            withdrawal, refresh, build, control_path, dataset_path, site_path
+        )
 
 
 def run_cli(*arguments: str) -> subprocess.CompletedProcess[str]:
@@ -247,7 +290,11 @@ def fixture_server(responses: dict[str, str]) -> ThreadingHTTPServer:
                 self.send_error(404)
                 return
             self.send_response(200)
-            content_type = "application/json; charset=utf-8" if self.path.startswith("/api/") else "text/html; charset=utf-8"
+            content_type = (
+                "application/json; charset=utf-8"
+                if self.path.startswith("/api/")
+                else "text/html; charset=utf-8"
+            )
             self.send_header("Content-Type", content_type)
             self.end_headers()
             self.wfile.write(content.encode("utf-8"))

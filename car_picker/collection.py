@@ -18,7 +18,9 @@ from car_picker.terminalen import TerminalenAdapter
 FLEASING_CATALOGUE_URL = "https://fleasing.dk/biler/"
 FLEASING_DESIGNATED_SOURCE = "Fleasing passenger-car catalogue and linked detail pages"
 TERMINALEN_CATALOGUE_URL = "https://www.terminalen.dk/nye-biler/hyundai"
-TERMINALEN_DESIGNATED_SOURCE = "Terminalen Hyundai model price pages and paired page API responses"
+TERMINALEN_DESIGNATED_SOURCE = (
+    "Terminalen Hyundai model price pages and paired page API responses"
+)
 PROVIDER_DESIGNATED_SOURCES = {
     "Fleasing": FLEASING_DESIGNATED_SOURCE,
     "Terminalen": TERMINALEN_DESIGNATED_SOURCE,
@@ -85,7 +87,9 @@ def collect_with_retries(
             if attempt == 2:
                 break
             sleep(float(2**attempt))
-    raise RuntimeError(f"{provider_name} collection failed after two retries") from last_error
+    raise RuntimeError(
+        f"{provider_name} collection failed after two retries"
+    ) from last_error
 
 
 def complete_catalogue_dataset(
@@ -105,7 +109,11 @@ def complete_catalogue_dataset(
         "generatedAt": generated_at,
         "coverage": {
             "providers": [
-                coverage_provider(name, PROVIDER_DESIGNATED_SOURCES[name], candidates_by_provider[name])
+                coverage_provider(
+                    name,
+                    PROVIDER_DESIGNATED_SOURCES[name],
+                    candidates_by_provider[name],
+                )
                 for name in active_providers
             ],
         },
@@ -120,11 +128,16 @@ def complete_catalogue_dataset(
     return to_legacy_dataset(from_legacy_dataset(legacy_dataset))
 
 
-def coverage_provider(name: str, designated_source: str, candidates: list[dict[str, Any]]) -> dict[str, Any]:
+def coverage_provider(
+    name: str, designated_source: str, candidates: list[dict[str, Any]]
+) -> dict[str, Any]:
     return {
         "name": name,
         "designatedSource": designated_source,
-        "quarantinedCandidateCount": sum(candidate.get("admissionStatus") == "quarantined" for candidate in candidates),
+        "quarantinedCandidateCount": sum(
+            candidate.get("admissionStatus") == "quarantined"
+            for candidate in candidates
+        ),
     }
 
 
@@ -133,12 +146,16 @@ def validate_complete_catalogue_dataset(dataset: dict[str, Any]) -> None:
     coverage = dataset.get("coverage")
     provider_rows = coverage.get("providers") if isinstance(coverage, dict) else None
     ended_rows = dataset.get("coverageEnded")
-    if not isinstance(offers, list) or not isinstance(provider_rows, list) or not isinstance(ended_rows, list):
-        raise ValueError("complete catalogue dataset requires coverage and catalogue offers")
+    if (
+        not isinstance(offers, list)
+        or not isinstance(provider_rows, list)
+        or not isinstance(ended_rows, list)
+    ):
+        raise ValueError(
+            "complete catalogue dataset requires coverage and catalogue offers"
+        )
     provider_names = [
-        provider.get("name")
-        for provider in provider_rows
-        if isinstance(provider, dict)
+        provider.get("name") for provider in provider_rows if isinstance(provider, dict)
     ]
     if (
         len(provider_names) != len(provider_rows)
@@ -155,7 +172,9 @@ def validate_complete_catalogue_dataset(dataset: dict[str, Any]) -> None:
             or not isinstance(ended_provider.get("coverageEndedAt"), str)
             or not ended_provider["coverageEndedAt"]
         ):
-            raise ValueError("complete catalogue dataset has invalid ended provider coverage")
+            raise ValueError(
+                "complete catalogue dataset has invalid ended provider coverage"
+            )
         ended_names.add(ended_provider["name"])
     if ended_names.intersection(provider_names):
         raise ValueError("a provider cannot be both covered and ended")
@@ -166,8 +185,15 @@ def validate_complete_catalogue_dataset(dataset: dict[str, Any]) -> None:
             raise ValueError("catalogue offer must be an object")
         provider = offer.get("provider")
         identity = offer.get("offerIdentity")
-        if provider not in providers or not isinstance(identity, str) or not identity or identity in identities:
-            raise ValueError("catalogue offers require unique identities from each covered provider")
+        if (
+            provider not in providers
+            or not isinstance(identity, str)
+            or not identity
+            or identity in identities
+        ):
+            raise ValueError(
+                "catalogue offers require unique identities from each covered provider"
+            )
         if offer.get("admissionStatus") not in {"admitted", "quarantined"}:
             raise ValueError("catalogue offer has an invalid admission status")
         validate_candidate(offer)
@@ -230,8 +256,12 @@ def refresh_all_providers(
     client = http_client or UrlLibHttpClient()
     return refresh_catalogue(
         dataset_path,
-        collect_fleasing=lambda: FleasingAdapter(client, now()).collect(fleasing_catalogue_url),
-        collect_terminalen=lambda: TerminalenAdapter(client, now()).collect(terminalen_catalogue_url),
+        collect_fleasing=lambda: FleasingAdapter(client, now()).collect(
+            fleasing_catalogue_url
+        ),
+        collect_terminalen=lambda: TerminalenAdapter(client, now()).collect(
+            terminalen_catalogue_url
+        ),
         generated_at=now,
         sleep=time.sleep,
         active_providers=active_providers,

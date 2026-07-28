@@ -39,11 +39,15 @@ class FleasingAdapter:
         self._http_client = http_client
         self._retrieved_at = retrieved_at
 
-    def collect(self, catalogue_url: str = "https://fleasing.dk/biler/") -> list[dict[str, Any]]:
+    def collect(
+        self, catalogue_url: str = "https://fleasing.dk/biler/"
+    ) -> list[dict[str, Any]]:
         catalogue_html = self._http_client.get_text(catalogue_url)
         offers = catalogue_detail_offers(catalogue_html, catalogue_url)
         if not offers:
-            raise StructuralSourceError("Fleasing catalogue contains no designated detail links")
+            raise StructuralSourceError(
+                "Fleasing catalogue contains no designated detail links"
+            )
 
         candidates: list[dict[str, Any]] = []
         for offer in offers:
@@ -68,7 +72,9 @@ class FleasingAdapter:
         return candidates
 
 
-def catalogue_detail_offers(catalogue_html: str, catalogue_url: str) -> list[DiscoveredOffer]:
+def catalogue_detail_offers(
+    catalogue_html: str, catalogue_url: str
+) -> list[DiscoveredOffer]:
     parser = CatalogueLinkParser()
     parser.feed(catalogue_html)
     parser.close()
@@ -93,7 +99,9 @@ def catalogue_detail_offers(catalogue_html: str, catalogue_url: str) -> list[Dis
 
 def catalogue_detail_urls(catalogue_html: str, catalogue_url: str) -> list[str]:
     """Expose the bounded detail enumeration for the source-adapter test seam."""
-    return [offer.url for offer in catalogue_detail_offers(catalogue_html, catalogue_url)]
+    return [
+        offer.url for offer in catalogue_detail_offers(catalogue_html, catalogue_url)
+    ]
 
 
 def map_detail_page(
@@ -121,9 +129,15 @@ def map_detail_page(
         ],
     }
     vehicle = vehicle_specification(detail, discovered_offer.url)
-    monthly_payment = money_fact(detail.private_terms, "Ydelse pr. måned", discovered_offer.url)
-    term_months = months_fact(detail.private_terms, "Leasingperiode", discovered_offer.url)
-    upfront_payment = money_fact(detail.private_terms, "Udbetaling", discovered_offer.url)
+    monthly_payment = money_fact(
+        detail.private_terms, "Ydelse pr. måned", discovered_offer.url
+    )
+    term_months = months_fact(
+        detail.private_terms, "Leasingperiode", discovered_offer.url
+    )
+    upfront_payment = money_fact(
+        detail.private_terms, "Udbetaling", discovered_offer.url
+    )
     configuration_key = configuration_key_from_private_terms(detail.private_terms)
     candidate = {
         "offerIdentity": f"fleasing:{source_id}:{configuration_key}",
@@ -132,24 +146,52 @@ def map_detail_page(
         "canonicalOfferUrl": discovered_offer.url,
         "sourceLocalConfigurationKey": configuration_key,
         "vehicleSpecification": vehicle,
-        "privateConsumerEligibility": known_fact(True, discovered_offer.url, 'id="privat"'),
+        "privateConsumerEligibility": known_fact(
+            True, discovered_offer.url, 'id="privat"'
+        ),
         "passengerCarScope": passenger_car_fact(detail, discovered_offer.url),
-        "currentAvailability": known_fact(True, catalogue_url, discovered_offer.source_fragment),
-        "supportedLeasingForm": financial_leasing_fact(detail.private_terms, discovered_offer.url),
+        "currentAvailability": known_fact(
+            True, catalogue_url, discovered_offer.source_fragment
+        ),
+        "supportedLeasingForm": financial_leasing_fact(
+            detail.private_terms, discovered_offer.url
+        ),
         "advertisedMonthlyPayment": monthly_payment,
         "termMonths": term_months,
-        "baseCashFlowStream": base_cash_flow_stream(upfront_payment, monthly_payment, term_months),
+        "baseCashFlowStream": base_cash_flow_stream(
+            upfront_payment, monthly_payment, term_months
+        ),
         "baseCashFlowBlockers": ["normalEndMechanism"],
-        "upfrontCashRequirement": not_stated_fact(discovered_offer.url, detail.private_tab_fragment),
-        "nominalBaseOutlay": not_stated_fact(discovered_offer.url, detail.private_tab_fragment),
-        "nominalMonthlyEquivalent": not_stated_fact(discovered_offer.url, detail.private_tab_fragment),
-        "annualMileageKm": not_stated_fact(discovered_offer.url, detail.private_tab_fragment),
-        "normalEndMechanism": not_stated_fact(discovered_offer.url, detail.private_tab_fragment),
-        "residualRiskAllocation": residual_risk_allocation_fact(detail.private_terms, discovered_offer.url),
-        "registrationTaxTreatment": not_stated_fact(discovered_offer.url, detail.private_tab_fragment),
-        "serviceArrangements": not_stated_fact(discovered_offer.url, detail.private_tab_fragment),
-        "exclusions": not_stated_fact(discovered_offer.url, detail.private_tab_fragment),
-        "exposureScenarios": not_stated_fact(discovered_offer.url, detail.private_tab_fragment),
+        "upfrontCashRequirement": not_stated_fact(
+            discovered_offer.url, detail.private_tab_fragment
+        ),
+        "nominalBaseOutlay": not_stated_fact(
+            discovered_offer.url, detail.private_tab_fragment
+        ),
+        "nominalMonthlyEquivalent": not_stated_fact(
+            discovered_offer.url, detail.private_tab_fragment
+        ),
+        "annualMileageKm": not_stated_fact(
+            discovered_offer.url, detail.private_tab_fragment
+        ),
+        "normalEndMechanism": not_stated_fact(
+            discovered_offer.url, detail.private_tab_fragment
+        ),
+        "residualRiskAllocation": residual_risk_allocation_fact(
+            detail.private_terms, discovered_offer.url
+        ),
+        "registrationTaxTreatment": not_stated_fact(
+            discovered_offer.url, detail.private_tab_fragment
+        ),
+        "serviceArrangements": not_stated_fact(
+            discovered_offer.url, detail.private_tab_fragment
+        ),
+        "exclusions": not_stated_fact(
+            discovered_offer.url, detail.private_tab_fragment
+        ),
+        "exposureScenarios": not_stated_fact(
+            discovered_offer.url, detail.private_tab_fragment
+        ),
         "sourceMetadata": source_metadata,
     }
     reasons = admission_reasons(candidate)
@@ -183,7 +225,9 @@ def quarantined_unavailable_detail_candidate(
         "vehicleSpecification": unavailable_fact,
         "privateConsumerEligibility": unavailable_fact,
         "passengerCarScope": unavailable_fact,
-        "currentAvailability": unclear_fact(catalogue_url, discovered_offer.source_fragment),
+        "currentAvailability": unclear_fact(
+            catalogue_url, discovered_offer.source_fragment
+        ),
         "supportedLeasingForm": unavailable_fact,
         "advertisedMonthlyPayment": unavailable_fact,
         "termMonths": unavailable_fact,
@@ -244,15 +288,25 @@ def payment_event(
     recurrence_fact: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     blockers: list[str] = []
-    amount = amount_fact.get("valueDkk") if amount_fact.get("state") == "known" else None
+    amount = (
+        amount_fact.get("valueDkk") if amount_fact.get("state") == "known" else None
+    )
     if amount is None:
-        blockers.append("upfrontPayment" if timing == "acceptance_to_handover" else "advertisedMonthlyPayment")
+        blockers.append(
+            "upfrontPayment"
+            if timing == "acceptance_to_handover"
+            else "advertisedMonthlyPayment"
+        )
 
     recurrence_count = 1
     amount_evidence = evidence_value(amount_fact)
     wording = amount_evidence["wording"]
     if recurrence_fact is not None:
-        recurrence_count = recurrence_fact.get("value") if recurrence_fact.get("state") == "known" else None
+        recurrence_count = (
+            recurrence_fact.get("value")
+            if recurrence_fact.get("state") == "known"
+            else None
+        )
         if recurrence_count is None:
             blockers.append("termMonths")
         recurrence_wording = evidence_value(recurrence_fact)["wording"]
@@ -288,7 +342,9 @@ def evidence_value(fact: Mapping[str, Any]) -> dict[str, str]:
     return {"sourceUrl": source_url, "wording": wording}
 
 
-def vehicle_specification(detail: "FleasingDetailParser", source_url: str) -> dict[str, Any]:
+def vehicle_specification(
+    detail: "FleasingDetailParser", source_url: str
+) -> dict[str, Any]:
     if not detail.make or not detail.trim:
         return not_stated_fact(source_url, detail.private_tab_fragment)
     return known_fact(
@@ -298,19 +354,27 @@ def vehicle_specification(detail: "FleasingDetailParser", source_url: str) -> di
     )
 
 
-def passenger_car_fact(detail: "FleasingDetailParser", source_url: str) -> dict[str, Any]:
+def passenger_car_fact(
+    detail: "FleasingDetailParser", source_url: str
+) -> dict[str, Any]:
     return not_stated_fact(source_url, detail.private_tab_fragment)
 
 
-def financial_leasing_fact(private_terms: Mapping[str, str], source_url: str) -> dict[str, Any]:
+def financial_leasing_fact(
+    private_terms: Mapping[str, str], source_url: str
+) -> dict[str, Any]:
     return residual_value_fact(private_terms, source_url)
 
 
-def residual_risk_allocation_fact(private_terms: Mapping[str, str], source_url: str) -> dict[str, Any]:
+def residual_risk_allocation_fact(
+    private_terms: Mapping[str, str], source_url: str
+) -> dict[str, Any]:
     return residual_value_fact(private_terms, source_url)
 
 
-def residual_value_fact(private_terms: Mapping[str, str], source_url: str) -> dict[str, Any]:
+def residual_value_fact(
+    private_terms: Mapping[str, str], source_url: str
+) -> dict[str, Any]:
     residual_value = private_terms.get("Restværdi")
     if residual_value is None:
         return not_stated_fact(source_url, 'id="privat"')
@@ -335,14 +399,18 @@ def admission_reasons(candidate: Mapping[str, Any]) -> list[dict[str, str]]:
 
 
 def configuration_key_from_private_terms(private_terms: Mapping[str, str]) -> str:
-    selected_values = "\n".join(f"{label}:{value}" for label, value in sorted(private_terms.items()))
+    selected_values = "\n".join(
+        f"{label}:{value}" for label, value in sorted(private_terms.items())
+    )
     return f"private-{hashlib.sha256(selected_values.encode('utf-8')).hexdigest()[:12]}"
 
 
 def source_id_from_url(detail_url: str) -> str:
     source_ids = parse_qs(urlparse(detail_url).query).get("vid")
     if not source_ids:
-        raise StructuralSourceError(f"Fleasing detail URL has no vid identity: {detail_url}")
+        raise StructuralSourceError(
+            f"Fleasing detail URL has no vid identity: {detail_url}"
+        )
     return source_ids[0]
 
 
@@ -366,24 +434,42 @@ def unclear_fact(source_url: str, wording: str) -> dict[str, Any]:
     return {"state": "unclear", "evidence": evidence(source_url, wording)}
 
 
-def money_fact(private_terms: Mapping[str, str], label: str, source_url: str) -> dict[str, Any]:
+def money_fact(
+    private_terms: Mapping[str, str], label: str, source_url: str
+) -> dict[str, Any]:
     wording = private_terms.get(label)
     if wording is None:
         return not_stated_fact(source_url, 'id="privat"')
     amount = dkk_amount(wording)
     if amount is None or "inkl. moms" not in wording.lower():
-        return {"state": "unclear", "evidence": evidence(source_url, f"{label} {wording}")}
-    return {"state": "known", "valueDkk": amount, "evidence": evidence(source_url, f"{label} {wording}")}
+        return {
+            "state": "unclear",
+            "evidence": evidence(source_url, f"{label} {wording}"),
+        }
+    return {
+        "state": "known",
+        "valueDkk": amount,
+        "evidence": evidence(source_url, f"{label} {wording}"),
+    }
 
 
-def months_fact(private_terms: Mapping[str, str], label: str, source_url: str) -> dict[str, Any]:
+def months_fact(
+    private_terms: Mapping[str, str], label: str, source_url: str
+) -> dict[str, Any]:
     wording = private_terms.get(label)
     if wording is None:
         return not_stated_fact(source_url, 'id="privat"')
     match = re.search(r"\b(\d+)\b", wording)
     if match is None:
-        return {"state": "unclear", "evidence": evidence(source_url, f"{label} {wording}")}
-    return {"state": "known", "value": int(match.group(1)), "evidence": evidence(source_url, f"{label} {wording}")}
+        return {
+            "state": "unclear",
+            "evidence": evidence(source_url, f"{label} {wording}"),
+        }
+    return {
+        "state": "known",
+        "value": int(match.group(1)),
+        "evidence": evidence(source_url, f"{label} {wording}"),
+    }
 
 
 def dkk_amount(wording: str) -> int | None:

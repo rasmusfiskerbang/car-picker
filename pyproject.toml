@@ -9,8 +9,33 @@ description = "Evidence-backed Danish private-leasing catalogue"
 requires-python = ">=3.14"
 dependencies = ["pydantic>=2.12,<3"]
 
+[dependency-groups]
+dev = [
+    "prek>=0.4.11",
+    "ruff>=0.16.0",
+    "ty>=0.0.64",
+]
+
 [project.scripts]
 car-picker = "car_picker.__main__:main"
 
 [tool.setuptools]
 packages = ["car_picker"]
+
+[tool.ruff]
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "ANN"]
+# JSON enters the application as untyped data and is narrowed by validation.
+ignore = ["ANN401"]
+
+[tool.ruff.lint.per-file-ignores]
+# This throwaway HTTP handler must mirror the variadic stdlib constructor.
+"prototype/private-comparison/serve.py" = ["ANN002", "ANN003"]
+
+[tool.ty.environment]
+python-version = "3.14"
+
+[tool.ty.src]
+include = ["car_picker", "tests"]

@@ -19,7 +19,9 @@ from pydantic import (
 NonEmptyString = Annotated[str, StringConstraints(min_length=1)]
 OfferIdentity = Annotated[
     str,
-    StringConstraints(min_length=3, pattern=r"^[a-z0-9][a-z0-9_-]*:[^\s:]+(?::[^\s]+)?$"),
+    StringConstraints(
+        min_length=3, pattern=r"^[a-z0-9][a-z0-9_-]*:[^\s:]+(?::[^\s]+)?$"
+    ),
 ]
 FactState = Literal["known", "not_stated", "unclear", "conflicting", "not_applicable"]
 
@@ -126,7 +128,9 @@ class CashFlowEvent(CatalogueModel):
 
 class SourceDocument(CatalogueModel):
     source_url: NonEmptyString
-    content_sha256: Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")] | None = None
+    content_sha256: (
+        Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")] | None
+    ) = None
     retrieved_at: NonEmptyString | None = None
 
 
@@ -211,9 +215,13 @@ class CatalogueOffer(CatalogueCandidate):
             not isinstance(fact, KnownFact) or fact.value is not True
             for fact in boolean_admission_facts
         ):
-            raise ValueError("admitted catalogue offers require positive admission facts")
+            raise ValueError(
+                "admitted catalogue offers require positive admission facts"
+            )
         if not isinstance(self.supported_leasing_form, KnownFact):
-            raise ValueError("admitted catalogue offers require a classifiable leasing form")
+            raise ValueError(
+                "admitted catalogue offers require a classifiable leasing form"
+            )
         return self
 
 
@@ -272,17 +280,24 @@ class CatalogueDataset(CatalogueModel):
             raise ValueError("offer identities must be unique within a dataset")
         candidate_providers = {candidate.provider for candidate in candidates}
         if candidate_providers != set(provider_names):
-            raise ValueError("every and only covered providers must contribute candidates")
+            raise ValueError(
+                "every and only covered providers must contribute candidates"
+            )
 
         quarantine_counts = {
-            provider: sum(offer.provider == provider for offer in self.quarantined_offers)
+            provider: sum(
+                offer.provider == provider for offer in self.quarantined_offers
+            )
             for provider in provider_names
         }
         declared_counts = {
-            provider.name: provider.quarantined_candidate_count for provider in provider_rows
+            provider.name: provider.quarantined_candidate_count
+            for provider in provider_rows
         }
         if quarantine_counts != declared_counts:
-            raise ValueError("provider coverage quarantine counts must match retained candidates")
+            raise ValueError(
+                "provider coverage quarantine counts must match retained candidates"
+            )
         return self
 
 
@@ -316,7 +331,10 @@ def from_legacy_dataset(
             admitted.append(candidate)
         elif status == "quarantined":
             candidate["admissionOutcome"] = "quarantined"
-            if not require_complete_replacement and "quarantineReasons" not in candidate:
+            if (
+                not require_complete_replacement
+                and "quarantineReasons" not in candidate
+            ):
                 candidate["quarantineReasons"] = [
                     {"fact": "admissionOutcome", "state": "unclear"}
                 ]

@@ -16,21 +16,29 @@ def calculate_comparison_values(offer: Mapping[str, Any]) -> dict[str, dict[str,
         return {
             "upfrontCashRequirement": unavailable,
             "nominalBaseOutlay": unavailable,
-            "nominalMonthlyEquivalent": calculate_nominal_monthly_equivalent(unavailable, offer.get("termMonths")),
+            "nominalMonthlyEquivalent": calculate_nominal_monthly_equivalent(
+                unavailable, offer.get("termMonths")
+            ),
         }
     if not is_time_ordered(events):
         unavailable = unavailable_value("baseCashFlowStream")
         return {
             "upfrontCashRequirement": unavailable,
             "nominalBaseOutlay": unavailable,
-            "nominalMonthlyEquivalent": calculate_nominal_monthly_equivalent(unavailable, offer.get("termMonths")),
+            "nominalMonthlyEquivalent": calculate_nominal_monthly_equivalent(
+                unavailable, offer.get("termMonths")
+            ),
         }
 
     upfront = calculate_upfront_cash_requirement(events)
-    nominal_outlay = calculate_nominal_base_outlay(events, offer.get("baseCashFlowBlockers"))
+    nominal_outlay = calculate_nominal_base_outlay(
+        events, offer.get("baseCashFlowBlockers")
+    )
     if reconcile_provider_advertised_aggregate(offer)["status"] == "mismatch":
         nominal_outlay = unavailable_value("providerAdvertisedAggregateMismatch")
-    monthly_equivalent = calculate_nominal_monthly_equivalent(nominal_outlay, offer.get("termMonths"))
+    monthly_equivalent = calculate_nominal_monthly_equivalent(
+        nominal_outlay, offer.get("termMonths")
+    )
     return {
         "upfrontCashRequirement": upfront,
         "nominalBaseOutlay": nominal_outlay,
@@ -94,14 +102,22 @@ def provider_aggregate_assertion(offer: Mapping[str, Any]) -> dict[str, Any] | N
     return {
         "valueDkk": amount,
         "scope": NORMAL_COMPLETION_BASE_CASH_FLOW_SCOPE,
-        "evidence": {"sourceUrl": evidence["sourceUrl"], "wording": evidence["wording"]},
+        "evidence": {
+            "sourceUrl": evidence["sourceUrl"],
+            "wording": evidence["wording"],
+        },
     }
 
 
 def recurrence_counts(events: Any) -> list[int]:
     if not isinstance(events, list):
         return []
-    return [event.get("recurrenceCount", 1) for event in events if isinstance(event, Mapping) and isinstance(event.get("recurrenceCount", 1), int)]
+    return [
+        event.get("recurrenceCount", 1)
+        for event in events
+        if isinstance(event, Mapping)
+        and isinstance(event.get("recurrenceCount", 1), int)
+    ]
 
 
 def reconstructed_events(events: Any) -> list[dict[str, Any]]:
@@ -124,10 +140,18 @@ def reconstructed_events(events: Any) -> list[dict[str, Any]]:
 def vat_bases(events: Any) -> list[str]:
     if not isinstance(events, list):
         return []
-    return sorted({event["amountBasis"] for event in events if isinstance(event, Mapping) and isinstance(event.get("amountBasis"), str)})
+    return sorted(
+        {
+            event["amountBasis"]
+            for event in events
+            if isinstance(event, Mapping) and isinstance(event.get("amountBasis"), str)
+        }
+    )
 
 
-def aggregate_evidence_references(assertion: Mapping[str, Any] | None, events: Any) -> list[dict[str, str]]:
+def aggregate_evidence_references(
+    assertion: Mapping[str, Any] | None, events: Any
+) -> list[dict[str, str]]:
     references: list[dict[str, str]] = []
     if assertion is not None:
         references.append(dict(assertion["evidence"]))
@@ -138,11 +162,17 @@ def aggregate_evidence_references(assertion: Mapping[str, Any] | None, events: A
     return references
 
 
-def investigation_prompts(assertion: Mapping[str, Any] | None, reconstructed: Mapping[str, Any]) -> list[str]:
+def investigation_prompts(
+    assertion: Mapping[str, Any] | None, reconstructed: Mapping[str, Any]
+) -> list[str]:
     if assertion is None:
-        return ["Find a provider-advertised aggregate for the same normal-completion base cash-flow scope."]
+        return [
+            "Find a provider-advertised aggregate for the same normal-completion base cash-flow scope."
+        ]
     if reconstructed["state"] != "known":
-        return ["Verify every base cash-flow amount, recurrence, VAT basis, and normal-completion timing."]
+        return [
+            "Verify every base cash-flow amount, recurrence, VAT basis, and normal-completion timing."
+        ]
     return [
         "Verify that the provider aggregate covers the same normal-completion cash flows.",
         "Check recurrence counts, VAT basis, and any end-of-term fees against their source evidence.",
@@ -150,18 +180,26 @@ def investigation_prompts(assertion: Mapping[str, Any] | None, reconstructed: Ma
 
 
 def calculate_upfront_cash_requirement(events: list[Any]) -> dict[str, Any]:
-    blocking_facts = invalid_event_facts(events, relevant_timing="acceptance_to_handover")
+    blocking_facts = invalid_event_facts(
+        events, relevant_timing="acceptance_to_handover"
+    )
     if blocking_facts:
         return unavailable_value(*blocking_facts)
-    return known_value(sum(payment_amount(event) for event in events if is_upfront_payment(event)))
+    return known_value(
+        sum(payment_amount(event) for event in events if is_upfront_payment(event))
+    )
 
 
-def calculate_nominal_base_outlay(events: list[Any], completion_blockers: Any) -> dict[str, Any]:
+def calculate_nominal_base_outlay(
+    events: list[Any], completion_blockers: Any
+) -> dict[str, Any]:
     blocking_facts = invalid_event_facts(events)
     blocking_facts.extend(blocking_fact_list(completion_blockers, "baseCashFlowStream"))
     if blocking_facts:
         return unavailable_value(*blocking_facts)
-    return known_value(sum(signed_amount(event) for event in events if is_base_event(event)))
+    return known_value(
+        sum(signed_amount(event) for event in events if is_base_event(event))
+    )
 
 
 def calculate_nominal_monthly_equivalent(
@@ -187,7 +225,9 @@ def round_to_nearest_dkk(amount_dkk: int, months: int) -> int:
     return (amount_dkk * 2 + months) // (months * 2)
 
 
-def invalid_event_facts(events: list[Any], relevant_timing: str | None = None) -> list[str]:
+def invalid_event_facts(
+    events: list[Any], relevant_timing: str | None = None
+) -> list[str]:
     blocking_facts: list[str] = []
     for event in events:
         if not isinstance(event, Mapping):
@@ -197,7 +237,11 @@ def invalid_event_facts(events: list[Any], relevant_timing: str | None = None) -
             continue
         timing = event.get("timing")
         if relevant_timing is not None and timing != relevant_timing:
-            if timing in {"acceptance_to_handover", "recurring", "normal_completion_end"}:
+            if timing in {
+                "acceptance_to_handover",
+                "recurring",
+                "normal_completion_end",
+            }:
                 continue
         if not valid_event(event):
             blocking_facts.extend(event_blocking_facts(event))
@@ -210,7 +254,8 @@ def valid_event(event: Mapping[str, Any]) -> bool:
     return (
         event.get("includedInBase") is True
         and event.get("direction") in {"payment", "receipt"}
-        and event.get("timing") in {"acceptance_to_handover", "recurring", "normal_completion_end"}
+        and event.get("timing")
+        in {"acceptance_to_handover", "recurring", "normal_completion_end"}
         and event.get("amountBasis") in {"including_vat", "excluding_vat", "not_stated"}
         and isinstance(amount, int)
         and not isinstance(amount, bool)
@@ -224,13 +269,19 @@ def valid_event(event: Mapping[str, Any]) -> bool:
 
 def event_blocking_facts(event: Mapping[str, Any]) -> list[str]:
     blockers = event.get("blockingFacts")
-    if isinstance(blockers, list) and blockers and all(isinstance(blocker, str) and blocker for blocker in blockers):
+    if (
+        isinstance(blockers, list)
+        and blockers
+        and all(isinstance(blocker, str) and blocker for blocker in blockers)
+    ):
         return blockers
     return ["baseCashFlowStream"]
 
 
 def blocking_fact_list(value: Any, fallback: str) -> list[str]:
-    if isinstance(value, list) and all(isinstance(item, str) and item for item in value):
+    if isinstance(value, list) and all(
+        isinstance(item, str) and item for item in value
+    ):
         return value
     return [] if value is None else [fallback]
 
@@ -240,7 +291,11 @@ def is_base_event(event: Mapping[str, Any]) -> bool:
 
 
 def is_time_ordered(events: list[Any]) -> bool:
-    timing_order = {"acceptance_to_handover": 0, "recurring": 1, "normal_completion_end": 2}
+    timing_order = {
+        "acceptance_to_handover": 0,
+        "recurring": 1,
+        "normal_completion_end": 2,
+    }
     previous_phase = -1
     for event in events:
         if not isinstance(event, Mapping) or event.get("includedInBase") is not True:
@@ -267,7 +322,11 @@ def has_evidence(evidence: Any) -> bool:
 
 
 def is_upfront_payment(event: Mapping[str, Any]) -> bool:
-    return is_base_event(event) and event.get("timing") == "acceptance_to_handover" and event.get("direction") == "payment"
+    return (
+        is_base_event(event)
+        and event.get("timing") == "acceptance_to_handover"
+        and event.get("direction") == "payment"
+    )
 
 
 def payment_amount(event: Mapping[str, Any]) -> int:
