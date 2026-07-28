@@ -4,6 +4,10 @@ from collections.abc import Mapping
 from typing import Any
 
 
+ORDINARY_ROUNDING_TOLERANCE_DKK = 1
+NORMAL_COMPLETION_BASE_CASH_FLOW_SCOPE = "normal_completion_base_cash_flows"
+
+
 def calculate_comparison_values(offer: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
     """Derive normal-completion comparison values from one base cash-flow stream."""
     events = offer.get("baseCashFlowStream")
@@ -24,12 +28,125 @@ def calculate_comparison_values(offer: Mapping[str, Any]) -> dict[str, dict[str,
 
     upfront = calculate_upfront_cash_requirement(events)
     nominal_outlay = calculate_nominal_base_outlay(events, offer.get("baseCashFlowBlockers"))
+    if reconcile_provider_advertised_aggregate(offer)["status"] == "mismatch":
+        nominal_outlay = unavailable_value("providerAdvertisedAggregateMismatch")
     monthly_equivalent = calculate_nominal_monthly_equivalent(nominal_outlay, offer.get("termMonths"))
     return {
         "upfrontCashRequirement": upfront,
         "nominalBaseOutlay": nominal_outlay,
         "nominalMonthlyEquivalent": monthly_equivalent,
     }
+
+
+def reconcile_provider_advertised_aggregate(offer: Mapping[str, Any]) -> dict[str, Any]:
+    """Compare a same-scope provider aggregate assertion with reconstructed base cash flows."""
+    assertion = provider_aggregate_assertion(offer)
+    events = offer.get("baseCashFlowStream")
+    reconstructed = (
+        calculate_nominal_base_outlay(events, offer.get("baseCashFlowBlockers"))
+        if isinstance(events, list) and is_time_ordered(events)
+        else unavailable_value("baseCashFlowStream")
+    )
+    diagnostic = {
+        "offerIdentity": offer.get("offerIdentity"),
+        "providerAdvertisedAggregate": assertion,
+        "reconstructedNominalBaseOutlayDkk": reconstructed.get("valueDkk"),
+        "reconstructedEvents": reconstructed_events(events),
+        "differenceDkk": None,
+        "toleranceDkk": ORDINARY_ROUNDING_TOLERANCE_DKK,
+        "recurrenceCounts": recurrence_counts(events),
+        "vatBases": vat_bases(events),
+        "evidenceReferences": aggregate_evidence_references(assertion, events),
+        "investigationPrompts": investigation_prompts(assertion, reconstructed),
+    }
+    if assertion is None:
+        diagnostic["status"] = "not_available"
+        return diagnostic
+    if reconstructed["state"] != "known":
+        diagnostic["status"] = "not_reconstructed"
+        return diagnostic
+    difference = assertion["valueDkk"] - reconstructed["valueDkk"]
+    diagnostic["differenceDkk"] = difference
+    if difference == 0:
+        diagnostic["status"] = "matching"
+    elif abs(difference) <= ORDINARY_ROUNDING_TOLERANCE_DKK:
+        diagnostic["status"] = "within_ordinary_rounding_tolerance"
+    else:
+        diagnostic["status"] = "mismatch"
+    return diagnostic
+
+
+def provider_aggregate_assertion(offer: Mapping[str, Any]) -> dict[str, Any] | None:
+    value = offer.get("providerAdvertisedAggregate")
+    if not isinstance(value, Mapping):
+        return None
+    amount = value.get("valueDkk")
+    evidence = value.get("evidence")
+    if (
+        value.get("state") != "known"
+        or value.get("scope") != NORMAL_COMPLETION_BASE_CASH_FLOW_SCOPE
+        or not isinstance(amount, int)
+        or isinstance(amount, bool)
+        or amount < 0
+        or not has_evidence(evidence)
+    ):
+        return None
+    return {
+        "valueDkk": amount,
+        "scope": NORMAL_COMPLETION_BASE_CASH_FLOW_SCOPE,
+        "evidence": {"sourceUrl": evidence["sourceUrl"], "wording": evidence["wording"]},
+    }
+
+
+def recurrence_counts(events: Any) -> list[int]:
+    if not isinstance(events, list):
+        return []
+    return [event.get("recurrenceCount", 1) for event in events if isinstance(event, Mapping) and isinstance(event.get("recurrenceCount", 1), int)]
+
+
+def reconstructed_events(events: Any) -> list[dict[str, Any]]:
+    if not isinstance(events, list):
+        return []
+    return [
+        {
+            "meaning": event.get("meaning"),
+            "direction": event.get("direction"),
+            "amountDkk": event.get("amountDkk"),
+            "recurrenceCount": event.get("recurrenceCount", 1),
+            "amountBasis": event.get("amountBasis"),
+            "evidence": event.get("evidence"),
+        }
+        for event in events
+        if isinstance(event, Mapping) and event.get("includedInBase") is True
+    ]
+
+
+def vat_bases(events: Any) -> list[str]:
+    if not isinstance(events, list):
+        return []
+    return sorted({event["amountBasis"] for event in events if isinstance(event, Mapping) and isinstance(event.get("amountBasis"), str)})
+
+
+def aggregate_evidence_references(assertion: Mapping[str, Any] | None, events: Any) -> list[dict[str, str]]:
+    references: list[dict[str, str]] = []
+    if assertion is not None:
+        references.append(dict(assertion["evidence"]))
+    if isinstance(events, list):
+        for event in events:
+            if isinstance(event, Mapping) and has_evidence(event.get("evidence")):
+                references.append(dict(event["evidence"]))
+    return references
+
+
+def investigation_prompts(assertion: Mapping[str, Any] | None, reconstructed: Mapping[str, Any]) -> list[str]:
+    if assertion is None:
+        return ["Find a provider-advertised aggregate for the same normal-completion base cash-flow scope."]
+    if reconstructed["state"] != "known":
+        return ["Verify every base cash-flow amount, recurrence, VAT basis, and normal-completion timing."]
+    return [
+        "Verify that the provider aggregate covers the same normal-completion cash flows.",
+        "Check recurrence counts, VAT basis, and any end-of-term fees against their source evidence.",
+    ]
 
 
 def calculate_upfront_cash_requirement(events: list[Any]) -> dict[str, Any]:
@@ -136,7 +253,10 @@ def is_time_ordered(events: list[Any]) -> bool:
 
 
 def has_event_evidence(event: Mapping[str, Any]) -> bool:
-    evidence = event.get("evidence")
+    return has_evidence(event.get("evidence"))
+
+
+def has_evidence(evidence: Any) -> bool:
     return (
         isinstance(evidence, Mapping)
         and isinstance(evidence.get("sourceUrl"), str)

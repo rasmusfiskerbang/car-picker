@@ -45,6 +45,10 @@ class TerminalenAdapterTest(unittest.TestCase):
         self.assertEqual(candidates[0]["residualRiskAllocation"]["value"], "provider")
         self.assertEqual(candidates[0]["providerAdvertisedAggregate"]["valueDkk"], 117195)
         self.assertEqual(
+            candidates[0]["providerAdvertisedAggregate"]["scope"],
+            "normal_completion_base_cash_flows",
+        )
+        self.assertEqual(
             [event["meaning"] for event in candidates[0]["baseCashFlowStream"]],
             ["Udbetaling", "Månedlig ydelse", "Inspektionsgebyr"],
         )

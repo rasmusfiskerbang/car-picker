@@ -164,8 +164,6 @@ def map_configuration(
                 {"sourceUrl": api_url, "wording": legal_wording},
             )
         )
-    total = upfront + monthly * term + sum(item["amountDkk"] for item in events[2:])
-    blockers = ["unreconciledProviderAggregate"] if total != aggregate else []
     candidate = {
         "offerIdentity": f"terminalen:{model_id}:{configuration_id}",
         "provider": "Terminalen",
@@ -181,14 +179,16 @@ def map_configuration(
         "currentAvailability": not_stated(api_url, wording),
         "supportedLeasingForm": operational_form_fact(api_url, end_wording),
         "advertisedMonthlyPayment": money(monthly, payment_evidence),
-        "providerAdvertisedAggregate": money(aggregate, card_evidence),
+        "providerAdvertisedAggregate": {
+            **money(aggregate, card_evidence),
+            "scope": "normal_completion_base_cash_flows",
+        },
         "termMonths": known(term, card_evidence),
         "annualMileageKm": mileage,
         "normalEndMechanism": normal_end_fact(api_url, end_wording),
         "residualRiskAllocation": residual_risk_fact(api_url, end_wording),
         "registrationTaxTreatment": not_stated(api_url, legal_wording),
         "baseCashFlowStream": events,
-        "baseCashFlowBlockers": blockers,
         "serviceArrangements": service_arrangements_fact(api_url, legal_wording),
         "exclusions": exclusions_fact(api_url, legal_wording),
         "exposureScenarios": not_stated(api_url, legal_wording),

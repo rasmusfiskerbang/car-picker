@@ -1216,6 +1216,7 @@ function blockingFactLabel(value) {{
     advertisedMonthlyPayment: "annonceret månedlig ydelse",
     upfrontPayment: "udbetaling",
     normalEndMechanism: "normal afslutningsmekanisme",
+    providerAdvertisedAggregateMismatch: "udbyderens samlede beløb stemmer ikke med betalingsstrømmen",
   }};
   return labels[value] || value;
 }}

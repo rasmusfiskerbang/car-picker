@@ -37,7 +37,7 @@ def refresh_catalogue(
     collect_terminalen: Callable[[], list[dict[str, Any]]],
     generated_at: Callable[[], str],
     sleep: Callable[[float], None],
-) -> None:
+) -> dict[str, Any]:
     """Atomically replace the complete two-provider catalogue after every provider succeeds."""
     fleasing_candidates = collect_with_retries("Fleasing", collect_fleasing, sleep)
     terminalen_candidates = collect_with_retries("Terminalen", collect_terminalen, sleep)
@@ -45,6 +45,7 @@ def refresh_catalogue(
     dataset = complete_catalogue_dataset(fleasing_candidates, terminalen_candidates, timestamp)
     validate_complete_catalogue_dataset(dataset)
     write_json_atomically(dataset_path, dataset)
+    return dataset
 
 
 def collect_with_retries(
@@ -158,10 +159,10 @@ def refresh_all_providers(
     fleasing_catalogue_url: str = FLEASING_CATALOGUE_URL,
     terminalen_catalogue_url: str = TERMINALEN_CATALOGUE_URL,
     http_client: TextHttpClient | None = None,
-) -> None:
+) -> dict[str, Any]:
     """Collect Fleasing followed by Terminalen into one generation and atomic replacement."""
     client = http_client or UrlLibHttpClient()
-    refresh_catalogue(
+    return refresh_catalogue(
         dataset_path,
         collect_fleasing=lambda: FleasingAdapter(client, now()).collect(fleasing_catalogue_url),
         collect_terminalen=lambda: TerminalenAdapter(client, now()).collect(terminalen_catalogue_url),

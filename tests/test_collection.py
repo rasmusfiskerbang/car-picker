@@ -81,6 +81,8 @@ class CollectionTest(unittest.TestCase):
 
         self.assertEqual([row["name"] for row in dataset["coverage"]["providers"]], ["Fleasing", "Terminalen"])
         self.assertEqual(len(dataset["catalogueOffers"]), 4)
+        self.assertIn("WARNING provider aggregate reconciliation mismatch:", result.stdout)
+        self.assertIn("terminalen:HY_INSTER:", result.stdout)
     def test_retries_each_provider_at_most_twice_and_publishes_one_complete_generation(self) -> None:
         calls: list[str] = []
         sleeps: list[float] = []
