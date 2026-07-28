@@ -136,6 +136,118 @@ class CollectionTest(unittest.TestCase):
         )
         self.assertIn("terminalen:HY_INSTER:", result.stdout)
 
+    def test_complete_fixture_refresh_carries_admitted_fleasing_offers_into_static_catalogue(
+        self,
+    ) -> None:
+        fleasing_detail_path = "/bil/?porsche-taycan&vid=982451736"
+        responses = {
+            "/biler/": (f'<a href="{fleasing_detail_path}">Porsche Taycan</a>'),
+            fleasing_detail_path: (
+                FLEASING_FIXTURES / "porsche-taycan-configurations.html"
+            ).read_text(encoding="utf-8"),
+            "/terminalen": (TERMINALEN_FIXTURES / "catalogue.html").read_text(
+                encoding="utf-8"
+            ),
+            "/nye-biler/hyundai/hyundai-inster/pris-og-udstyr": (
+                TERMINALEN_FIXTURES / "inster-price-page.html"
+            ).read_text(encoding="utf-8"),
+            "/api/page/url?url=/nye-biler/hyundai/hyundai-inster/pris-og-udstyr&culture=da-DK": (
+                TERMINALEN_FIXTURES / "inster-price-page.json"
+            ).read_text(encoding="utf-8"),
+        }
+        server = fixture_server(responses)
+        thread = threading.Thread(target=server.serve_forever)
+        thread.start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(thread.join)
+        self.addCleanup(server.shutdown)
+
+        with tempfile.TemporaryDirectory() as directory:
+            temporary_path = Path(directory)
+            dataset_path = temporary_path / "catalogue-dataset.json"
+            site_path = temporary_path / "site"
+            provider_control_path = temporary_path / "provider-control.json"
+            provider_control_path.write_text(
+                (REPOSITORY_ROOT / "config/provider-control.json").read_text(
+                    encoding="utf-8"
+                ),
+                encoding="utf-8",
+            )
+            refresh_result = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "car_picker",
+                    "refresh-catalogue",
+                    "--dataset",
+                    str(dataset_path),
+                    "--fleasing-catalogue-url",
+                    f"http://127.0.0.1:{server.server_port}/biler/",
+                    "--terminalen-catalogue-url",
+                    f"http://127.0.0.1:{server.server_port}/terminalen",
+                    "--provider-control",
+                    str(provider_control_path),
+                ],
+                cwd=REPOSITORY_ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(refresh_result.returncode, 0, refresh_result.stderr)
+            build_result = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "car_picker",
+                    "build-site",
+                    "--dataset",
+                    str(dataset_path),
+                    "--output",
+                    str(site_path),
+                    "--provider-control",
+                    str(provider_control_path),
+                ],
+                cwd=REPOSITORY_ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(build_result.returncode, 0, build_result.stderr)
+            dataset = json.loads(dataset_path.read_text(encoding="utf-8"))
+            projection = json.loads(
+                (site_path / "projection.json").read_text(encoding="utf-8")
+            )
+
+        fleasing_candidates = [
+            candidate
+            for candidate in dataset["catalogueOffers"]
+            if candidate["provider"] == "Fleasing"
+        ]
+        self.assertEqual(
+            [
+                (candidate["offerIdentity"], candidate["admissionStatus"])
+                for candidate in fleasing_candidates
+            ],
+            [
+                ("fleasing:982451736:private-standard", "admitted"),
+                ("fleasing:982451736:private-low-upfront", "admitted"),
+            ],
+        )
+        fleasing_offers = [
+            offer for offer in projection["offers"] if offer["provider"] == "Fleasing"
+        ]
+        self.assertEqual(len(fleasing_offers), 2)
+        self.assertEqual(
+            fleasing_offers[0]["advertisedMonthlyPayment"]["valueDkk"], 9995
+        )
+        self.assertEqual(
+            fleasing_offers[0]["upfrontCashRequirement"]["valueDkk"], 149995
+        )
+        self.assertEqual(
+            fleasing_offers[0]["advertisedMonthlyPayment"]["evidence"]["wording"],
+            "Ydelse pr. måned 9.995 kr. /inkl. moms",
+        )
+
     def test_retries_each_provider_at_most_twice_and_publishes_one_complete_generation(
         self,
     ) -> None:

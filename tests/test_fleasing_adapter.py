@@ -17,6 +17,7 @@ FIXTURE_DIRECTORY = Path(__file__).resolve().parent / "fixtures/fleasing"
 CATALOGUE_URL = "https://fleasing.dk/biler/"
 DETAIL_URL = "https://fleasing.dk/bil/?aston-martin-db9-volante-aut&vid=442795427"
 MISSING_MONTHLY_DETAIL_URL = "https://fleasing.dk/bil/?bmw-i4&vid=771869804"
+MULTI_CONFIGURATION_DETAIL_URL = "https://fleasing.dk/bil/?porsche-taycan&vid=982451736"
 
 
 class FixtureHttpClient:
@@ -133,7 +134,7 @@ class FleasingAdapterTest(unittest.TestCase):
             },
         )
         self.assertEqual(
-            candidate["sourceMetadata"]["parserVersion"], "fleasing-html-v2"
+            candidate["sourceMetadata"]["parserVersion"], "fleasing-html-v3"
         )
         self.assertEqual(
             len(candidate["sourceMetadata"]["documents"][0]["contentSha256"]), 64
@@ -158,6 +159,81 @@ class FleasingAdapterTest(unittest.TestCase):
             candidates[1]["baseCashFlowStream"][1]["blockingFacts"],
             ["advertisedMonthlyPayment"],
         )
+
+    def test_collects_each_explicit_private_configuration_as_an_admitted_offer(
+        self,
+    ) -> None:
+        catalogue_html = f"""
+            <a href="{MULTI_CONFIGURATION_DETAIL_URL}">Porsche Taycan</a>
+        """
+        detail_html = (
+            FIXTURE_DIRECTORY / "porsche-taycan-configurations.html"
+        ).read_text(encoding="utf-8")
+        client = FixtureHttpClient(
+            {
+                CATALOGUE_URL: catalogue_html,
+                MULTI_CONFIGURATION_DETAIL_URL: detail_html,
+            }
+        )
+
+        candidates = FleasingAdapter(
+            client, retrieved_at="2026-07-28T12:00:00Z"
+        ).collect()
+
+        self.assertEqual(len(candidates), 2)
+        self.assertEqual(
+            [
+                (
+                    candidate["sourceLocalConfigurationKey"],
+                    candidate["admissionStatus"],
+                    candidate["advertisedMonthlyPayment"]["valueDkk"],
+                    candidate["termMonths"]["value"],
+                )
+                for candidate in candidates
+            ],
+            [
+                ("private-standard", "admitted", 9995, 12),
+                ("private-low-upfront", "admitted", 11995, 12),
+            ],
+        )
+        for candidate in candidates:
+            self.assertEqual(
+                candidate["privateConsumerEligibility"],
+                {
+                    "state": "known",
+                    "value": True,
+                    "evidence": {
+                        "sourceUrl": MULTI_CONFIGURATION_DETAIL_URL,
+                        "wording": "Privatleasing · inkl. moms",
+                    },
+                },
+            )
+            self.assertEqual(
+                candidate["passengerCarScope"],
+                {
+                    "state": "known",
+                    "value": True,
+                    "evidence": {
+                        "sourceUrl": MULTI_CONFIGURATION_DETAIL_URL,
+                        "wording": "Køretøjstype Personbil",
+                    },
+                },
+            )
+            self.assertEqual(
+                candidate["supportedLeasingForm"],
+                {
+                    "state": "known",
+                    "value": "financial",
+                    "evidence": {
+                        "sourceUrl": MULTI_CONFIGURATION_DETAIL_URL,
+                        "wording": "Leasingform Finansiel leasing",
+                    },
+                },
+            )
+            self.assertEqual(
+                candidate["currentAvailability"]["evidence"]["sourceUrl"],
+                CATALOGUE_URL,
+            )
 
     def test_quarantines_a_catalogue_link_when_its_detail_page_loses_private_pricing(
         self,
@@ -214,6 +290,194 @@ class FleasingAdapterTest(unittest.TestCase):
                 {"fact": "termMonths", "state": "not_stated"},
             ],
         )
+
+    def test_quarantines_conflicting_admission_evidence_without_choosing_a_value(
+        self,
+    ) -> None:
+        catalogue_html = f"""
+            <a href="{MULTI_CONFIGURATION_DETAIL_URL}">Porsche Taycan</a>
+        """
+        detail_html = """
+            <div class="vehicle-page-info">
+              <h1>Porsche Taycan</h1><h3>Performance Plus</h3>
+              <dl>
+                <dt>Køretøjstype</dt><dd>Personbil</dd>
+                <dt>Køretøjstype</dt><dd>Varebil</dd>
+                <dt>Leasingform</dt><dd>Finansiel leasing</dd>
+                <dt>Leasingform</dt><dd>Operationel leasing</dd>
+              </dl>
+              <div id="privat">
+                <h2>Privatleasing · inkl. moms</h2>
+                <ul data-configuration-id="conflicting">
+                  <li>Ydelse pr. måned 9.995 kr. /inkl. moms</li>
+                  <li>Udbetaling 149.995 kr. /inkl. moms</li>
+                  <li>Leasingperiode 12</li>
+                </ul>
+              </div>
+            </div>
+        """
+        client = FixtureHttpClient(
+            {
+                CATALOGUE_URL: catalogue_html,
+                MULTI_CONFIGURATION_DETAIL_URL: detail_html,
+            }
+        )
+
+        [candidate] = FleasingAdapter(
+            client, retrieved_at="2026-07-28T12:00:00Z"
+        ).collect()
+
+        self.assertEqual(candidate["passengerCarScope"]["state"], "conflicting")
+        self.assertEqual(candidate["supportedLeasingForm"]["state"], "conflicting")
+        self.assertEqual(
+            candidate["quarantineReasons"],
+            [
+                {"fact": "passengerCarScope", "state": "conflicting"},
+                {"fact": "supportedLeasingForm", "state": "conflicting"},
+            ],
+        )
+
+    def test_quarantines_duplicate_configuration_ids_without_collapsing_candidates(
+        self,
+    ) -> None:
+        catalogue_html = f"""
+            <a href="{MULTI_CONFIGURATION_DETAIL_URL}">Porsche Taycan</a>
+        """
+        detail_html = """
+            <div class="vehicle-page-info">
+              <h1>Porsche Taycan</h1><h3>Performance Plus</h3>
+              <dl>
+                <dt>Køretøjstype</dt><dd>Personbil</dd>
+                <dt>Leasingform</dt><dd>Finansiel leasing</dd>
+              </dl>
+              <div id="privat">
+                <h2>Privatleasing · inkl. moms</h2>
+                <ul data-configuration-id="duplicate">
+                  <li>Ydelse pr. måned 9.995 kr. /inkl. moms</li>
+                  <li>Udbetaling 149.995 kr. /inkl. moms</li>
+                  <li>Leasingperiode 12</li>
+                </ul>
+                <ul data-configuration-id="duplicate">
+                  <li>Ydelse pr. måned 11.995 kr. /inkl. moms</li>
+                  <li>Udbetaling 99.995 kr. /inkl. moms</li>
+                  <li>Leasingperiode 12</li>
+                </ul>
+              </div>
+            </div>
+        """
+        client = FixtureHttpClient(
+            {
+                CATALOGUE_URL: catalogue_html,
+                MULTI_CONFIGURATION_DETAIL_URL: detail_html,
+            }
+        )
+
+        candidates = FleasingAdapter(
+            client, retrieved_at="2026-07-28T12:00:00Z"
+        ).collect()
+
+        self.assertEqual(len(candidates), 2)
+        self.assertEqual(
+            len({candidate["offerIdentity"] for candidate in candidates}), 2
+        )
+        for candidate in candidates:
+            self.assertEqual(candidate["admissionStatus"], "quarantined")
+            self.assertEqual(
+                candidate["quarantineReasons"],
+                [
+                    {
+                        "fact": "sourceLocalConfigurationKey",
+                        "state": "conflicting",
+                        "code": "duplicate_configuration_id",
+                    }
+                ],
+            )
+
+    def test_private_tab_without_explicit_vat_inclusive_heading_is_quarantined(
+        self,
+    ) -> None:
+        catalogue_html = f"""
+            <a href="{MULTI_CONFIGURATION_DETAIL_URL}">Porsche Taycan</a>
+        """
+        detail_html = (
+            FIXTURE_DIRECTORY / "porsche-taycan-configurations.html"
+        ).read_text(encoding="utf-8")
+        detail_html = detail_html.replace("<h2>Privatleasing · inkl. moms</h2>", "")
+        client = FixtureHttpClient(
+            {
+                CATALOGUE_URL: catalogue_html,
+                MULTI_CONFIGURATION_DETAIL_URL: detail_html,
+            }
+        )
+
+        candidates = FleasingAdapter(
+            client, retrieved_at="2026-07-28T12:00:00Z"
+        ).collect()
+
+        for candidate in candidates:
+            self.assertEqual(candidate["admissionStatus"], "quarantined")
+            self.assertIn(
+                {
+                    "fact": "privateConsumerEligibility",
+                    "state": "not_stated",
+                },
+                candidate["quarantineReasons"],
+            )
+
+    def test_quarantines_identical_configurations_without_source_ids_as_distinct_candidates(
+        self,
+    ) -> None:
+        catalogue_html = f"""
+            <a href="{MULTI_CONFIGURATION_DETAIL_URL}">Porsche Taycan</a>
+        """
+        configuration = """
+            <ul>
+              <li>Ydelse pr. måned 9.995 kr. /inkl. moms</li>
+              <li>Udbetaling 149.995 kr. /inkl. moms</li>
+              <li>Leasingperiode 12</li>
+            </ul>
+        """
+        detail_html = f"""
+            <div class="vehicle-page-info">
+              <h1>Porsche Taycan</h1><h3>Performance Plus</h3>
+              <dl>
+                <dt>Køretøjstype</dt><dd>Personbil</dd>
+                <dt>Leasingform</dt><dd>Finansiel leasing</dd>
+              </dl>
+              <div id="privat">
+                <h2>Privatleasing · inkl. moms</h2>
+                {configuration}
+                {configuration}
+              </div>
+            </div>
+        """
+        client = FixtureHttpClient(
+            {
+                CATALOGUE_URL: catalogue_html,
+                MULTI_CONFIGURATION_DETAIL_URL: detail_html,
+            }
+        )
+
+        candidates = FleasingAdapter(
+            client, retrieved_at="2026-07-28T12:00:00Z"
+        ).collect()
+
+        self.assertEqual(len(candidates), 2)
+        self.assertEqual(
+            len({candidate["offerIdentity"] for candidate in candidates}), 2
+        )
+        for candidate in candidates:
+            self.assertEqual(candidate["admissionStatus"], "quarantined")
+            self.assertEqual(
+                candidate["quarantineReasons"],
+                [
+                    {
+                        "fact": "sourceLocalConfigurationKey",
+                        "state": "unclear",
+                        "code": "ambiguous_derived_configuration_id",
+                    }
+                ],
+            )
 
     def test_detects_a_detail_page_that_loses_the_private_configuration_structure(
         self,

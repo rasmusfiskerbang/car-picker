@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections import Counter
 from collections.abc import Mapping
 from dataclasses import dataclass
 from html.parser import HTMLParser
@@ -9,7 +10,7 @@ from typing import Any, Protocol
 from urllib.parse import parse_qs, urljoin, urlparse
 
 
-PARSER_VERSION = "fleasing-html-v2"
+PARSER_VERSION = "fleasing-html-v3"
 
 
 class TextHttpClient(Protocol):
@@ -53,7 +54,7 @@ class FleasingAdapter:
         for offer in offers:
             detail_html = self._http_client.get_text(offer.url)
             try:
-                candidate = map_detail_page(
+                detail_candidates = map_detail_pages(
                     catalogue_url=catalogue_url,
                     catalogue_html=catalogue_html,
                     discovered_offer=offer,
@@ -61,14 +62,16 @@ class FleasingAdapter:
                     retrieved_at=self._retrieved_at,
                 )
             except UnavailablePrivateDetailError:
-                candidate = quarantined_unavailable_detail_candidate(
-                    catalogue_url=catalogue_url,
-                    catalogue_html=catalogue_html,
-                    discovered_offer=offer,
-                    detail_html=detail_html,
-                    retrieved_at=self._retrieved_at,
-                )
-            candidates.append(candidate)
+                detail_candidates = [
+                    quarantined_unavailable_detail_candidate(
+                        catalogue_url=catalogue_url,
+                        catalogue_html=catalogue_html,
+                        discovered_offer=offer,
+                        detail_html=detail_html,
+                        retrieved_at=self._retrieved_at,
+                    )
+                ]
+            candidates.extend(detail_candidates)
         return candidates
 
 
@@ -112,10 +115,37 @@ def map_detail_page(
     detail_html: str,
     retrieved_at: str,
 ) -> dict[str, Any]:
+    """Map the sole configuration exposed by a detail page."""
+    candidates = map_detail_pages(
+        catalogue_url=catalogue_url,
+        catalogue_html=catalogue_html,
+        discovered_offer=discovered_offer,
+        detail_html=detail_html,
+        retrieved_at=retrieved_at,
+    )
+    if len(candidates) != 1:
+        raise StructuralSourceError(
+            f"Fleasing detail {discovered_offer.url} contains multiple private configurations"
+        )
+    return candidates[0]
+
+
+def map_detail_pages(
+    *,
+    catalogue_url: str,
+    catalogue_html: str,
+    discovered_offer: DiscoveredOffer,
+    detail_html: str,
+    retrieved_at: str,
+) -> list[dict[str, Any]]:
     detail = FleasingDetailParser()
     detail.feed(detail_html)
     detail.close()
-    if not detail.found_vehicle_info or not detail.found_private_tab:
+    if (
+        not detail.found_vehicle_info
+        or not detail.found_private_tab
+        or not detail.private_configurations
+    ):
         raise UnavailablePrivateDetailError(
             f"Fleasing detail {discovered_offer.url} no longer contains vehicle information and a private-pricing tab"
         )
@@ -129,16 +159,60 @@ def map_detail_page(
         ],
     }
     vehicle = vehicle_specification(detail, discovered_offer.url)
+    configuration_id_counts = Counter(
+        configuration_id
+        for configuration_id, _ in detail.private_configurations
+        if configuration_id is not None
+    )
+    derived_key_counts = Counter(
+        configuration_key_from_private_terms(private_terms)
+        for configuration_id, private_terms in detail.private_configurations
+        if configuration_id is None
+    )
+    candidates: list[dict[str, Any]] = []
+    for index, (configuration_id, private_terms) in enumerate(
+        detail.private_configurations
+    ):
+        configuration_key, structural_reasons = configuration_identity(
+            configuration_id,
+            private_terms,
+            index,
+            configuration_id_counts,
+            derived_key_counts,
+        )
+        candidates.append(
+            map_private_configuration(
+                catalogue_url=catalogue_url,
+                discovered_offer=discovered_offer,
+                detail=detail,
+                private_terms=private_terms,
+                configuration_key=configuration_key,
+                structural_reasons=structural_reasons,
+                source_id=source_id,
+                source_metadata=source_metadata,
+                vehicle=vehicle,
+            )
+        )
+    return candidates
+
+
+def map_private_configuration(
+    *,
+    catalogue_url: str,
+    discovered_offer: DiscoveredOffer,
+    detail: FleasingDetailParser,
+    private_terms: Mapping[str, str],
+    configuration_key: str,
+    structural_reasons: list[dict[str, str]],
+    source_id: str,
+    source_metadata: dict[str, Any],
+    vehicle: dict[str, Any],
+) -> dict[str, Any]:
     monthly_payment = money_fact(
-        detail.private_terms, "Ydelse pr. måned", discovered_offer.url
+        private_terms, "Ydelse pr. måned", discovered_offer.url
     )
-    term_months = months_fact(
-        detail.private_terms, "Leasingperiode", discovered_offer.url
-    )
-    upfront_payment = money_fact(
-        detail.private_terms, "Udbetaling", discovered_offer.url
-    )
-    configuration_key = configuration_key_from_private_terms(detail.private_terms)
+    term_months = months_fact(private_terms, "Leasingperiode", discovered_offer.url)
+    upfront_payment = money_fact(private_terms, "Udbetaling", discovered_offer.url)
     candidate = {
         "offerIdentity": f"fleasing:{source_id}:{configuration_key}",
         "provider": "Fleasing",
@@ -146,15 +220,15 @@ def map_detail_page(
         "canonicalOfferUrl": discovered_offer.url,
         "sourceLocalConfigurationKey": configuration_key,
         "vehicleSpecification": vehicle,
-        "privateConsumerEligibility": known_fact(
-            True, discovered_offer.url, 'id="privat"'
+        "privateConsumerEligibility": private_consumer_eligibility_fact(
+            detail, discovered_offer.url
         ),
         "passengerCarScope": passenger_car_fact(detail, discovered_offer.url),
         "currentAvailability": known_fact(
             True, catalogue_url, discovered_offer.source_fragment
         ),
-        "supportedLeasingForm": financial_leasing_fact(
-            detail.private_terms, discovered_offer.url
+        "supportedLeasingForm": supported_leasing_form_fact(
+            detail, private_terms, discovered_offer.url
         ),
         "advertisedMonthlyPayment": monthly_payment,
         "termMonths": term_months,
@@ -169,7 +243,7 @@ def map_detail_page(
             discovered_offer.url, detail.private_tab_fragment
         ),
         "residualRiskAllocation": residual_risk_allocation_fact(
-            detail.private_terms, discovered_offer.url
+            private_terms, discovered_offer.url
         ),
         "registrationTaxTreatment": not_stated_fact(
             discovered_offer.url, detail.private_tab_fragment
@@ -185,7 +259,7 @@ def map_detail_page(
         ),
         "sourceMetadata": source_metadata,
     }
-    reasons = admission_reasons(candidate)
+    reasons = [*admission_reasons(candidate), *structural_reasons]
     candidate["admissionStatus"] = "quarantined" if reasons else "admitted"
     if reasons:
         candidate["quarantineReasons"] = reasons
@@ -342,15 +416,53 @@ def vehicle_specification(
     )
 
 
-def passenger_car_fact(
+def private_consumer_eligibility_fact(
     detail: "FleasingDetailParser", source_url: str
 ) -> dict[str, Any]:
+    if detail.private_eligibility_fragment is not None:
+        return known_fact(True, source_url, detail.private_eligibility_fragment)
     return not_stated_fact(source_url, detail.private_tab_fragment)
 
 
-def financial_leasing_fact(
-    private_terms: Mapping[str, str], source_url: str
+def passenger_car_fact(
+    detail: "FleasingDetailParser", source_url: str
 ) -> dict[str, Any]:
+    vehicle_types = set(detail.vehicle_types)
+    if len(vehicle_types) > 1:
+        return conflicting_fact(
+            source_url,
+            "; ".join(f"Køretøjstype {value}" for value in detail.vehicle_types),
+        )
+    if vehicle_types == {"Personbil"}:
+        return known_fact(True, source_url, "Køretøjstype Personbil")
+    if detail.vehicle_types:
+        return unclear_fact(source_url, f"Køretøjstype {detail.vehicle_types[0]}")
+    return not_stated_fact(source_url, detail.private_tab_fragment)
+
+
+def supported_leasing_form_fact(
+    detail: "FleasingDetailParser",
+    private_terms: Mapping[str, str],
+    source_url: str,
+) -> dict[str, Any]:
+    leasing_forms = {
+        "Finansiel leasing": "financial",
+        "Flexleasing": "flex",
+        "Operationel leasing": "operational",
+        "Hybrid leasing": "hybrid",
+    }
+    distinct_leasing_forms = set(detail.leasing_forms)
+    if len(distinct_leasing_forms) > 1:
+        return conflicting_fact(
+            source_url,
+            "; ".join(f"Leasingform {value}" for value in detail.leasing_forms),
+        )
+    leasing_form = detail.leasing_forms[0] if detail.leasing_forms else ""
+    value = leasing_forms.get(leasing_form)
+    if value is not None:
+        return known_fact(value, source_url, f"Leasingform {leasing_form}")
+    if leasing_form:
+        return unclear_fact(source_url, f"Leasingform {leasing_form}")
     return residual_value_fact(private_terms, source_url)
 
 
@@ -393,6 +505,53 @@ def configuration_key_from_private_terms(private_terms: Mapping[str, str]) -> st
     return f"private-{hashlib.sha256(selected_values.encode('utf-8')).hexdigest()[:12]}"
 
 
+def configuration_identity(
+    explicit_id: str | None,
+    private_terms: Mapping[str, str],
+    index: int,
+    id_counts: Mapping[str, int],
+    derived_key_counts: Mapping[str, int],
+) -> tuple[str, list[dict[str, str]]]:
+    if explicit_id is None:
+        derived_key = configuration_key_from_private_terms(private_terms)
+        if derived_key_counts.get(derived_key, 0) > 1:
+            return (
+                f"{derived_key}-{index + 1}",
+                [
+                    {
+                        "fact": "sourceLocalConfigurationKey",
+                        "state": "unclear",
+                        "code": "ambiguous_derived_configuration_id",
+                    }
+                ],
+            )
+        return derived_key, []
+    if re.fullmatch(r"[a-z0-9][a-z0-9_-]*", explicit_id) is None:
+        fallback = configuration_key_from_private_terms(private_terms)
+        return (
+            f"{fallback}-{index + 1}",
+            [
+                {
+                    "fact": "sourceLocalConfigurationKey",
+                    "state": "unclear",
+                    "code": "invalid_configuration_id",
+                }
+            ],
+        )
+    if id_counts.get(explicit_id, 0) > 1:
+        return (
+            f"private-{explicit_id}-{index + 1}",
+            [
+                {
+                    "fact": "sourceLocalConfigurationKey",
+                    "state": "conflicting",
+                    "code": "duplicate_configuration_id",
+                }
+            ],
+        )
+    return f"private-{explicit_id}", []
+
+
 def source_id_from_url(detail_url: str) -> str:
     source_ids = parse_qs(urlparse(detail_url).query).get("vid")
     if not source_ids:
@@ -420,6 +579,10 @@ def not_stated_fact(source_url: str, wording: str) -> dict[str, Any]:
 
 def unclear_fact(source_url: str, wording: str) -> dict[str, Any]:
     return {"state": "unclear", "evidence": evidence(source_url, wording)}
+
+
+def conflicting_fact(source_url: str, wording: str) -> dict[str, Any]:
+    return {"state": "conflicting", "evidence": evidence(source_url, wording)}
 
 
 def money_fact(
@@ -502,13 +665,20 @@ class FleasingDetailParser(HTMLParser):
         self.make = ""
         self.model = ""
         self.trim = ""
-        self.private_terms: dict[str, str] = {}
+        self.private_configurations: list[tuple[str | None, dict[str, str]]] = []
         self.private_tab_fragment = 'id="privat"'
+        self.private_eligibility_fragment: str | None = None
+        self.vehicle_types: list[str] = []
+        self.leasing_forms: list[str] = []
         self._vehicle_info_depth: int | None = None
         self._private_tab_depth: int | None = None
+        self._private_configuration_depth: int | None = None
+        self._private_configuration_id: str | None = None
+        self._private_terms: dict[str, str] = {}
         self._depth = 0
         self._capturing_tag: str | None = None
         self._text_parts: list[str] = []
+        self._definition_label = ""
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         self._depth += 1
@@ -519,7 +689,17 @@ class FleasingDetailParser(HTMLParser):
         if tag == "div" and attributes.get("id") == "privat":
             self.found_private_tab = True
             self._private_tab_depth = self._depth
+        if self._in_private_tab() and tag == "ul":
+            self._private_configuration_depth = self._depth
+            self._private_configuration_id = attributes.get("data-configuration-id")
+            self._private_terms = {}
         if self._in_vehicle_info() and tag in {"h1", "h3"}:
+            self._capturing_tag = tag
+            self._text_parts = []
+        if self._in_vehicle_info() and tag in {"dt", "dd"}:
+            self._capturing_tag = tag
+            self._text_parts = []
+        if self._in_private_tab() and tag == "h2":
             self._capturing_tag = tag
             self._text_parts = []
         if self._in_private_tab() and tag == "li":
@@ -537,12 +717,29 @@ class FleasingDetailParser(HTMLParser):
                 self.make, self.model = split_make_and_model(text)
             elif tag == "h3" and not self.trim:
                 self.trim = text
+            elif tag == "dt":
+                self._definition_label = text
+            elif tag == "dd":
+                if self._definition_label == "Køretøjstype":
+                    self.vehicle_types.append(text)
+                elif self._definition_label == "Leasingform":
+                    self.leasing_forms.append(text)
+                self._definition_label = ""
+            elif tag == "h2" and "Privatleasing" in text and "inkl. moms" in text:
+                self.private_eligibility_fragment = text
             elif tag == "li":
                 label, value = split_private_term(text)
                 if label and value:
-                    self.private_terms[label] = value
+                    self._private_terms[label] = value
             self._capturing_tag = None
             self._text_parts = []
+        if self._private_configuration_depth == self._depth:
+            self.private_configurations.append(
+                (self._private_configuration_id, self._private_terms)
+            )
+            self._private_configuration_depth = None
+            self._private_configuration_id = None
+            self._private_terms = {}
         if self._vehicle_info_depth == self._depth:
             self._vehicle_info_depth = None
         if self._private_tab_depth == self._depth:
