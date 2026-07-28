@@ -13,6 +13,14 @@ from car_picker.comparison import calculate_comparison_values, is_time_ordered
 
 PRESENTATION_SCHEMA_VERSION = "catalogue-presentation/v1"
 FACT_STATES = {"known", "not_stated", "unclear", "conflicting", "not_applicable"}
+STATIC_ARTIFACT_FILENAMES = {
+    "app.js",
+    "index.html",
+    "projection-schema.json",
+    "projection.json",
+    "styles.css",
+}
+FORBIDDEN_ARTIFACT_KEYS = {"contentSha256", "hash", "parserMetadata", "parserVersion", "quarantineReasons", "sourceMetadata"}
 
 PRESENTATION_SCHEMA: dict[str, Any] = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -576,10 +584,86 @@ def write_site_atomically(output_path: Path, projection: Mapping[str, Any]) -> N
         (staging_path / "projection.json").write_text(
             json.dumps(projection, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
         )
+        (staging_path / "projection-schema.json").write_text(
+            json.dumps(PRESENTATION_SCHEMA, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
+        )
         (staging_path / "index.html").write_text(index_html(), encoding="utf-8")
         (staging_path / "app.js").write_text(browser_app(), encoding="utf-8")
         (staging_path / "styles.css").write_text(stylesheet(), encoding="utf-8")
+        verify_static_artifact(staging_path)
         replace_directory(staging_path, output_path)
+
+
+def verify_static_artifact(site_path: Path) -> None:
+    """Reject an incomplete or internally detailed static artifact before publication."""
+    entries = tuple(site_path.iterdir())
+    if any(not path.is_file() or path.is_symlink() for path in entries):
+        raise ValueError("static artifact must contain only approved regular files")
+    files = {path.name for path in entries}
+    if files != STATIC_ARTIFACT_FILENAMES:
+        raise ValueError("static artifact contains unexpected or missing files")
+    projection = read_json(site_path / "projection.json")
+    validate_presentation_projection(projection)
+    schema = read_json(site_path / "projection-schema.json")
+    if schema != PRESENTATION_SCHEMA:
+        raise ValueError("static artifact must export the presentation serialization schema")
+    if contains_forbidden_artifact_key(projection):
+        raise ValueError("static artifact projection contains internal metadata")
+    app = (site_path / "app.js").read_text(encoding="utf-8")
+    index = (site_path / "index.html").read_text(encoding="utf-8")
+    if 'fetch("projection.json"' not in app or "hashchange" not in app or 'src="app.js"' not in index:
+        raise ValueError("static artifact browser application is incomplete")
+    validate_javascript_delimiters(app)
+
+
+def validate_javascript_delimiters(source: str) -> None:
+    """Reject browser output with unclosed syntax delimiters before it replaces the site."""
+    closing_for = {"(": ")", "[": "]", "{": "}"}
+    delimiters: list[str] = []
+    quote: str | None = None
+    escaped = False
+    index = 0
+    while index < len(source):
+        character = source[index]
+        next_character = source[index + 1] if index + 1 < len(source) else ""
+        if quote is not None:
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == quote:
+                quote = None
+            index += 1
+            continue
+        if character in {"'", '"', "`"}:
+            quote = character
+        elif character == "/" and next_character == "/":
+            index = source.find("\n", index + 2)
+            if index == -1:
+                break
+            continue
+        elif character == "/" and next_character == "*":
+            comment_end = source.find("*/", index + 2)
+            if comment_end == -1:
+                raise ValueError("static artifact browser application has an unclosed comment")
+            index = comment_end + 2
+            continue
+        elif character in closing_for:
+            delimiters.append(character)
+        elif character in closing_for.values():
+            if not delimiters or closing_for[delimiters.pop()] != character:
+                raise ValueError("static artifact browser application has mismatched delimiters")
+        index += 1
+    if quote is not None or delimiters:
+        raise ValueError("static artifact browser application has unclosed syntax delimiters")
+
+
+def contains_forbidden_artifact_key(value: Any) -> bool:
+    if isinstance(value, Mapping):
+        return any(key in FORBIDDEN_ARTIFACT_KEYS or contains_forbidden_artifact_key(item) for key, item in value.items())
+    if isinstance(value, list):
+        return any(contains_forbidden_artifact_key(item) for item in value)
+    return False
 
 
 def replace_directory(staging_path: Path, output_path: Path) -> None:
