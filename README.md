@@ -18,3 +18,6 @@ GitHub Pages without a runtime backend.
 The Fleasing refresh is limited to its designated first-party catalogue and linked
 detail pages. See `docs/source-audits/fleasing.md` before using it against the live
 source.
+
+Authenticated provider withdrawal requests follow the tested procedure in
+`docs/operations/provider-withdrawal.md`.

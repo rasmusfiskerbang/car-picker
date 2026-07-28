@@ -6,8 +6,19 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
-from car_picker.collection import FLEASING_CATALOGUE_URL, TERMINALEN_CATALOGUE_URL, refresh_all_providers
+from car_picker.collection import FLEASING_CATALOGUE_URL, PROVIDER_NAMES, TERMINALEN_CATALOGUE_URL, refresh_all_providers
 from car_picker.comparison import reconcile_provider_advertised_aggregate
+from car_picker.provider_withdrawal import (
+    DEFAULT_PROVIDER_CONTROL,
+    active_provider_names,
+    coverage_ended_facts,
+    current_timestamp,
+    read_provider_control,
+    record_refresh_completion,
+    record_site_build_completion,
+    validate_dataset_for_withdrawals,
+    withdraw_provider,
+)
 from car_picker.publication import build_site, verify_static_artifact
 
 
@@ -20,10 +31,17 @@ def parse_arguments() -> argparse.Namespace:
     build = subcommands.add_parser("build-site", help="Build a static catalogue site.")
     build.add_argument("--dataset", required=True, type=Path, help="Canonical catalogue dataset JSON.")
     build.add_argument("--output", required=True, type=Path, help="Static site output directory.")
+    build.add_argument("--provider-control", default=DEFAULT_PROVIDER_CONTROL, type=Path)
     complete_refresh = subcommands.add_parser("refresh-catalogue", help="Refresh the complete covered-provider catalogue.")
     complete_refresh.add_argument("--dataset", required=True, type=Path, help="Active catalogue dataset JSON.")
     complete_refresh.add_argument("--fleasing-catalogue-url", default=FLEASING_CATALOGUE_URL)
     complete_refresh.add_argument("--terminalen-catalogue-url", default=TERMINALEN_CATALOGUE_URL)
+    complete_refresh.add_argument("--provider-control", default=DEFAULT_PROVIDER_CONTROL, type=Path)
+    withdraw = subcommands.add_parser("withdraw-provider", help="Record an authenticated provider withdrawal and disable retrieval.")
+    withdraw.add_argument("--provider", required=True, choices=PROVIDER_NAMES)
+    withdraw.add_argument("--provider-control", default=DEFAULT_PROVIDER_CONTROL, type=Path)
+    withdraw.add_argument("--received-at", required=True, help="Authenticated request receipt time as ISO 8601.")
+    withdraw.add_argument("--authentication-note", required=True, help="How the request was authenticated.")
     diagnose = subcommands.add_parser("diagnose-aggregates", help="Diagnose provider aggregate reconciliation.")
     diagnose.add_argument("--dataset", required=True, type=Path, help="Canonical catalogue dataset JSON.")
     diagnose.add_argument("--offer", help="One offer identity to diagnose; omit for every offer.")
@@ -37,16 +55,70 @@ def main() -> None:
     arguments = parse_arguments()
     if arguments.command == "build-site":
         validate_site_directory(arguments.output, "--output")
+        control = read_provider_control_or_exit(arguments.provider_control)
+        validate_dataset_for_withdrawals_or_exit(arguments.dataset, control)
         build_site(arguments.dataset, arguments.output)
+        record_site_build_completion_or_exit(arguments.provider_control, current_timestamp())
     elif arguments.command == "refresh-catalogue":
         validate_fleasing_catalogue_url(arguments.fleasing_catalogue_url)
         validate_terminalen_catalogue_url(arguments.terminalen_catalogue_url)
-        dataset = refresh_all_providers(arguments.dataset, arguments.fleasing_catalogue_url, arguments.terminalen_catalogue_url)
+        control = read_provider_control_or_exit(arguments.provider_control)
+        dataset = refresh_all_providers(
+            arguments.dataset,
+            arguments.fleasing_catalogue_url,
+            arguments.terminalen_catalogue_url,
+            active_providers=active_provider_names(control),
+            ended_providers=coverage_ended_facts(control),
+        )
+        record_refresh_completion_or_exit(arguments.provider_control, dataset["generatedAt"])
         print(refresh_reconciliation_summary(dataset))
+    elif arguments.command == "withdraw-provider":
+        withdraw_provider_or_exit(
+            arguments.provider_control,
+            arguments.provider,
+            arguments.received_at,
+            arguments.authentication_note,
+        )
     elif arguments.command == "diagnose-aggregates":
         print(json.dumps(aggregate_diagnostics(arguments.dataset, arguments.offer), ensure_ascii=False))
     elif arguments.command == "serve-site":
         serve_site(arguments.site, arguments.port)
+
+
+def read_provider_control_or_exit(path: Path) -> dict[str, object]:
+    try:
+        return read_provider_control(path)
+    except (OSError, ValueError) as error:
+        raise SystemExit(str(error)) from error
+
+
+def validate_dataset_for_withdrawals_or_exit(dataset_path: Path, control: dict[str, object]) -> None:
+    try:
+        validate_dataset_for_withdrawals(dataset_path, control)
+    except ValueError as error:
+        raise SystemExit(str(error)) from error
+
+
+def withdraw_provider_or_exit(path: Path, provider: str, received_at: str, authentication_note: str) -> None:
+    try:
+        withdraw_provider(path, provider, received_at, authentication_note)
+    except (OSError, ValueError) as error:
+        raise SystemExit(str(error)) from error
+    print(f"{provider} retrieval disabled; authenticated withdrawal recorded in {path}.")
+
+
+def record_refresh_completion_or_exit(path: Path, completed_at: str) -> None:
+    try:
+        record_refresh_completion(path, completed_at)
+    except (OSError, ValueError) as error:
+        raise SystemExit(str(error)) from error
+
+
+def record_site_build_completion_or_exit(path: Path, completed_at: str) -> None:
+    try:
+        record_site_build_completion(path, completed_at)
+    except (OSError, ValueError) as error:
+        raise SystemExit(str(error)) from error
 
 
 def aggregate_diagnostics(dataset_path: Path, offer_identity: str | None) -> dict[str, object]:

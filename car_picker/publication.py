@@ -27,7 +27,7 @@ PRESENTATION_SCHEMA: dict[str, Any] = {
     "$id": "https://car-picker.local/schemas/catalogue-presentation-v1.json",
     "type": "object",
     "additionalProperties": False,
-    "required": ["schemaVersion", "generatedAt", "coverage", "offers"],
+    "required": ["schemaVersion", "generatedAt", "coverage", "coverageEnded", "offers"],
     "properties": {
         "schemaVersion": {"const": PRESENTATION_SCHEMA_VERSION},
         "generatedAt": {"type": "string"},
@@ -48,7 +48,19 @@ PRESENTATION_SCHEMA: dict[str, Any] = {
                             "quarantinedCandidateCount": {"type": "integer", "minimum": 0},
                         },
                     },
-                }
+                },
+            },
+        },
+        "coverageEnded": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["name", "coverageEndedAt"],
+                "properties": {
+                    "name": {"type": "string"},
+                    "coverageEndedAt": {"type": "string"},
+                },
             },
         },
         "offers": {
@@ -215,6 +227,11 @@ def project_catalogue(dataset: Mapping[str, Any]) -> dict[str, Any]:
     coverage = object_value(dataset.get("coverage"), "coverage")
     provider_rows = list_value(coverage.get("providers"), "coverage.providers")
     providers = [project_provider(object_value(row, "coverage provider")) for row in provider_rows]
+    ended_provider_rows = list_value(dataset.get("coverageEnded", []), "coverageEnded")
+    ended_providers = [
+        project_ended_provider(object_value(row, "ended coverage provider"))
+        for row in ended_provider_rows
+    ]
     offer_rows = list_value(dataset.get("catalogueOffers"), "catalogueOffers")
     admitted_offers = [
         object_value(row, "catalogue offer")
@@ -225,6 +242,7 @@ def project_catalogue(dataset: Mapping[str, Any]) -> dict[str, Any]:
         "schemaVersion": PRESENTATION_SCHEMA_VERSION,
         "generatedAt": generated_at,
         "coverage": {"providers": providers},
+        "coverageEnded": ended_providers,
         "offers": [project_offer(offer) for offer in admitted_offers],
     }
 
@@ -237,6 +255,15 @@ def project_provider(provider: Mapping[str, Any]) -> dict[str, Any]:
         "name": string_value(provider, "name"),
         "designatedSource": string_value(provider, "designatedSource"),
         "quarantinedCandidateCount": count,
+    }
+
+
+def project_ended_provider(provider: Mapping[str, Any]) -> dict[str, str]:
+    if set(provider) != {"name", "coverageEndedAt"}:
+        raise ValueError("ended provider coverage may retain only the provider name and end time")
+    return {
+        "name": string_value(provider, "name"),
+        "coverageEndedAt": string_value(provider, "coverageEndedAt"),
     }
 
 
@@ -517,6 +544,8 @@ def validate_presentation_projection(projection: Mapping[str, Any]) -> None:
     coverage = object_value(projection.get("coverage"), "coverage")
     for provider in list_value(coverage.get("providers"), "coverage.providers"):
         project_provider(object_value(provider, "coverage provider"))
+    for provider in list_value(projection.get("coverageEnded"), "coverageEnded"):
+        project_ended_provider(object_value(provider, "ended coverage provider"))
     offers = list_value(projection.get("offers"), "offers")
     for offer in offers:
         projection_offer = object_value(offer, "presentation offer")
@@ -834,7 +863,7 @@ function renderCatalogue(projection) {{
   const comparison = comparisonControl(selected);
   const refreshComparison = () => {{}};
   const filters = filterControls(projection.offers, (filters) => renderOffers(offers, projection.offers, filters, selected, refreshComparison));
-  catalogue.append(filters, comparison, offers, coverage(projection.coverage, projection.generatedAt), footer(projection.generatedAt));
+  catalogue.append(filters, comparison, offers, coverage(projection.coverage, projection.coverageEnded, projection.generatedAt), footer(projection.generatedAt));
   renderOffers(offers, projection.offers, initialFilters(), selected, refreshComparison);
   root.replaceChildren(catalogue);
 }}
@@ -876,7 +905,7 @@ function textFilter(filters, update) {{
   input.id = "catalogue-search";
   input.name = "search";
   input.type = "search";
-  input.placeholder = "Fx Hyundai eller Terminalen";
+  input.placeholder = "Fx Hyundai IONIQ 5";
   input.addEventListener("input", () => {{ filters.search = input.value; update(); }});
   label.append(input);
   return label;
@@ -1380,7 +1409,7 @@ function cashFlowTiming(value) {{
   return labels[value] || value;
 }}
 
-function coverage(coverage, generatedAt) {{
+function coverage(coverage, coverageEnded, generatedAt) {{
   const section = document.createElement("section");
   section.className = "coverage";
   section.append(
@@ -1389,6 +1418,7 @@ function coverage(coverage, generatedAt) {{
     text("p", "Dækkede udbydere og deres udpegede tilbudskilder i neutral kildeorden:"),
   );
   coverage.providers.forEach((provider) => section.append(text("p", `${{provider.name}} · ${{provider.designatedSource}} · ${{provider.quarantinedCandidateCount}} kandidater holdt tilbage.`)));
+  coverageEnded.forEach((provider) => section.append(text("p", `Dækning af ${{provider.name}} sluttede ${{formatDate(provider.coverageEndedAt)}}.`)));
   section.append(
     text("p", "Kataloget dækker muligvis ikke hele det danske marked."),
     text("p", "Dette viser aktiv katalogdækning, ikke vurderingen af andre udbydere."),

@@ -18,6 +18,11 @@ FLEASING_CATALOGUE_URL = "https://fleasing.dk/biler/"
 FLEASING_DESIGNATED_SOURCE = "Fleasing passenger-car catalogue and linked detail pages"
 TERMINALEN_CATALOGUE_URL = "https://www.terminalen.dk/nye-biler/hyundai"
 TERMINALEN_DESIGNATED_SOURCE = "Terminalen Hyundai model price pages and paired page API responses"
+PROVIDER_DESIGNATED_SOURCES = {
+    "Fleasing": FLEASING_DESIGNATED_SOURCE,
+    "Terminalen": TERMINALEN_DESIGNATED_SOURCE,
+}
+PROVIDER_NAMES = tuple(PROVIDER_DESIGNATED_SOURCES)
 
 
 class UrlLibHttpClient(TextHttpClient):
@@ -37,12 +42,28 @@ def refresh_catalogue(
     collect_terminalen: Callable[[], list[dict[str, Any]]],
     generated_at: Callable[[], str],
     sleep: Callable[[float], None],
+    active_providers: tuple[str, ...] = PROVIDER_NAMES,
+    ended_providers: list[dict[str, str]] | None = None,
 ) -> dict[str, Any]:
-    """Atomically replace the complete two-provider catalogue after every provider succeeds."""
-    fleasing_candidates = collect_with_retries("Fleasing", collect_fleasing, sleep)
-    terminalen_candidates = collect_with_retries("Terminalen", collect_terminalen, sleep)
+    """Atomically replace the complete enabled-provider catalogue after every provider succeeds."""
+    fleasing_candidates = (
+        collect_with_retries("Fleasing", collect_fleasing, sleep)
+        if "Fleasing" in active_providers
+        else []
+    )
+    terminalen_candidates = (
+        collect_with_retries("Terminalen", collect_terminalen, sleep)
+        if "Terminalen" in active_providers
+        else []
+    )
     timestamp = generated_at()
-    dataset = complete_catalogue_dataset(fleasing_candidates, terminalen_candidates, timestamp)
+    dataset = complete_catalogue_dataset(
+        fleasing_candidates,
+        terminalen_candidates,
+        timestamp,
+        active_providers=active_providers,
+        ended_providers=ended_providers or [],
+    )
     validate_complete_catalogue_dataset(dataset)
     write_json_atomically(dataset_path, dataset)
     return dataset
@@ -70,17 +91,29 @@ def complete_catalogue_dataset(
     fleasing_candidates: list[dict[str, Any]],
     terminalen_candidates: list[dict[str, Any]],
     generated_at: str,
+    *,
+    active_providers: tuple[str, ...] = PROVIDER_NAMES,
+    ended_providers: list[dict[str, str]] | None = None,
 ) -> dict[str, Any]:
+    candidates_by_provider = {
+        "Fleasing": fleasing_candidates,
+        "Terminalen": terminalen_candidates,
+    }
     return {
         "schemaVersion": "catalogue-dataset/v1",
         "generatedAt": generated_at,
         "coverage": {
             "providers": [
-                coverage_provider("Fleasing", FLEASING_DESIGNATED_SOURCE, fleasing_candidates),
-                coverage_provider("Terminalen", TERMINALEN_DESIGNATED_SOURCE, terminalen_candidates),
-            ]
+                coverage_provider(name, PROVIDER_DESIGNATED_SOURCES[name], candidates_by_provider[name])
+                for name in active_providers
+            ],
         },
-        "catalogueOffers": [*fleasing_candidates, *terminalen_candidates],
+        "coverageEnded": ended_providers or [],
+        "catalogueOffers": [
+            candidate
+            for name in active_providers
+            for candidate in candidates_by_provider[name]
+        ],
     }
 
 
@@ -94,9 +127,36 @@ def coverage_provider(name: str, designated_source: str, candidates: list[dict[s
 
 def validate_complete_catalogue_dataset(dataset: dict[str, Any]) -> None:
     offers = dataset.get("catalogueOffers")
-    if not isinstance(offers, list) or not offers:
-        raise ValueError("complete catalogue dataset requires offers from every covered provider")
-    providers = {"Fleasing": 0, "Terminalen": 0}
+    coverage = dataset.get("coverage")
+    provider_rows = coverage.get("providers") if isinstance(coverage, dict) else None
+    ended_rows = dataset.get("coverageEnded")
+    if not isinstance(offers, list) or not isinstance(provider_rows, list) or not isinstance(ended_rows, list):
+        raise ValueError("complete catalogue dataset requires coverage and catalogue offers")
+    provider_names = [
+        provider.get("name")
+        for provider in provider_rows
+        if isinstance(provider, dict)
+    ]
+    if (
+        len(provider_names) != len(provider_rows)
+        or len(provider_names) != len(set(provider_names))
+        or any(name not in PROVIDER_NAMES for name in provider_names)
+    ):
+        raise ValueError("complete catalogue dataset has invalid covered providers")
+    ended_names: set[str] = set()
+    for ended_provider in ended_rows:
+        if (
+            not isinstance(ended_provider, dict)
+            or set(ended_provider) != {"name", "coverageEndedAt"}
+            or ended_provider.get("name") not in PROVIDER_NAMES
+            or not isinstance(ended_provider.get("coverageEndedAt"), str)
+            or not ended_provider["coverageEndedAt"]
+        ):
+            raise ValueError("complete catalogue dataset has invalid ended provider coverage")
+        ended_names.add(ended_provider["name"])
+    if ended_names.intersection(provider_names):
+        raise ValueError("a provider cannot be both covered and ended")
+    providers = {name: 0 for name in provider_names}
     identities: set[str] = set()
     for offer in offers:
         if not isinstance(offer, dict):
@@ -110,7 +170,7 @@ def validate_complete_catalogue_dataset(dataset: dict[str, Any]) -> None:
         validate_candidate(offer)
         providers[provider] += 1
         identities.add(identity)
-    if not all(providers.values()):
+    if providers and not all(providers.values()):
         raise ValueError("complete catalogue dataset requires every covered provider")
 
 
@@ -159,8 +219,11 @@ def refresh_all_providers(
     fleasing_catalogue_url: str = FLEASING_CATALOGUE_URL,
     terminalen_catalogue_url: str = TERMINALEN_CATALOGUE_URL,
     http_client: TextHttpClient | None = None,
+    *,
+    active_providers: tuple[str, ...] = PROVIDER_NAMES,
+    ended_providers: list[dict[str, str]] | None = None,
 ) -> dict[str, Any]:
-    """Collect Fleasing followed by Terminalen into one generation and atomic replacement."""
+    """Collect enabled providers in source order into one generation and atomic replacement."""
     client = http_client or UrlLibHttpClient()
     return refresh_catalogue(
         dataset_path,
@@ -168,6 +231,8 @@ def refresh_all_providers(
         collect_terminalen=lambda: TerminalenAdapter(client, now()).collect(terminalen_catalogue_url),
         generated_at=now,
         sleep=time.sleep,
+        active_providers=active_providers,
+        ended_providers=ended_providers,
     )
 
 

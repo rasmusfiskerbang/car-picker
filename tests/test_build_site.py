@@ -274,7 +274,7 @@ class BuildSiteTest(unittest.TestCase):
         for hidden_detail in ("quarantineReasons", "parserMetadata", "hash"):
             self.assertNotIn(hidden_detail, json.dumps(projection["coverage"]))
         for route in (
-            "catalogue.append(filters, comparison, offers, coverage(projection.coverage, projection.generatedAt), footer(projection.generatedAt));",
+            "catalogue.append(filters, comparison, offers, coverage(projection.coverage, projection.coverageEnded, projection.generatedAt), footer(projection.generatedAt));",
             "page.append(back, offerCard(offer), footer(projection.generatedAt));",
             "page.append(back, heading(\"Sammenlign tilbud\", 1), comparisonTable(offers), footer(projection.generatedAt));",
         ):
