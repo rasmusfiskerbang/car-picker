@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 
 from car_picker.collection import FLEASING_CATALOGUE_URL, PROVIDER_NAMES, TERMINALEN_CATALOGUE_URL, refresh_all_providers
 from car_picker.comparison import reconcile_provider_advertised_aggregate
+from car_picker.legal_release import DEFAULT_LEGAL_RECORD, validate_legal_release
 from car_picker.owner_operations import validate_owner_checkout
 from car_picker.provider_withdrawal import (
     DEFAULT_PROVIDER_CONTROL,
@@ -50,6 +51,7 @@ def parse_arguments() -> argparse.Namespace:
     validate.add_argument("--dataset", required=True, type=Path, help="Canonical catalogue dataset JSON.")
     validate.add_argument("--repository", default=Path("."), type=Path, help="Git checkout to inspect.")
     validate.add_argument("--provider-control", default=DEFAULT_PROVIDER_CONTROL, type=Path)
+    validate.add_argument("--legal-record", default=DEFAULT_LEGAL_RECORD, type=Path)
     serve = subcommands.add_parser("serve-site", help="Serve a completed static site on the local network.")
     serve.add_argument("--site", required=True, type=Path, help="Completed static site directory.")
     serve.add_argument("--port", type=int, default=4173, help="TCP port to serve (default: 4173).")
@@ -91,6 +93,7 @@ def main() -> None:
             arguments.dataset,
             arguments.repository,
             arguments.provider_control,
+            arguments.legal_record,
         )
     elif arguments.command == "serve-site":
         serve_site(arguments.site, arguments.port)
@@ -107,12 +110,17 @@ def validate_owner_checkout_or_exit(
     dataset_path: Path,
     repository_path: Path,
     provider_control_path: Path,
+    legal_record_path: Path,
 ) -> None:
     try:
         validate_owner_checkout(dataset_path, repository_path, provider_control_path)
+        legal_status = validate_legal_release(
+            legal_record_path,
+            repository_path,
+        )
     except (OSError, ValueError) as error:
         raise SystemExit(str(error)) from error
-    print("Catalogue schema and Git-history validation passed.")
+    print(f"Catalogue schema and Git-history validation passed. {legal_status}")
 
 
 def validate_dataset_for_withdrawals_or_exit(dataset_path: Path, control: dict[str, object]) -> None:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 import tempfile
@@ -13,17 +14,41 @@ FIXTURE_DATASET = REPOSITORY_ROOT / "tests/fixtures/one-offer-catalogue-dataset.
 
 class OwnerOperationsTest(unittest.TestCase):
     def test_validate_checks_schemas_and_rejects_generated_artifacts_in_git_history(self) -> None:
-        valid_checkout_result = run_cli(
-            "validate",
-            "--dataset",
-            str(FIXTURE_DATASET),
-            "--repository",
-            str(REPOSITORY_ROOT),
-        )
-
         with tempfile.TemporaryDirectory() as temporary_directory:
             repository = Path(temporary_directory)
             run_git(repository, "init")
+            legal_record_path = repository / "config/consumer-credit-legal-review.json"
+            legal_record_path.parent.mkdir()
+            legal_record_path.write_text(
+                json.dumps(
+                    {
+                        "schemaVersion": "consumer-credit-legal-review/v1",
+                        "changeHorizon": "2026-11-20",
+                        "revalidation": None,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            run_git(repository, "add", "config/consumer-credit-legal-review.json")
+            run_git(
+                repository,
+                "-c",
+                "user.name=Fixture Owner",
+                "-c",
+                "user.email=owner@example.test",
+                "commit",
+                "-m",
+                "record pending legal review",
+            )
+            valid_checkout_result = run_cli(
+                "validate",
+                "--dataset",
+                str(FIXTURE_DATASET),
+                "--repository",
+                str(repository),
+                "--legal-record",
+                str(legal_record_path),
+            )
             site_path = repository / "site"
             site_path.mkdir()
             (site_path / "index.html").write_text("<p>Generated site</p>", encoding="utf-8")
@@ -48,6 +73,8 @@ class OwnerOperationsTest(unittest.TestCase):
                 str(FIXTURE_DATASET),
                 "--repository",
                 str(repository),
+                "--legal-record",
+                str(legal_record_path),
             )
 
         self.assertEqual(valid_checkout_result.returncode, 0, valid_checkout_result.stderr)

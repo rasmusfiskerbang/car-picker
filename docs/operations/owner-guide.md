@@ -29,7 +29,8 @@ has no runtime application backend.
 `validate` checks the canonical catalogue dataset, the minimized presentation
 projection, the provider control, and every reachable Git-history path. It
 fails if generated provider data such as `var/catalogue-dataset.json` or files
-under a generated `site/` directory have entered history.
+under a generated `site/` directory have entered history. It also enforces the
+[dated consumer-credit release gate](consumer-credit-revalidation.md).
 
 ## Refresh, validate, build, and serve
 
@@ -133,3 +134,7 @@ After changes to adapters, schemas, projection code, or operating configuration:
    files by hand.
 4. Inspect refresh warnings and run aggregate diagnostics before serving or
    deploying the completed artifact.
+
+For every release, record the legal-gate result. Releases on or after 20
+November 2026 require the completed, committed consumer-credit revalidation
+described above.

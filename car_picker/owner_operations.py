@@ -45,6 +45,28 @@ def generated_paths_in_history(repository_path: Path) -> list[str]:
     return sorted({path for path in paths if is_generated_path(path)})
 
 
+def validate_version_controlled_file(repository_path: Path, file_path: Path) -> None:
+    repository = repository_path.resolve()
+    try:
+        relative_path = file_path.resolve().relative_to(repository).as_posix()
+    except ValueError as error:
+        raise ValueError(f"{file_path} must be inside the validated Git checkout") from error
+    committed = subprocess.run(
+        ["git", "-C", str(repository), "cat-file", "-e", f"HEAD:{relative_path}"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    unchanged = subprocess.run(
+        ["git", "-C", str(repository), "diff", "--quiet", "HEAD", "--", relative_path],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if committed.returncode != 0 or unchanged.returncode != 0:
+        raise ValueError(f"{relative_path} must be committed without local changes before release validation")
+
+
 def is_generated_path(path: str) -> bool:
     parts = PurePosixPath(path).parts
     return (
