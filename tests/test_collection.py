@@ -20,21 +20,42 @@ TERMINALEN_FIXTURES = Path(__file__).resolve().parent / "fixtures/terminalen"
 
 def candidate(provider: str, identity: str, status: str = "admitted") -> dict[str, object]:
     evidence = {"sourceUrl": f"https://example.test/{provider.lower()}", "wording": "Fixture evidence"}
-    known = {"state": "known", "value": True, "evidence": evidence}
-    return {
+    known_boolean = {"state": "known", "value": True, "evidence": evidence}
+    value: dict[str, object] = {
         "provider": provider,
         "offerIdentity": identity,
         "admissionStatus": status,
-        "vehicleSpecification": known,
-        "privateConsumerEligibility": known,
-        "passengerCarScope": known,
-        "currentAvailability": known,
-        "supportedLeasingForm": known,
-        "advertisedMonthlyPayment": known,
-        "termMonths": known,
+        "vehicleSpecification": {
+            "state": "known",
+            "value": {"make": "Fixture", "model": "Car"},
+            "evidence": evidence,
+        },
+        "privateConsumerEligibility": known_boolean,
+        "passengerCarScope": known_boolean,
+        "currentAvailability": known_boolean,
+        "supportedLeasingForm": {
+            "state": "known",
+            "value": "operational",
+            "evidence": evidence,
+        },
+        "advertisedMonthlyPayment": {
+            "state": "known",
+            "valueDkk": 1000,
+            "evidence": evidence,
+        },
+        "termMonths": {"state": "known", "value": 12, "evidence": evidence},
         "baseCashFlowStream": [{"meaning": "Fixture payment"}],
         "sourceMetadata": {"documents": [{"sourceUrl": evidence["sourceUrl"]}]},
     }
+    if status == "quarantined":
+        value["quarantineReasons"] = [
+            {"fact": "supportedLeasingForm", "state": "unclear"}
+        ]
+        value["supportedLeasingForm"] = {
+            "state": "unclear",
+            "evidence": evidence,
+        }
+    return value
 
 
 class CollectionTest(unittest.TestCase):

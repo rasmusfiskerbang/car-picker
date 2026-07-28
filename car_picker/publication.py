@@ -8,6 +8,7 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
+from car_picker.catalogue_model import from_legacy_dataset, to_legacy_dataset
 from car_picker.comparison import calculate_comparison_values, is_time_ordered
 
 
@@ -207,7 +208,12 @@ PRESENTATION_SCHEMA: dict[str, Any] = {
 
 def build_site(dataset_path: Path, output_path: Path) -> None:
     """Project a canonical catalogue dataset and atomically replace a static site."""
-    dataset = read_json(dataset_path)
+    dataset = to_legacy_dataset(
+        from_legacy_dataset(
+            dict(read_json(dataset_path)),
+            require_complete_replacement=False,
+        )
+    )
     projection = project_catalogue(dataset)
     validate_presentation_projection(projection)
     write_site_atomically(output_path, projection)

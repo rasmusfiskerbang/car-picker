@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 from urllib.request import Request, urlopen
 
+from car_picker.catalogue_model import from_legacy_dataset, to_legacy_dataset
 from car_picker.fleasing import FleasingAdapter, TextHttpClient
 from car_picker.terminalen import TerminalenAdapter
 
@@ -99,7 +100,7 @@ def complete_catalogue_dataset(
         "Fleasing": fleasing_candidates,
         "Terminalen": terminalen_candidates,
     }
-    return {
+    legacy_dataset = {
         "schemaVersion": "catalogue-dataset/v1",
         "generatedAt": generated_at,
         "coverage": {
@@ -115,6 +116,8 @@ def complete_catalogue_dataset(
             for candidate in candidates_by_provider[name]
         ],
     }
+    validate_complete_catalogue_dataset(legacy_dataset)
+    return to_legacy_dataset(from_legacy_dataset(legacy_dataset))
 
 
 def coverage_provider(name: str, designated_source: str, candidates: list[dict[str, Any]]) -> dict[str, Any]:
