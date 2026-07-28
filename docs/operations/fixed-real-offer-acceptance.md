@@ -7,10 +7,12 @@ acceptance.
 
 Run the fixed-offer tasks only after a successful all-provider refresh. Always
 create an acceptance record, including when refresh fails. Do not bypass a
-designated source that has changed, a provider access boundary, or a failed
-structural check to assemble a partial dataset. A failed refresh is an
-acceptance blocker: record the provider, source URL, and the exact structural
-or access failure, then keep the prior completed artifact active.
+designated source that has changed, a provider access boundary, or a source-wide
+structural check to assemble a partial dataset. A listed detail page that lacks
+the required private-offer sections is retained as a quarantined candidate, not
+published as an offer. A failed refresh is an acceptance blocker: record the
+provider, source URL, and the exact structural or access failure, then keep the
+prior completed artifact active.
 
 ## Fixed offer set
 

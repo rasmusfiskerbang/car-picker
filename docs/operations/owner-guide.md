@@ -79,9 +79,12 @@ dataset.
 
 ## Failure guarantees
 
-- A provider retrieval, enumeration, or structural parsing failure rejects the
-  complete replacement after at most two retries. The prior catalogue dataset
-  remains byte-for-byte active; a partial or mixed-age dataset is never written.
+- A provider retrieval, enumeration, or source-wide structural parsing failure
+  rejects the complete replacement after at most two retries. The prior
+  catalogue dataset remains byte-for-byte active; a partial or mixed-age dataset
+  is never written. A listed detail page that lacks the required private-offer
+  sections is instead retained as a quarantined candidate with no published
+  private-offer facts.
 - A schema, projection, browser-bundle, or artifact verification failure leaves
   the prior completed static artifact active.
 - Full fetched provider documents exist only for the running refresh, in process

@@ -22,6 +22,10 @@ class StructuralSourceError(ValueError):
     """The designated source changed shape and cannot be mapped safely."""
 
 
+class UnavailablePrivateDetailError(StructuralSourceError):
+    """A listed detail page cannot establish the private-offer facts it needs."""
+
+
 @dataclass(frozen=True)
 class DiscoveredOffer:
     url: str
@@ -44,15 +48,23 @@ class FleasingAdapter:
         candidates: list[dict[str, Any]] = []
         for offer in offers:
             detail_html = self._http_client.get_text(offer.url)
-            candidates.append(
-                map_detail_page(
+            try:
+                candidate = map_detail_page(
                     catalogue_url=catalogue_url,
                     catalogue_html=catalogue_html,
                     discovered_offer=offer,
                     detail_html=detail_html,
                     retrieved_at=self._retrieved_at,
                 )
-            )
+            except UnavailablePrivateDetailError:
+                candidate = quarantined_unavailable_detail_candidate(
+                    catalogue_url=catalogue_url,
+                    catalogue_html=catalogue_html,
+                    discovered_offer=offer,
+                    detail_html=detail_html,
+                    retrieved_at=self._retrieved_at,
+                )
+            candidates.append(candidate)
         return candidates
 
 
@@ -96,7 +108,7 @@ def map_detail_page(
     detail.feed(detail_html)
     detail.close()
     if not detail.found_vehicle_info or not detail.found_private_tab:
-        raise StructuralSourceError(
+        raise UnavailablePrivateDetailError(
             f"Fleasing detail {discovered_offer.url} no longer contains vehicle information and a private-pricing tab"
         )
 
@@ -144,6 +156,72 @@ def map_detail_page(
     candidate["admissionStatus"] = "quarantined" if reasons else "admitted"
     if reasons:
         candidate["quarantineReasons"] = reasons
+    return candidate
+
+
+def quarantined_unavailable_detail_candidate(
+    *,
+    catalogue_url: str,
+    catalogue_html: str,
+    discovered_offer: DiscoveredOffer,
+    detail_html: str,
+    retrieved_at: str,
+) -> dict[str, Any]:
+    """Retain a catalogue link whose detail page cannot support private-offer facts."""
+    source_id = source_id_from_url(discovered_offer.url)
+    unavailable_evidence = evidence(
+        discovered_offer.url,
+        'Missing required detail sections: class="vehicle-page-info" and id="privat".',
+    )
+    unavailable_fact = {"state": "not_stated", "evidence": unavailable_evidence}
+    candidate = {
+        "offerIdentity": f"fleasing:{source_id}:detail-unavailable",
+        "provider": "Fleasing",
+        "providerSourceId": source_id,
+        "canonicalOfferUrl": discovered_offer.url,
+        "sourceLocalConfigurationKey": "detail-unavailable",
+        "vehicleSpecification": unavailable_fact,
+        "privateConsumerEligibility": unavailable_fact,
+        "passengerCarScope": unavailable_fact,
+        "currentAvailability": unclear_fact(catalogue_url, discovered_offer.source_fragment),
+        "supportedLeasingForm": unavailable_fact,
+        "advertisedMonthlyPayment": unavailable_fact,
+        "termMonths": unavailable_fact,
+        "baseCashFlowStream": [
+            {
+                "meaning": "Privat prisoplysning er ikke tilgængelig",
+                "direction": "payment",
+                "amountDkk": None,
+                "amountBasis": "not_stated",
+                "timing": "recurring",
+                "recurrenceCount": None,
+                "refundability": "not_stated",
+                "includedInBase": True,
+                "blockingFacts": ["advertisedMonthlyPayment", "termMonths"],
+                "evidence": unavailable_evidence,
+            }
+        ],
+        "baseCashFlowBlockers": ["advertisedMonthlyPayment", "termMonths"],
+        "upfrontCashRequirement": unavailable_fact,
+        "nominalBaseOutlay": unavailable_fact,
+        "nominalMonthlyEquivalent": unavailable_fact,
+        "annualMileageKm": unavailable_fact,
+        "normalEndMechanism": unavailable_fact,
+        "residualRiskAllocation": unavailable_fact,
+        "registrationTaxTreatment": unavailable_fact,
+        "serviceArrangements": unavailable_fact,
+        "exclusions": unavailable_fact,
+        "exposureScenarios": unavailable_fact,
+        "sourceMetadata": {
+            "parserVersion": PARSER_VERSION,
+            "documents": [
+                source_document(catalogue_url, catalogue_html, retrieved_at),
+                source_document(discovered_offer.url, detail_html, retrieved_at),
+            ],
+        },
+    }
+    candidate["admissionStatus"] = "quarantined"
+    candidate["quarantineReasons"] = admission_reasons(candidate)
     return candidate
 
 

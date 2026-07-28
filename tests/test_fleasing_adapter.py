@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 from car_picker.comparison import calculate_comparison_values
-from car_picker.fleasing import FleasingAdapter, StructuralSourceError, catalogue_detail_urls
+from car_picker.fleasing import FleasingAdapter, StructuralSourceError, catalogue_detail_offers, catalogue_detail_urls, map_detail_page
 
 
 FIXTURE_DIRECTORY = Path(__file__).resolve().parent / "fixtures/fleasing"
@@ -130,7 +130,7 @@ class FleasingAdapterTest(unittest.TestCase):
             ["advertisedMonthlyPayment"],
         )
 
-    def test_detects_a_detail_page_that_loses_the_private_configuration_structure(self) -> None:
+    def test_quarantines_a_catalogue_link_when_its_detail_page_loses_private_pricing(self) -> None:
         client = FixtureHttpClient(
             {
                 CATALOGUE_URL: (FIXTURE_DIRECTORY / "catalogue.html").read_text(encoding="utf-8"),
@@ -138,11 +138,53 @@ class FleasingAdapterTest(unittest.TestCase):
                     <article data-offer-id="442795427" data-make="Aston Martin" data-model="DB9"
                     data-trim="Volante" data-passenger-car="true" data-availability="available"></article>
                 """,
+                MISSING_MONTHLY_DETAIL_URL: (FIXTURE_DIRECTORY / "bmw-i4.html").read_text(encoding="utf-8"),
             }
         )
 
+        candidates = FleasingAdapter(client, retrieved_at="2026-07-22T12:00:00Z").collect()
+
+        self.assertEqual(client.requested_urls, [CATALOGUE_URL, DETAIL_URL, MISSING_MONTHLY_DETAIL_URL])
+        self.assertEqual(
+            [(candidate["offerIdentity"], candidate["admissionStatus"]) for candidate in candidates],
+            [
+                ("fleasing:442795427:detail-unavailable", "quarantined"),
+                ("fleasing:771869804:private-390493d196b5", "quarantined"),
+            ],
+        )
+        stale_candidate = candidates[0]
+        self.assertEqual(stale_candidate["vehicleSpecification"]["state"], "not_stated")
+        self.assertEqual(stale_candidate["currentAvailability"]["state"], "unclear")
+        self.assertEqual(stale_candidate["advertisedMonthlyPayment"]["state"], "not_stated")
+        self.assertEqual(stale_candidate["termMonths"]["state"], "not_stated")
+        self.assertEqual(
+            stale_candidate["quarantineReasons"],
+            [
+                {"fact": "vehicleSpecification", "state": "not_stated"},
+                {"fact": "privateConsumerEligibility", "state": "not_stated"},
+                {"fact": "passengerCarScope", "state": "not_stated"},
+                {"fact": "currentAvailability", "state": "unclear"},
+                {"fact": "supportedLeasingForm", "state": "not_stated"},
+                {"fact": "advertisedMonthlyPayment", "state": "not_stated"},
+                {"fact": "termMonths", "state": "not_stated"},
+            ],
+        )
+
+    def test_detects_a_detail_page_that_loses_the_private_configuration_structure(self) -> None:
+        catalogue_html = (FIXTURE_DIRECTORY / "catalogue.html").read_text(encoding="utf-8")
+        first_offer = catalogue_detail_offers(catalogue_html, CATALOGUE_URL)[0]
+
         with self.assertRaisesRegex(StructuralSourceError, "private-pricing tab"):
-            FleasingAdapter(client, retrieved_at="2026-07-22T12:00:00Z").collect()
+            map_detail_page(
+                catalogue_url=CATALOGUE_URL,
+                catalogue_html=catalogue_html,
+                discovered_offer=first_offer,
+                detail_html="""
+                    <article data-offer-id="442795427" data-make="Aston Martin" data-model="DB9"
+                    data-trim="Volante" data-passenger-car="true" data-availability="available"></article>
+                """,
+                retrieved_at="2026-07-22T12:00:00Z",
+            )
 
 
 
