@@ -750,7 +750,7 @@ function renderCatalogue(projection) {{
   const comparison = comparisonControl(selected);
   const refreshComparison = () => {{}};
   const filters = filterControls(projection.offers, (filters) => renderOffers(offers, projection.offers, filters, selected, refreshComparison));
-  catalogue.append(filters, comparison, offers, coverage(projection.coverage, projection.generatedAt), footer());
+  catalogue.append(filters, comparison, offers, coverage(projection.coverage, projection.generatedAt), footer(projection.generatedAt));
   renderOffers(offers, projection.offers, initialFilters(), selected, refreshComparison);
   root.replaceChildren(catalogue);
 }}
@@ -912,7 +912,7 @@ function renderDetailRoute(projection, identity) {{
   if (!offer) return root.replaceChildren(message("Tilbuddet kan ikke vises", "Tilbuddet findes ikke i dette katalog."));
   const page = document.createElement("section"); page.className = "catalogue";
   const back = document.createElement("a"); back.href = "#"; back.textContent = "Tilbage til kataloget";
-  page.append(back, offerCard(offer)); root.replaceChildren(page);
+  page.append(back, offerCard(offer), footer(projection.generatedAt)); root.replaceChildren(page);
 }}
 
 function renderComparison(projection, identities) {{
@@ -920,7 +920,7 @@ function renderComparison(projection, identities) {{
   if (offers.length < 2) return root.replaceChildren(message("Sammenligning kan ikke vises", "Vælg mindst to tilbud fra kataloget."));
   const page = document.createElement("section"); page.className = "catalogue";
   const back = document.createElement("a"); back.href = "#"; back.textContent = "Tilbage til kataloget";
-  page.append(back, heading("Sammenlign tilbud", 1), comparisonTable(offers)); root.replaceChildren(page);
+  page.append(back, heading("Sammenlign tilbud", 1), comparisonTable(offers), footer(projection.generatedAt)); root.replaceChildren(page);
 }}
 
 function comparisonTable(offers) {{
@@ -1311,8 +1311,13 @@ function coverage(coverage, generatedAt) {{
   return section;
 }}
 
-function footer() {{
-  return text("footer", "Tilbud kan være ændret eller udløbet siden data blev indsamlet. Filtrering er ikke personlig rangering.");
+function footer(generatedAt) {{
+  const element = document.createElement("footer");
+  element.append(
+    text("p", `Katalogdatasættet blev genereret ${{formatDate(generatedAt)}}.`),
+    text("p", "Tilbud kan være ændret eller udløbet siden data blev indsamlet. Filtrering er ikke personlig rangering."),
+  );
+  return element;
 }}
 
 function message(title, detail) {{

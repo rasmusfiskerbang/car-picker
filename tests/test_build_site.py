@@ -273,6 +273,12 @@ class BuildSiteTest(unittest.TestCase):
             self.assertIn(copy, app_source)
         for hidden_detail in ("quarantineReasons", "parserMetadata", "hash"):
             self.assertNotIn(hidden_detail, json.dumps(projection["coverage"]))
+        for route in (
+            "catalogue.append(filters, comparison, offers, coverage(projection.coverage, projection.generatedAt), footer(projection.generatedAt));",
+            "page.append(back, offerCard(offer), footer(projection.generatedAt));",
+            "page.append(back, heading(\"Sammenlign tilbud\", 1), comparisonTable(offers), footer(projection.generatedAt));",
+        ):
+            self.assertIn(route, app_source)
 
     def test_build_site_derives_values_and_one_cash_flow_breakdown(self) -> None:
         """The public site build exposes service-derived totals from sourced events."""
