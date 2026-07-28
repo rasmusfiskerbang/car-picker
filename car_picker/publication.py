@@ -160,6 +160,7 @@ PRESENTATION_SCHEMA: dict[str, Any] = {
             "properties": {
                 "kind": {"type": "string"}, "trigger": {"type": "string"},
                 "requiredInputs": {"type": "array", "items": {"type": "string"}},
+                "inputKinds": {"type": "array", "items": {"type": "string"}},
                 "formula": {"type": "string"}, "amountDkk": {"type": "integer", "minimum": 0},
                 "rateDkk": {"type": "integer", "minimum": 0}, "capDkk": {"type": "integer", "minimum": 0},
             },
@@ -450,10 +451,19 @@ def valid_service_arrangement(value: Mapping[str, Any]) -> bool:
 
 def valid_exposure_scenario(value: Mapping[str, Any]) -> bool:
     inputs = value.get("requiredInputs")
+    input_kinds = value.get("inputKinds")
     return (
         all(isinstance(value.get(field), str) and value[field] for field in ("kind", "trigger"))
         and isinstance(inputs, list)
         and all(isinstance(item, str) and item for item in inputs)
+        and (
+            input_kinds is None
+            or (
+                isinstance(input_kinds, list)
+                and len(input_kinds) == len(inputs)
+                and all(isinstance(item, str) and item for item in input_kinds)
+            )
+        )
         and all(
             key not in value or (isinstance(value[key], int) and not isinstance(value[key], bool) and value[key] >= 0)
             for key in ("amountDkk", "rateDkk", "capDkk")
@@ -1102,13 +1112,12 @@ function scenarioCalculationExample(scenario, scenarioIndex) {{
 function standardizedScenarioCalculation(scenario) {{
   const definitions = {{
     excess_mileage: {{
-      formula: "rate_times_input", requiredInputCount: 1, requiresRate: true,
+      formula: "rate_times_input", requiredInputCount: 1, requiredInputKinds: ["excess_distance_km"], requiresRate: true,
       calculate: (scenario, inputs) => inputs[0] * scenario.rateDkk,
       arithmetic: (scenario, inputs) => `${{scenario.requiredInputs[0]}} (${{formatNumber(inputs[0])}}) × ${{money(scenario.rateDkk)}}`,
     }},
     residual_shortfall: {{
-      formula: "residual_value_minus_sale_proceeds", requiredInputCount: 2, requiresFormula: true,
-      requiredInputNames: ["Aftalt restværdi", "Salgsprovenu"],
+      formula: "residual_value_minus_sale_proceeds", requiredInputCount: 2, requiredInputKinds: ["residual_value_dkk", "sale_proceeds_dkk"], requiresFormula: true,
       calculate: (_scenario, inputs) => Math.max(0, inputs[0] - inputs[1]),
       arithmetic: (scenario, inputs) => `max(0, ${{scenario.requiredInputs[0]}} (${{formatNumber(inputs[0])}}) − ${{scenario.requiredInputs[1]}} (${{formatNumber(inputs[1])}}))`,
     }},
@@ -1125,7 +1134,7 @@ function standardizedScenarioCalculation(scenario) {{
 
 function scenarioCanBeCalculated(scenario, calculation) {{
   return scenario.requiredInputs.length === calculation.requiredInputCount
-    && (!calculation.requiredInputNames || calculation.requiredInputNames.every((name, index) => scenario.requiredInputs[index] === name))
+    && (!calculation.requiredInputKinds || (Array.isArray(scenario.inputKinds) && calculation.requiredInputKinds.every((kind, index) => scenario.inputKinds[index] === kind)))
     && (!calculation.requiresRate || Number.isInteger(scenario.rateDkk))
     && (!calculation.requiresAmount || Number.isInteger(scenario.amountDkk));
 }}

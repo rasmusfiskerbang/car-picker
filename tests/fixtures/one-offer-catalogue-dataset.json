@@ -61,7 +61,7 @@
       "exposureScenarios": {
         "state": "known",
         "value": [
-          {"kind": "excess_mileage", "trigger": "Hvis kilometergrænsen overskrides.", "requiredInputs": ["Ekstra kilometer"], "rateDkk": 2},
+          {"kind": "excess_mileage", "trigger": "Hvis kilometergrænsen overskrides.", "requiredInputs": ["Ekstra kilometer"], "inputKinds": ["excess_distance_km"], "rateDkk": 2},
           {"kind": "damage", "trigger": "Hvis bilen afleveres med skader ud over normal slitage.", "requiredInputs": []}
         ],
         "evidence": {"sourceUrl": "https://example.test/ioniq-5", "wording": "Overkørte kilometer afregnes med 2 kr. pr. km; skader kan medføre betaling."}

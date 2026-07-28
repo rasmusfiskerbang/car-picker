@@ -92,7 +92,7 @@ class BuildSiteTest(unittest.TestCase):
                 },
                 "exposureScenarios": {
                     "state": "known", "value": [
-                        {"kind": "excess_mileage", "trigger": "Hvis kilometergrænsen overskrides.", "requiredInputs": ["Ekstra kilometer"], "rateDkk": 2},
+                        {"kind": "excess_mileage", "trigger": "Hvis kilometergrænsen overskrides.", "requiredInputs": ["Ekstra kilometer"], "inputKinds": ["excess_distance_km"], "rateDkk": 2},
                         {"kind": "damage", "trigger": "Hvis bilen afleveres med skader ud over normal slitage.", "requiredInputs": []},
                     ],
                     "evidence": {"sourceUrl": "https://example.test/ioniq-5", "wording": "Overkørte kilometer afregnes med 2 kr. pr. km; skader kan medføre betaling."},
@@ -452,7 +452,7 @@ class BuildSiteTest(unittest.TestCase):
         self.assertEqual(
             projection["offers"][0]["exposureScenarios"]["value"],
             [
-                {"kind": "excess_mileage", "trigger": "Hvis kilometergrænsen overskrides.", "requiredInputs": ["Ekstra kilometer"], "rateDkk": 2},
+                {"kind": "excess_mileage", "trigger": "Hvis kilometergrænsen overskrides.", "requiredInputs": ["Ekstra kilometer"], "inputKinds": ["excess_distance_km"], "rateDkk": 2},
                 {"kind": "damage", "trigger": "Hvis bilen afleveres med skader ud over normal slitage.", "requiredInputs": []},
             ],
         )
@@ -464,13 +464,42 @@ class BuildSiteTest(unittest.TestCase):
             "standardizedScenarioCalculation",
             "residual_value_minus_sale_proceeds",
             "residual_shortfall",
-            "requiredInputNames",
-            "Aftalt restværdi",
-            "Salgsprovenu",
+            "requiredInputKinds",
+            "residual_value_dkk",
+            "sale_proceeds_dkk",
             "scenarioCanBeCalculated",
             "calculateScenarioExample",
         ):
             self.assertIn(control, app_source)
+        self.assertNotIn("requiredInputNames", app_source)
+
+    def test_build_site_rejects_exposure_input_kinds_that_do_not_align_with_their_labels(self) -> None:
+        """Normalized input kinds must remain paired with the source labels shown to the prospective lessee."""
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            dataset_path = Path(temporary_directory) / "catalogue-dataset.json"
+            dataset = json.loads(FIXTURE_DATASET.read_text(encoding="utf-8"))
+            scenario = dataset["catalogueOffers"][0]["exposureScenarios"]["value"][0]
+            scenario["inputKinds"].append("unrelated_input")
+            dataset_path.write_text(json.dumps(dataset), encoding="utf-8")
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "car_picker",
+                    "build-site",
+                    "--dataset",
+                    str(dataset_path),
+                    "--output",
+                    str(Path(temporary_directory) / "site"),
+                ],
+                cwd=REPOSITORY_ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Known detail facts require supported structured values", result.stderr)
 
 
 def known_value_fact(value: object, wording: str) -> dict[str, object]:
