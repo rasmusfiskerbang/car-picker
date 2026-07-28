@@ -15,6 +15,16 @@ FIXTURE_DATASET = REPOSITORY_ROOT / "tests/fixtures/one-offer-catalogue-dataset.
 class BuildSiteTest(unittest.TestCase):
     def test_build_site_projects_one_evidence_backed_catalogue_offer(self) -> None:
         """The public CLI builds the one-offer catalogue shown to a prospective lessee."""
+        canonical_offer = json.loads(FIXTURE_DATASET.read_text(encoding="utf-8"))[
+            "catalogueOffers"
+        ][0]
+        for derived_fact in (
+            "upfrontCashRequirement",
+            "nominalBaseOutlay",
+            "nominalMonthlyEquivalent",
+        ):
+            self.assertNotIn(derived_fact, canonical_offer)
+
         with tempfile.TemporaryDirectory() as temporary_directory:
             site_path = Path(temporary_directory) / "site"
             result = subprocess.run(
@@ -41,8 +51,13 @@ class BuildSiteTest(unittest.TestCase):
             projection = json.loads(
                 (site_path / "projection.json").read_text(encoding="utf-8")
             )
+            schema = json.loads(
+                (site_path / "projection-schema.json").read_text(encoding="utf-8")
+            )
 
         self.assertEqual(projection["schemaVersion"], "catalogue-presentation/v1")
+        self.assertEqual(schema["title"], "CataloguePresentation")
+        self.assertIn("PresentationOffer", schema["$defs"])
         self.assertEqual(
             projection["offers"],
             [
@@ -148,27 +163,68 @@ class BuildSiteTest(unittest.TestCase):
                         },
                     },
                     "upfrontCashRequirement": {
-                        "state": "not_stated",
-                        "blockingFacts": ["baseCashFlowStream"],
-                        "evidence": {
-                            "sourceUrl": "https://example.test/ioniq-5",
-                            "wording": "Beregnet af tjenesten fra betalingsstrømmen.",
+                        "state": "known",
+                        "valueDkk": 15990,
+                        "calculation": {
+                            "method": "base_cash_flow_stream",
+                            "inputEvidence": [
+                                {
+                                    "sourceUrl": "https://example.test/ioniq-5",
+                                    "wording": "Førstegangsydelse 15.990 kr.",
+                                },
+                                {
+                                    "sourceUrl": "https://example.test/ioniq-5",
+                                    "wording": "Månedlig ydelse 3.795 kr. i 36 måneder.",
+                                },
+                            ],
                         },
                     },
                     "nominalBaseOutlay": {
-                        "state": "not_stated",
-                        "blockingFacts": ["baseCashFlowStream"],
-                        "evidence": {
-                            "sourceUrl": "https://example.test/ioniq-5",
-                            "wording": "Beregnet af tjenesten fra betalingsstrømmen.",
+                        "state": "known",
+                        "valueDkk": 152610,
+                        "calculation": {
+                            "method": "base_cash_flow_stream",
+                            "inputEvidence": [
+                                {
+                                    "sourceUrl": "https://example.test/ioniq-5",
+                                    "wording": "Førstegangsydelse 15.990 kr.",
+                                },
+                                {
+                                    "sourceUrl": "https://example.test/ioniq-5",
+                                    "wording": "Månedlig ydelse 3.795 kr. i 36 måneder.",
+                                },
+                            ],
                         },
                     },
                     "nominalMonthlyEquivalent": {
-                        "state": "not_stated",
-                        "blockingFacts": ["baseCashFlowStream"],
-                        "evidence": {
-                            "sourceUrl": "https://example.test/ioniq-5",
-                            "wording": "Beregnet af tjenesten fra betalingsstrømmen.",
+                        "state": "known",
+                        "valueDkk": 4239,
+                        "calculation": {
+                            "method": "base_cash_flow_stream",
+                            "inputEvidence": [
+                                {
+                                    "sourceUrl": "https://example.test/ioniq-5",
+                                    "wording": "Førstegangsydelse 15.990 kr.",
+                                },
+                                {
+                                    "sourceUrl": "https://example.test/ioniq-5",
+                                    "wording": "Månedlig ydelse 3.795 kr. i 36 måneder.",
+                                },
+                            ],
+                        },
+                    },
+                    "operationReadiness": {
+                        "upfrontCashRequirement": {
+                            "state": "ready",
+                            "blockingFacts": [],
+                        },
+                        "nominalBaseOutlay": {
+                            "state": "ready",
+                            "blockingFacts": [],
+                        },
+                        "nominalMonthlyEquivalent": {
+                            "state": "ready",
+                            "blockingFacts": [],
                         },
                     },
                     "termMonths": {
@@ -195,6 +251,34 @@ class BuildSiteTest(unittest.TestCase):
                             "wording": "Bilen afleveres ved leasingperiodens udløb.",
                         },
                     },
+                    "cashFlowBreakdown": [
+                        {
+                            "meaning": "Førstegangsydelse",
+                            "direction": "payment",
+                            "amountDkk": 15990,
+                            "amountBasis": "including_vat",
+                            "timing": "acceptance_to_handover",
+                            "recurrenceCount": 1,
+                            "refundability": "not_refundable",
+                            "evidence": {
+                                "sourceUrl": "https://example.test/ioniq-5",
+                                "wording": "Førstegangsydelse 15.990 kr.",
+                            },
+                        },
+                        {
+                            "meaning": "Månedlig ydelse",
+                            "direction": "payment",
+                            "amountDkk": 3795,
+                            "amountBasis": "including_vat",
+                            "timing": "recurring",
+                            "recurrenceCount": 36,
+                            "refundability": "not_refundable",
+                            "evidence": {
+                                "sourceUrl": "https://example.test/ioniq-5",
+                                "wording": "Månedlig ydelse 3.795 kr. i 36 måneder.",
+                            },
+                        },
+                    ],
                 }
             ],
         )
@@ -225,14 +309,52 @@ class BuildSiteTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("must name a site directory", result.stderr)
 
+    def test_build_site_rejects_persisted_derived_comparison_values(self) -> None:
+        dataset = json.loads(FIXTURE_DATASET.read_text(encoding="utf-8"))
+        dataset["catalogueOffers"][0]["nominalBaseOutlay"] = {
+            "state": "known",
+            "valueDkk": 1,
+        }
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            dataset_path = Path(temporary_directory) / "catalogue-dataset.json"
+            dataset_path.write_text(json.dumps(dataset), encoding="utf-8")
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "car_picker",
+                    "build-site",
+                    "--dataset",
+                    str(dataset_path),
+                    "--output",
+                    str(Path(temporary_directory) / "site"),
+                ],
+                cwd=REPOSITORY_ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("must not persist derived comparison values", result.stderr)
+
     def test_build_site_withholds_quarantined_candidates_from_the_active_catalogue(
         self,
     ) -> None:
         """A quarantined offer remains in the dataset but cannot enter the static catalogue."""
         dataset = json.loads(FIXTURE_DATASET.read_text(encoding="utf-8"))
-        quarantined_offer = dataset["catalogueOffers"][0].copy()
+        quarantined_offer = json.loads(json.dumps(dataset["catalogueOffers"][0]))
         quarantined_offer["offerIdentity"] = "terminalen:ioniq-5:quarantined"
         quarantined_offer["admissionStatus"] = "quarantined"
+        quarantined_offer["quarantineReasons"] = [
+            {
+                "fact": "supportedLeasingForm",
+                "state": "unclear",
+                "code": "admission_fact_unclear",
+            }
+        ]
+        dataset["coverage"]["providers"][0]["quarantinedCandidateCount"] = 1
         dataset["catalogueOffers"].append(quarantined_offer)
 
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -271,18 +393,9 @@ class BuildSiteTest(unittest.TestCase):
     ) -> None:
         """The public coverage register describes one complete catalogue dataset."""
         dataset = json.loads(FIXTURE_DATASET.read_text(encoding="utf-8"))
-        dataset["coverage"]["providers"] = [
-            {
-                "name": "Fleasing",
-                "designatedSource": "Fleasing private-offer catalogue and linked details",
-                "quarantinedCandidateCount": 2,
-            },
-            {
-                "name": "Terminalen",
-                "designatedSource": "Terminalen model price page",
-                "quarantinedCandidateCount": 1,
-            },
-        ]
+        dataset["coverage"]["providers"][0]["designatedSource"] = (
+            "Terminalen model price page"
+        )
 
         with tempfile.TemporaryDirectory() as temporary_directory:
             temporary_path = Path(temporary_directory)
@@ -367,10 +480,6 @@ class BuildSiteTest(unittest.TestCase):
             "advertisedMonthlyPayment"
         ]
         dataset["catalogueOffers"].append(missing_monthly_offer)
-        malformed_stream_offer = json.loads(json.dumps(offer))
-        malformed_stream_offer["offerIdentity"] = "terminalen:ioniq-5:malformed-stream"
-        del malformed_stream_offer["baseCashFlowStream"][0]["evidence"]
-        dataset["catalogueOffers"].append(malformed_stream_offer)
 
         with tempfile.TemporaryDirectory() as temporary_directory:
             temporary_path = Path(temporary_directory)
@@ -404,8 +513,8 @@ class BuildSiteTest(unittest.TestCase):
         self.assertEqual(rendered_offer["nominalBaseOutlay"]["valueDkk"], 30000)
         self.assertEqual(rendered_offer["nominalMonthlyEquivalent"]["valueDkk"], 2500)
         self.assertEqual(
-            rendered_offer["nominalBaseOutlay"]["evidence"]["wording"],
-            "Beregnet af tjenesten fra betalingsstrømmen.",
+            rendered_offer["nominalBaseOutlay"]["calculation"]["method"],
+            "base_cash_flow_stream",
         )
         self.assertIn("Oplyst af udbyderen", app_source)
         self.assertIn("Beregnet af tjenesten", app_source)
@@ -436,12 +545,6 @@ class BuildSiteTest(unittest.TestCase):
         self.assertIsNone(
             rendered_missing_monthly_offer["cashFlowBreakdown"][2]["amountDkk"]
         )
-        rendered_malformed_stream_offer = projection["offers"][2]
-        self.assertEqual(
-            rendered_malformed_stream_offer["upfrontCashRequirement"]["blockingFacts"],
-            ["baseCashFlowStream"],
-        )
-        self.assertNotIn("cashFlowBreakdown", rendered_malformed_stream_offer)
 
     def test_build_site_exposes_filterable_offer_facts_without_changing_source_order(
         self,
@@ -466,11 +569,15 @@ class BuildSiteTest(unittest.TestCase):
         second_offer["residualRiskAllocation"] = known_value_fact(
             "lessee", "Lessee bærer restværdirisikoen."
         )
-        second_offer["upfrontCashRequirement"] = known_money_fact(
-            8000, "Udbetaling 8.000 kr."
-        )
         second_offer["termMonths"] = known_value_fact(24, "Løbetid 24 måneder.")
         second_offer["annualMileageKm"] = known_value_fact(15000, "15.000 km om året.")
+        dataset["coverage"]["providers"].append(
+            {
+                "name": "Fleasing",
+                "designatedSource": "Fleasing private-offer catalogue and linked details",
+                "quarantinedCandidateCount": 0,
+            }
+        )
         dataset["catalogueOffers"].append(second_offer)
 
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -615,7 +722,7 @@ class BuildSiteTest(unittest.TestCase):
 
         self.assertNotEqual(result.returncode, 0)
         self.assertIn(
-            "Known detail facts require supported structured values", result.stderr
+            "exposure input kinds must align with required inputs", result.stderr
         )
 
 

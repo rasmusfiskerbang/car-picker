@@ -101,6 +101,28 @@ class StaticArtifactTest(unittest.TestCase):
 
         self.assertEqual(final_app, initial_app)
 
+    def test_invalid_presentation_projection_does_not_replace_the_completed_artifact(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            site_path = Path(temporary_directory) / "site"
+            build_site(FIXTURE_DATASET, site_path)
+            initial_projection = (site_path / "projection.json").read_bytes()
+
+            with patch(
+                "car_picker.publication.project_catalogue",
+                return_value={
+                    "schemaVersion": "catalogue-presentation/v1",
+                    "generatedAt": "2026-07-22T12:00:00Z",
+                },
+            ):
+                with self.assertRaises(ValueError):
+                    build_site(FIXTURE_DATASET, site_path)
+
+            final_projection = (site_path / "projection.json").read_bytes()
+
+        self.assertEqual(final_projection, initial_projection)
+
     def test_serve_site_binds_the_completed_artifact_on_all_interfaces(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             temporary_path = Path(temporary_directory)

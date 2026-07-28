@@ -156,6 +156,14 @@ class ExposureScenario(CatalogueModel):
     rate_dkk: int | None = Field(default=None, ge=0)
     cap_dkk: int | None = Field(default=None, ge=0)
 
+    @model_validator(mode="after")
+    def input_kinds_align_with_inputs(self) -> ExposureScenario:
+        if self.input_kinds is not None and len(self.input_kinds) != len(
+            self.required_inputs
+        ):
+            raise ValueError("exposure input kinds must align with required inputs")
+        return self
+
 
 ServiceFact = Annotated[
     KnownFact[list[ServiceArrangement]] | UnavailableFact,
@@ -311,6 +319,17 @@ def from_legacy_dataset(
     candidates = legacy.pop("catalogueOffers", None)
     if not isinstance(candidates, list):
         return CatalogueDataset.model_validate(legacy)
+    forbidden_derived_facts = {
+        "upfrontCashRequirement",
+        "nominalBaseOutlay",
+        "nominalMonthlyEquivalent",
+        "operationReadiness",
+    }
+    if any(
+        isinstance(candidate, dict) and forbidden_derived_facts.intersection(candidate)
+        for candidate in candidates
+    ):
+        raise ValueError("canonical offers must not persist derived comparison values")
     admitted: list[dict[str, Any]] = []
     quarantined: list[dict[str, Any]] = []
     for candidate_value in candidates:
@@ -318,12 +337,6 @@ def from_legacy_dataset(
             admitted.append(candidate_value)
             continue
         candidate = dict(candidate_value)
-        for derived_name in (
-            "upfrontCashRequirement",
-            "nominalBaseOutlay",
-            "nominalMonthlyEquivalent",
-        ):
-            candidate.pop(derived_name, None)
         normalize_legacy_cash_flow_events(candidate)
         status = candidate.pop("admissionStatus", None)
         if status == "admitted":
@@ -385,6 +398,8 @@ def normalize_legacy_cash_flow_events(candidate: dict[str, Any]) -> None:
     for event in events:
         if not isinstance(event, dict):
             continue
+        if set(event) != {"meaning"}:
+            continue
         event.setdefault("direction", "payment")
         event.setdefault("amountDkk", None)
         event.setdefault("amountBasis", "not_stated")
@@ -392,7 +407,8 @@ def normalize_legacy_cash_flow_events(candidate: dict[str, Any]) -> None:
         event.setdefault("recurrenceCount", None)
         event.setdefault("refundability", "not_stated")
         event.setdefault("includedInBase", True)
-        event.setdefault("blockingFacts", ["baseCashFlowStream"])
+        if event.get("amountDkk") is None or event.get("recurrenceCount") is None:
+            event.setdefault("blockingFacts", ["baseCashFlowStream"])
         event.setdefault(
             "evidence",
             {

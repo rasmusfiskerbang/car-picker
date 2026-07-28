@@ -1,11 +1,120 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from car_picker.catalogue_model import CatalogueOffer, CashFlowEvent
 
 
 ORDINARY_ROUNDING_TOLERANCE_DKK = 1
 NORMAL_COMPLETION_BASE_CASH_FLOW_SCOPE = "normal_completion_base_cash_flows"
+
+
+def calculate_catalogue_offer_comparison(
+    offer: CatalogueOffer,
+) -> dict[str, dict[str, Any]]:
+    """Derive comparison values directly from an admitted canonical offer."""
+    if not canonical_events_are_time_ordered(offer.base_cash_flow_stream):
+        unavailable = unavailable_value("baseCashFlowStream")
+        return comparison_result(
+            unavailable,
+            unavailable,
+            calculate_nominal_monthly_equivalent(
+                unavailable,
+                offer.term_months.model_dump(mode="json", by_alias=True),
+            ),
+        )
+
+    upfront_blockers = canonical_event_blockers(
+        offer.base_cash_flow_stream,
+        relevant_timing="acceptance_to_handover",
+    )
+    upfront = (
+        unavailable_value(*upfront_blockers)
+        if upfront_blockers
+        else known_value(
+            sum(
+                event.amount_dkk * (event.recurrence_count or 1)
+                for event in offer.base_cash_flow_stream
+                if event.timing == "acceptance_to_handover"
+                and event.direction == "payment"
+                and event.amount_dkk is not None
+            )
+        )
+    )
+    outlay_blockers = canonical_event_blockers(offer.base_cash_flow_stream)
+    outlay_blockers.extend(offer.base_cash_flow_blockers or [])
+    nominal_outlay = (
+        unavailable_value(*outlay_blockers)
+        if outlay_blockers
+        else known_value(
+            sum(
+                (1 if event.direction == "payment" else -1)
+                * (event.amount_dkk or 0)
+                * (event.recurrence_count or 1)
+                for event in offer.base_cash_flow_stream
+            )
+        )
+    )
+    assertion = offer.provider_advertised_aggregate
+    if (
+        assertion is not None
+        and nominal_outlay["state"] == "known"
+        and abs(assertion.value_dkk - nominal_outlay["valueDkk"])
+        > ORDINARY_ROUNDING_TOLERANCE_DKK
+    ):
+        nominal_outlay = unavailable_value("providerAdvertisedAggregateMismatch")
+    monthly_equivalent = calculate_nominal_monthly_equivalent(
+        nominal_outlay,
+        offer.term_months.model_dump(mode="json", by_alias=True),
+    )
+    return comparison_result(upfront, nominal_outlay, monthly_equivalent)
+
+
+def comparison_result(
+    upfront: dict[str, Any],
+    nominal_outlay: dict[str, Any],
+    monthly_equivalent: dict[str, Any],
+) -> dict[str, dict[str, Any]]:
+    values = {
+        "upfrontCashRequirement": upfront,
+        "nominalBaseOutlay": nominal_outlay,
+        "nominalMonthlyEquivalent": monthly_equivalent,
+    }
+    return {
+        **values,
+        "operationReadiness": {
+            name: {
+                "state": "ready" if value["state"] == "known" else "blocked",
+                "blockingFacts": value.get("blockingFacts", []),
+            }
+            for name, value in values.items()
+        },
+    }
+
+
+def canonical_events_are_time_ordered(events: list[CashFlowEvent]) -> bool:
+    timing_order = {
+        "acceptance_to_handover": 0,
+        "recurring": 1,
+        "normal_completion_end": 2,
+    }
+    phases = [timing_order[event.timing] for event in events]
+    return phases == sorted(phases)
+
+
+def canonical_event_blockers(
+    events: list[CashFlowEvent],
+    relevant_timing: str | None = None,
+) -> list[str]:
+    blockers: list[str] = []
+    for event in events:
+        if relevant_timing is not None and event.timing != relevant_timing:
+            continue
+        if event.amount_dkk is None or event.recurrence_count is None:
+            blockers.extend(event.blocking_facts or ["baseCashFlowStream"])
+    return sorted(set(blockers))
 
 
 def calculate_comparison_values(offer: Mapping[str, Any]) -> dict[str, dict[str, Any]]:

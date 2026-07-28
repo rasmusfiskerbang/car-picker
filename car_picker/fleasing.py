@@ -162,15 +162,6 @@ def map_detail_page(
             upfront_payment, monthly_payment, term_months
         ),
         "baseCashFlowBlockers": ["normalEndMechanism"],
-        "upfrontCashRequirement": not_stated_fact(
-            discovered_offer.url, detail.private_tab_fragment
-        ),
-        "nominalBaseOutlay": not_stated_fact(
-            discovered_offer.url, detail.private_tab_fragment
-        ),
-        "nominalMonthlyEquivalent": not_stated_fact(
-            discovered_offer.url, detail.private_tab_fragment
-        ),
         "annualMileageKm": not_stated_fact(
             discovered_offer.url, detail.private_tab_fragment
         ),
@@ -246,9 +237,6 @@ def quarantined_unavailable_detail_candidate(
             }
         ],
         "baseCashFlowBlockers": ["advertisedMonthlyPayment", "termMonths"],
-        "upfrontCashRequirement": unavailable_fact,
-        "nominalBaseOutlay": unavailable_fact,
-        "nominalMonthlyEquivalent": unavailable_fact,
         "annualMileageKm": unavailable_fact,
         "normalEndMechanism": unavailable_fact,
         "residualRiskAllocation": unavailable_fact,

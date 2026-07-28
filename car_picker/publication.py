@@ -4,16 +4,25 @@ import json
 import os
 import shutil
 import tempfile
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
-from car_picker.catalogue_model import from_legacy_dataset, to_legacy_dataset
-from car_picker.comparison import calculate_comparison_values, is_time_ordered
+from car_picker.catalogue_model import (
+    CatalogueDataset,
+    CatalogueOffer,
+    KnownFact,
+    VehicleSpecification,
+    from_legacy_dataset,
+)
+from car_picker.comparison import calculate_catalogue_offer_comparison
+from car_picker.presentation_model import (
+    CataloguePresentation,
+    presentation_json_schema,
+)
 
 
 PRESENTATION_SCHEMA_VERSION = "catalogue-presentation/v1"
-FACT_STATES = {"known", "not_stated", "unclear", "conflicting", "not_applicable"}
 STATIC_ARTIFACT_FILENAMES = {
     "app.js",
     "index.html",
@@ -30,226 +39,15 @@ FORBIDDEN_ARTIFACT_KEYS = {
     "sourceMetadata",
 }
 
-PRESENTATION_SCHEMA: dict[str, Any] = {
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "$id": "https://car-picker.local/schemas/catalogue-presentation-v1.json",
-    "type": "object",
-    "additionalProperties": False,
-    "required": ["schemaVersion", "generatedAt", "coverage", "coverageEnded", "offers"],
-    "properties": {
-        "schemaVersion": {"const": PRESENTATION_SCHEMA_VERSION},
-        "generatedAt": {"type": "string"},
-        "coverage": {
-            "type": "object",
-            "additionalProperties": False,
-            "required": ["providers"],
-            "properties": {
-                "providers": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "additionalProperties": False,
-                        "required": [
-                            "name",
-                            "designatedSource",
-                            "quarantinedCandidateCount",
-                        ],
-                        "properties": {
-                            "name": {"type": "string"},
-                            "designatedSource": {"type": "string"},
-                            "quarantinedCandidateCount": {
-                                "type": "integer",
-                                "minimum": 0,
-                            },
-                        },
-                    },
-                },
-            },
-        },
-        "coverageEnded": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "additionalProperties": False,
-                "required": ["name", "coverageEndedAt"],
-                "properties": {
-                    "name": {"type": "string"},
-                    "coverageEndedAt": {"type": "string"},
-                },
-            },
-        },
-        "offers": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "additionalProperties": False,
-                "required": [
-                    "offerIdentity",
-                    "provider",
-                    "providerSourceUrl",
-                    "vehicleSpecification",
-                    "supportedLeasingForm",
-                    "providerFormLabel",
-                    "residualRiskAllocation",
-                    "registrationTaxTreatment",
-                    "serviceArrangements",
-                    "exclusions",
-                    "exposureScenarios",
-                    "advertisedMonthlyPayment",
-                    "upfrontCashRequirement",
-                    "nominalBaseOutlay",
-                    "nominalMonthlyEquivalent",
-                    "termMonths",
-                    "annualMileageKm",
-                    "normalEndMechanism",
-                ],
-                "properties": {
-                    "offerIdentity": {"type": "string"},
-                    "provider": {"type": "string"},
-                    "providerSourceUrl": {"type": "string"},
-                    "vehicleSpecification": {"$ref": "#/$defs/valueFact"},
-                    "supportedLeasingForm": {"$ref": "#/$defs/valueFact"},
-                    "providerFormLabel": {"$ref": "#/$defs/valueFact"},
-                    "residualRiskAllocation": {"$ref": "#/$defs/valueFact"},
-                    "registrationTaxTreatment": {"$ref": "#/$defs/valueFact"},
-                    "serviceArrangements": {"$ref": "#/$defs/serviceListFact"},
-                    "exclusions": {"$ref": "#/$defs/serviceListFact"},
-                    "exposureScenarios": {"$ref": "#/$defs/exposureListFact"},
-                    "advertisedMonthlyPayment": {"$ref": "#/$defs/moneyFact"},
-                    "upfrontCashRequirement": {"$ref": "#/$defs/moneyFact"},
-                    "nominalBaseOutlay": {"$ref": "#/$defs/moneyFact"},
-                    "nominalMonthlyEquivalent": {"$ref": "#/$defs/moneyFact"},
-                    "termMonths": {"$ref": "#/$defs/valueFact"},
-                    "annualMileageKm": {"$ref": "#/$defs/valueFact"},
-                    "normalEndMechanism": {"$ref": "#/$defs/valueFact"},
-                    "cashFlowBreakdown": {
-                        "type": "array",
-                        "items": {"$ref": "#/$defs/cashFlowEvent"},
-                    },
-                },
-            },
-        },
-    },
-    "$defs": {
-        "evidence": {
-            "type": "object",
-            "additionalProperties": False,
-            "required": ["sourceUrl", "wording"],
-            "properties": {
-                "sourceUrl": {"type": "string"},
-                "wording": {"type": "string"},
-            },
-        },
-        "moneyFact": {
-            "type": "object",
-            "additionalProperties": False,
-            "required": ["state", "evidence"],
-            "properties": {
-                "state": {"enum": sorted(FACT_STATES)},
-                "valueDkk": {"type": "integer"},
-                "evidence": {"$ref": "#/$defs/evidence"},
-                "blockingFacts": {"type": "array", "items": {"type": "string"}},
-            },
-        },
-        "valueFact": {
-            "type": "object",
-            "additionalProperties": False,
-            "required": ["state", "evidence"],
-            "properties": {
-                "state": {"enum": sorted(FACT_STATES)},
-                "value": {"type": ["string", "integer"]},
-                "evidence": {"$ref": "#/$defs/evidence"},
-            },
-        },
-        "serviceListFact": {
-            "type": "object",
-            "additionalProperties": False,
-            "required": ["state", "evidence"],
-            "properties": {
-                "state": {"enum": sorted(FACT_STATES)},
-                "value": {
-                    "type": "array",
-                    "items": {"$ref": "#/$defs/serviceArrangement"},
-                },
-                "evidence": {"$ref": "#/$defs/evidence"},
-            },
-        },
-        "serviceArrangement": {
-            "type": "object",
-            "additionalProperties": False,
-            "required": ["category", "treatment", "scope"],
-            "properties": {
-                "category": {"type": "string"},
-                "treatment": {
-                    "enum": ["included", "optional", "required_external", "excluded"]
-                },
-                "scope": {"type": "string"},
-            },
-        },
-        "exposureListFact": {
-            "type": "object",
-            "additionalProperties": False,
-            "required": ["state", "evidence"],
-            "properties": {
-                "state": {"enum": sorted(FACT_STATES)},
-                "value": {
-                    "type": "array",
-                    "items": {"$ref": "#/$defs/exposureScenario"},
-                },
-                "evidence": {"$ref": "#/$defs/evidence"},
-            },
-        },
-        "exposureScenario": {
-            "type": "object",
-            "additionalProperties": False,
-            "required": ["kind", "trigger", "requiredInputs"],
-            "properties": {
-                "kind": {"type": "string"},
-                "trigger": {"type": "string"},
-                "requiredInputs": {"type": "array", "items": {"type": "string"}},
-                "inputKinds": {"type": "array", "items": {"type": "string"}},
-                "formula": {"type": "string"},
-                "amountDkk": {"type": "integer", "minimum": 0},
-                "rateDkk": {"type": "integer", "minimum": 0},
-                "capDkk": {"type": "integer", "minimum": 0},
-            },
-        },
-        "cashFlowEvent": {
-            "type": "object",
-            "additionalProperties": False,
-            "required": [
-                "meaning",
-                "direction",
-                "amountDkk",
-                "amountBasis",
-                "timing",
-                "recurrenceCount",
-                "refundability",
-                "evidence",
-            ],
-            "properties": {
-                "meaning": {"type": "string"},
-                "direction": {"type": "string"},
-                "amountDkk": {"type": ["integer", "null"]},
-                "amountBasis": {"type": "string"},
-                "timing": {"type": "string"},
-                "recurrenceCount": {"type": ["integer", "null"], "minimum": 1},
-                "refundability": {"type": "string"},
-                "blockingFacts": {"type": "array", "items": {"type": "string"}},
-                "evidence": {"$ref": "#/$defs/evidence"},
-            },
-        },
-    },
-}
+PRESENTATION_SCHEMA = presentation_json_schema()
 
 
 def build_site(dataset_path: Path, output_path: Path) -> None:
     """Project a canonical catalogue dataset and atomically replace a static site."""
-    dataset = to_legacy_dataset(
-        from_legacy_dataset(
-            dict(read_json(dataset_path)),
-            require_complete_replacement=False,
-        )
+    source = dict(read_json(dataset_path))
+    dataset = from_legacy_dataset(
+        source,
+        require_complete_replacement=True,
     )
     projection = project_catalogue(dataset)
     validate_presentation_projection(projection)
@@ -266,91 +64,40 @@ def read_json(path: Path) -> Mapping[str, Any]:
     return object_value(value, "canonical catalogue dataset")
 
 
-def project_catalogue(dataset: Mapping[str, Any]) -> dict[str, Any]:
-    require_equal(dataset, "schemaVersion", "catalogue-dataset/v1")
-    generated_at = string_value(dataset, "generatedAt")
-    coverage = object_value(dataset.get("coverage"), "coverage")
-    provider_rows = list_value(coverage.get("providers"), "coverage.providers")
-    providers = [
-        project_provider(object_value(row, "coverage provider"))
-        for row in provider_rows
-    ]
-    ended_provider_rows = list_value(dataset.get("coverageEnded", []), "coverageEnded")
-    ended_providers = [
-        project_ended_provider(object_value(row, "ended coverage provider"))
-        for row in ended_provider_rows
-    ]
-    offer_rows = list_value(dataset.get("catalogueOffers"), "catalogueOffers")
-    admitted_offers = [
-        object_value(row, "catalogue offer")
-        for row in offer_rows
-        if admission_status(object_value(row, "catalogue offer")) == "admitted"
-    ]
+def project_catalogue(dataset: CatalogueDataset) -> dict[str, Any]:
     return {
         "schemaVersion": PRESENTATION_SCHEMA_VERSION,
-        "generatedAt": generated_at,
-        "coverage": {"providers": providers},
-        "coverageEnded": ended_providers,
-        "offers": [project_offer(offer) for offer in admitted_offers],
+        "generatedAt": dataset.generated_at,
+        "coverage": {
+            "providers": [
+                provider.model_dump(mode="json", by_alias=True)
+                for provider in dataset.coverage.providers
+            ]
+        },
+        "coverageEnded": [
+            provider.model_dump(mode="json", by_alias=True)
+            for provider in dataset.coverage_ended
+        ],
+        "offers": [project_offer(offer) for offer in dataset.catalogue_offers],
     }
 
 
-def project_provider(provider: Mapping[str, Any]) -> dict[str, Any]:
-    count = provider.get("quarantinedCandidateCount")
-    if not isinstance(count, int) or isinstance(count, bool) or count < 0:
-        raise ValueError(
-            "coverage provider.quarantinedCandidateCount must be a non-negative integer"
-        )
-    return {
-        "name": string_value(provider, "name"),
-        "designatedSource": string_value(provider, "designatedSource"),
-        "quarantinedCandidateCount": count,
-    }
-
-
-def project_ended_provider(provider: Mapping[str, Any]) -> dict[str, str]:
-    if set(provider) != {"name", "coverageEndedAt"}:
-        raise ValueError(
-            "ended provider coverage may retain only the provider name and end time"
-        )
-    return {
-        "name": string_value(provider, "name"),
-        "coverageEndedAt": string_value(provider, "coverageEndedAt"),
-    }
-
-
-def project_offer(offer: Mapping[str, Any]) -> dict[str, Any]:
-    require_equal(offer, "admissionStatus", "admitted")
-    comparison_values = calculate_comparison_values(offer)
+def project_offer(offer: CatalogueOffer) -> dict[str, Any]:
+    comparison_values = calculate_catalogue_offer_comparison(offer)
+    source_url = canonical_source_url(offer)
     projected_offer = {
-        "offerIdentity": string_value(offer, "offerIdentity"),
-        "provider": string_value(offer, "provider"),
-        "providerSourceUrl": derived_value_source_url(offer),
-        "vehicleSpecification": project_vehicle_specification(
-            offer.get("vehicleSpecification")
-        ),
-        "supportedLeasingForm": project_value_fact(offer.get("supportedLeasingForm")),
-        "providerFormLabel": project_provider_form_label(
-            offer.get("supportedLeasingForm")
-        ),
-        "residualRiskAllocation": project_value_fact(
-            offer.get("residualRiskAllocation")
-        ),
-        "registrationTaxTreatment": project_registration_tax_fact(
-            offer.get("registrationTaxTreatment")
-        ),
-        "serviceArrangements": project_list_fact(
-            offer.get("serviceArrangements"), valid_service_arrangement
-        ),
-        "exclusions": project_list_fact(
-            offer.get("exclusions"), valid_service_arrangement
-        ),
-        "exposureScenarios": project_list_fact(
-            offer.get("exposureScenarios"), valid_exposure_scenario
-        ),
-        "advertisedMonthlyPayment": project_money_fact(
-            offer.get("advertisedMonthlyPayment")
-        ),
+        "offerIdentity": offer.offer_identity,
+        "provider": offer.provider,
+        "providerSourceUrl": source_url,
+        "vehicleSpecification": project_canonical_vehicle(offer),
+        "supportedLeasingForm": serialize_fact(offer.supported_leasing_form),
+        "providerFormLabel": project_canonical_provider_form_label(offer),
+        "residualRiskAllocation": serialize_fact(offer.residual_risk_allocation),
+        "registrationTaxTreatment": serialize_fact(offer.registration_tax_treatment),
+        "serviceArrangements": serialize_fact(offer.service_arrangements),
+        "exclusions": serialize_fact(offer.exclusions),
+        "exposureScenarios": serialize_fact(offer.exposure_scenarios),
+        "advertisedMonthlyPayment": serialize_fact(offer.advertised_monthly_payment),
         "upfrontCashRequirement": project_derived_money_fact(
             comparison_values["upfrontCashRequirement"], offer
         ),
@@ -360,398 +107,87 @@ def project_offer(offer: Mapping[str, Any]) -> dict[str, Any]:
         "nominalMonthlyEquivalent": project_derived_money_fact(
             comparison_values["nominalMonthlyEquivalent"], offer
         ),
-        "termMonths": project_value_fact(offer.get("termMonths")),
-        "annualMileageKm": project_value_fact(offer.get("annualMileageKm")),
-        "normalEndMechanism": project_value_fact(offer.get("normalEndMechanism")),
+        "operationReadiness": comparison_values["operationReadiness"],
+        "termMonths": serialize_fact(offer.term_months),
+        "annualMileageKm": serialize_fact(offer.annual_mileage_km),
+        "normalEndMechanism": serialize_fact(offer.normal_end_mechanism),
     }
-    if isinstance(offer.get("baseCashFlowStream"), list):
-        breakdown = project_cash_flow_breakdown(offer["baseCashFlowStream"])
-        if breakdown:
-            projected_offer["cashFlowBreakdown"] = breakdown
+    projected_offer["cashFlowBreakdown"] = [
+        {
+            key: value
+            for key, value in event.model_dump(
+                mode="json",
+                by_alias=True,
+                exclude={"included_in_base"},
+                exclude_none=False,
+            ).items()
+            if value is not None or key in {"amountDkk", "recurrenceCount"}
+        }
+        for event in offer.base_cash_flow_stream
+    ]
     return projected_offer
 
 
 def project_derived_money_fact(
-    value: Mapping[str, Any], offer: Mapping[str, Any]
+    value: Mapping[str, Any], offer: CatalogueOffer
 ) -> dict[str, Any]:
-    evidence = {
-        "sourceUrl": derived_value_source_url(offer),
-        "wording": "Beregnet af tjenesten fra betalingsstrømmen.",
+    calculation = {
+        "method": "base_cash_flow_stream",
+        "inputEvidence": [
+            event.evidence.model_dump(mode="json", by_alias=True)
+            for event in offer.base_cash_flow_stream
+        ],
     }
     if value["state"] == "known":
-        return {"state": "known", "valueDkk": value["valueDkk"], "evidence": evidence}
+        return {
+            "state": "known",
+            "valueDkk": value["valueDkk"],
+            "calculation": calculation,
+        }
     return {
         "state": "not_stated",
-        "evidence": evidence,
+        "calculation": calculation,
         "blockingFacts": value["blockingFacts"],
     }
 
 
-def derived_value_source_url(offer: Mapping[str, Any]) -> str:
-    canonical_url = offer.get("canonicalOfferUrl")
-    if isinstance(canonical_url, str) and canonical_url:
-        return canonical_url
-    events = offer.get("baseCashFlowStream")
-    if isinstance(events, list):
-        for event in events:
-            if not isinstance(event, Mapping):
-                continue
-            evidence = event.get("evidence")
-            source_url = (
-                evidence.get("sourceUrl") if isinstance(evidence, Mapping) else None
-            )
-            if isinstance(source_url, str) and source_url:
-                return source_url
-    for field_name in (
-        "upfrontCashRequirement",
-        "nominalBaseOutlay",
-        "nominalMonthlyEquivalent",
+def serialize_fact(value: Any) -> dict[str, Any]:
+    if value is None:
+        raise ValueError("admitted catalogue offer requires public comparison facts")
+    return cast(
+        dict[str, Any],
+        value.model_dump(mode="json", by_alias=True, exclude_none=True),
+    )
+
+
+def project_canonical_vehicle(offer: CatalogueOffer) -> dict[str, Any]:
+    fact = serialize_fact(offer.vehicle_specification)
+    if isinstance(offer.vehicle_specification, KnownFact) and isinstance(
+        offer.vehicle_specification.value, VehicleSpecification
     ):
-        fact = offer.get(field_name)
-        if isinstance(fact, Mapping):
-            evidence = fact.get("evidence")
-            if isinstance(evidence, Mapping):
-                source_url = evidence.get("sourceUrl")
-                if isinstance(source_url, str) and source_url:
-                    return source_url
-    raise ValueError("base cash-flow stream requires at least one source URL")
-
-
-def project_cash_flow_breakdown(events: list[Any]) -> list[dict[str, Any]]:
-    if not all(isinstance(event, Mapping) for event in events):
-        return []
-    event_rows = [event for event in events if isinstance(event, Mapping)]
-    if not is_time_ordered(event_rows) or not all(
-        cash_flow_event_has_presentation_shape(event) for event in event_rows
-    ):
-        return []
-    return [project_cash_flow_event(event) for event in event_rows]
-
-
-def cash_flow_event_has_presentation_shape(event: Mapping[str, Any]) -> bool:
-    required_strings = (
-        "meaning",
-        "direction",
-        "amountBasis",
-        "timing",
-        "refundability",
-    )
-    evidence = event.get("evidence")
-    return (
-        all(
-            isinstance(event.get(field), str) and event[field]
-            for field in required_strings
-        )
-        and isinstance(evidence, Mapping)
-        and isinstance(evidence.get("sourceUrl"), str)
-        and bool(evidence["sourceUrl"])
-        and isinstance(evidence.get("wording"), str)
-        and bool(evidence["wording"])
-        and valid_or_missing_cash_flow_number(event.get("amountDkk"))
-        and valid_or_missing_recurrence_count(event.get("recurrenceCount", 1))
-        and (
-            (
-                event.get("amountDkk") is not None
-                and event.get("recurrenceCount", 1) is not None
-            )
-            or has_precise_blocking_facts(event.get("blockingFacts"))
-        )
-    )
-
-
-def has_precise_blocking_facts(value: Any) -> bool:
-    return (
-        isinstance(value, list)
-        and bool(value)
-        and all(isinstance(item, str) and item for item in value)
-    )
-
-
-def project_cash_flow_event(event: Mapping[str, Any]) -> dict[str, Any]:
-    amount, recurrence_count, blocking_facts = checked_cash_flow_event_values(
-        event, "base cash-flow event"
-    )
-    evidence_value = object_value(event.get("evidence"), "base cash-flow evidence")
-    projected_event = {
-        "meaning": string_value(event, "meaning"),
-        "direction": string_value(event, "direction"),
-        "amountDkk": amount,
-        "amountBasis": amount_basis(event),
-        "timing": string_value(event, "timing"),
-        "recurrenceCount": recurrence_count,
-        "refundability": string_value(event, "refundability"),
-        "evidence": {
-            "sourceUrl": string_value(evidence_value, "sourceUrl"),
-            "wording": string_value(evidence_value, "wording"),
-        },
-    }
-    if blocking_facts:
-        projected_event["blockingFacts"] = blocking_facts
-    return projected_event
-
-
-def valid_or_missing_cash_flow_number(value: Any) -> bool:
-    return value is None or (
-        isinstance(value, int) and not isinstance(value, bool) and value >= 0
-    )
-
-
-def valid_or_missing_recurrence_count(value: Any) -> bool:
-    return value is None or (
-        isinstance(value, int) and not isinstance(value, bool) and value >= 1
-    )
-
-
-def checked_cash_flow_event_values(
-    event: Mapping[str, Any], context: str
-) -> tuple[Any, Any, list[str]]:
-    recurrence_count = event.get("recurrenceCount", 1)
-    amount = event.get("amountDkk")
-    blocking_facts = string_list_value(
-        event.get("blockingFacts", []), f"{context} blockingFacts"
-    )
-    if not valid_or_missing_recurrence_count(recurrence_count):
-        raise ValueError(
-            f"{context} recurrenceCount must be a positive integer or null"
-        )
-    if not valid_or_missing_cash_flow_number(amount):
-        raise ValueError(f"{context} amountDkk must be a non-negative integer or null")
-    if (amount is None or recurrence_count is None) and not blocking_facts:
-        raise ValueError(f"missing {context} values require precise blocking facts")
-    return amount, recurrence_count, blocking_facts
-
-
-def amount_basis(event: Mapping[str, Any]) -> str:
-    basis = string_value(event, "amountBasis")
-    if basis not in {"including_vat", "excluding_vat", "not_stated"}:
-        raise ValueError(
-            "base cash-flow event amountBasis must be a supported amount basis"
-        )
-    return basis
-
-
-def admission_status(offer: Mapping[str, Any]) -> str:
-    status = string_value(offer, "admissionStatus")
-    if status not in {"admitted", "quarantined"}:
-        raise ValueError(f"Unknown admission status: {status}")
-    return status
-
-
-def project_vehicle_specification(value: Any) -> dict[str, Any]:
-    fact = project_fact(value)
-    if fact["state"] == "known":
-        specification = object_value(
-            object_value(value, "vehicle specification").get("value"), "vehicle value"
-        )
+        vehicle = offer.vehicle_specification.value
         fact["value"] = " ".join(
-            string_value(specification, field_name)
-            for field_name in ("make", "model", "trim")
+            part for part in (vehicle.make, vehicle.model, vehicle.trim) if part
         )
     return fact
 
 
-def project_money_fact(value: Any) -> dict[str, Any]:
-    return project_known_value_fact(
-        value,
-        "valueDkk",
-        lambda amount: isinstance(amount, int) and not isinstance(amount, bool),
-        "Known money facts require an integer valueDkk",
-    )
-
-
-def project_value_fact(value: Any) -> dict[str, Any]:
-    return project_known_value_fact(
-        value,
-        "value",
-        lambda known_value: (
-            isinstance(known_value, (str, int)) and not isinstance(known_value, bool)
-        ),
-        "Known value facts require a string or integer value",
-    )
-
-
-def project_provider_form_label(value: Any) -> dict[str, Any]:
-    fact = project_fact(value)
+def project_canonical_provider_form_label(offer: CatalogueOffer) -> dict[str, Any]:
+    fact = serialize_fact(offer.supported_leasing_form)
     if fact["state"] == "known":
-        fact["value"] = fact["evidence"]["wording"]
+        fact["value"] = offer.supported_leasing_form.evidence.wording
     return fact
 
 
-def project_registration_tax_fact(value: Any) -> dict[str, Any]:
-    return project_known_value_fact(
-        value,
-        "value",
-        lambda known_value: known_value in {"full", "proportional"},
-        "Known registration-tax treatment must be full or proportional",
-    )
-
-
-def project_list_fact(
-    value: Any, valid_item: Callable[[Mapping[str, Any]], bool]
-) -> dict[str, Any]:
-    fact = project_fact(value)
-    if fact["state"] == "known":
-        items = list_value(
-            object_value(value, "offer fact").get("value"), "offer fact value"
-        )
-        if not all(isinstance(item, Mapping) and valid_item(item) for item in items):
-            raise ValueError("Known detail facts require supported structured values")
-        fact["value"] = [dict(item) for item in items]
-    return fact
-
-
-def valid_service_arrangement(value: Mapping[str, Any]) -> bool:
-    return all(
-        isinstance(value.get(field), str) and value[field]
-        for field in ("category", "treatment", "scope")
-    ) and value["treatment"] in {
-        "included",
-        "optional",
-        "required_external",
-        "excluded",
-    }
-
-
-def valid_exposure_scenario(value: Mapping[str, Any]) -> bool:
-    inputs = value.get("requiredInputs")
-    input_kinds = value.get("inputKinds")
-    return (
-        all(
-            isinstance(value.get(field), str) and value[field]
-            for field in ("kind", "trigger")
-        )
-        and isinstance(inputs, list)
-        and all(isinstance(item, str) and item for item in inputs)
-        and (
-            input_kinds is None
-            or (
-                isinstance(input_kinds, list)
-                and len(input_kinds) == len(inputs)
-                and all(isinstance(item, str) and item for item in input_kinds)
-            )
-        )
-        and all(
-            key not in value
-            or (
-                isinstance(value[key], int)
-                and not isinstance(value[key], bool)
-                and value[key] >= 0
-            )
-            for key in ("amountDkk", "rateDkk", "capDkk")
-        )
-        and (
-            "formula" not in value
-            or (isinstance(value["formula"], str) and value["formula"])
-        )
-    )
-
-
-def project_known_value_fact(
-    value: Any,
-    value_key: str,
-    is_valid: Callable[[Any], bool],
-    error_message: str,
-) -> dict[str, Any]:
-    fact = project_fact(value)
-    if fact["state"] == "known":
-        known_value = object_value(value, "offer fact").get(value_key)
-        if not is_valid(known_value):
-            raise ValueError(error_message)
-        fact[value_key] = known_value
-    return fact
-
-
-def project_fact(value: Any) -> dict[str, Any]:
-    fact = object_value(value, "offer fact")
-    state = string_value(fact, "state")
-    if state not in FACT_STATES:
-        raise ValueError(f"Unknown offer fact state: {state}")
-    evidence = object_value(fact.get("evidence"), "source evidence")
-    return {
-        "state": state,
-        "evidence": {
-            "sourceUrl": string_value(evidence, "sourceUrl"),
-            "wording": string_value(evidence, "wording"),
-        },
-    }
+def canonical_source_url(offer: CatalogueOffer) -> str:
+    if offer.canonical_offer_url:
+        return offer.canonical_offer_url
+    return offer.base_cash_flow_stream[0].evidence.source_url
 
 
 def validate_presentation_projection(projection: Mapping[str, Any]) -> None:
     """Validate the browser contract before it is published."""
-    require_equal(projection, "schemaVersion", PRESENTATION_SCHEMA_VERSION)
-    string_value(projection, "generatedAt")
-    coverage = object_value(projection.get("coverage"), "coverage")
-    for provider in list_value(coverage.get("providers"), "coverage.providers"):
-        project_provider(object_value(provider, "coverage provider"))
-    for provider in list_value(projection.get("coverageEnded"), "coverageEnded"):
-        project_ended_provider(object_value(provider, "ended coverage provider"))
-    offers = list_value(projection.get("offers"), "offers")
-    for offer in offers:
-        projection_offer = object_value(offer, "presentation offer")
-        for field_name in ("offerIdentity", "provider", "providerSourceUrl"):
-            string_value(projection_offer, field_name)
-        for field_name in (
-            "vehicleSpecification",
-            "supportedLeasingForm",
-            "providerFormLabel",
-            "residualRiskAllocation",
-        ):
-            validate_projected_fact(projection_offer.get(field_name), "value")
-        validate_projected_fact(
-            projection_offer.get("registrationTaxTreatment"), "value"
-        )
-        for field_name in ("serviceArrangements", "exclusions", "exposureScenarios"):
-            validate_projected_list_fact(projection_offer.get(field_name))
-        for field_name in (
-            "advertisedMonthlyPayment",
-            "upfrontCashRequirement",
-            "nominalBaseOutlay",
-            "nominalMonthlyEquivalent",
-        ):
-            validate_projected_fact(projection_offer.get(field_name), "valueDkk")
-        for field_name in ("termMonths", "annualMileageKm", "normalEndMechanism"):
-            validate_projected_fact(projection_offer.get(field_name), "value")
-        if "cashFlowBreakdown" in projection_offer:
-            for event in list_value(
-                projection_offer["cashFlowBreakdown"], "cashFlowBreakdown"
-            ):
-                validate_projected_cash_flow_event(
-                    object_value(event, "cash-flow event")
-                )
-
-
-def validate_projected_fact(value: Any, value_key: str) -> None:
-    fact = object_value(value, "presentation offer fact")
-    state = string_value(fact, "state")
-    if state not in FACT_STATES:
-        raise ValueError(f"Unknown offer fact state: {state}")
-    evidence = object_value(fact.get("evidence"), "source evidence")
-    string_value(evidence, "sourceUrl")
-    string_value(evidence, "wording")
-    if state == "known" and value_key not in fact:
-        raise ValueError(f"Known presentation offer fact requires {value_key}")
-
-
-def validate_projected_list_fact(value: Any) -> None:
-    fact = object_value(value, "presentation list fact")
-    state = string_value(fact, "state")
-    if state not in FACT_STATES:
-        raise ValueError(f"Unknown presentation fact state: {state}")
-    evidence = object_value(fact.get("evidence"), "source evidence")
-    string_value(evidence, "sourceUrl")
-    string_value(evidence, "wording")
-    if state == "known":
-        list_value(fact.get("value"), "known presentation list fact value")
-
-
-def validate_projected_cash_flow_event(event: Mapping[str, Any]) -> None:
-    for field_name in ("meaning", "direction", "timing", "refundability"):
-        string_value(event, field_name)
-    amount_basis(event)
-    checked_cash_flow_event_values(event, "cash-flow event")
-    evidence = object_value(event.get("evidence"), "cash-flow event evidence")
-    string_value(evidence, "sourceUrl")
-    string_value(evidence, "wording")
+    CataloguePresentation.model_validate(projection)
 
 
 def write_site_atomically(output_path: Path, projection: Mapping[str, Any]) -> None:
@@ -884,31 +320,6 @@ def object_value(value: Any, name: str) -> Mapping[str, Any]:
     if not isinstance(value, Mapping):
         raise ValueError(f"{name} must be an object")
     return value
-
-
-def list_value(value: Any, name: str) -> list[Any]:
-    if not isinstance(value, list):
-        raise ValueError(f"{name} must be an array")
-    return value
-
-
-def string_list_value(value: Any, name: str) -> list[str]:
-    items = list_value(value, name)
-    if not all(isinstance(item, str) and item for item in items):
-        raise ValueError(f"{name} must contain non-empty strings")
-    return items
-
-
-def string_value(value: Mapping[str, Any], name: str) -> str:
-    field_value = value.get(name)
-    if not isinstance(field_value, str) or not field_value:
-        raise ValueError(f"{name} must be a non-empty string")
-    return field_value
-
-
-def require_equal(value: Mapping[str, Any], name: str, expected: str) -> None:
-    if value.get(name) != expected:
-        raise ValueError(f"{name} must equal {expected}")
 
 
 def index_html() -> str:
@@ -1469,6 +880,19 @@ function factRow(label, fact, formatter, origin = "Oplyst af udbyderen") {{
 function evidenceDetails(label, fact) {{
   const evidence = document.createElement("details");
   const summary = document.createElement("summary");
+  if (fact.calculation) {{
+    summary.textContent = `Beregning for ${{label}}`;
+    const method = text("p", "Beregnet fra tilbuddets dokumenterede betalingsstrøm.");
+    evidence.append(summary, method);
+    fact.calculation.inputEvidence.forEach((input) => {{
+      const link = document.createElement("a");
+      link.href = input.sourceUrl;
+      link.textContent = input.wording;
+      link.rel = "noreferrer";
+      evidence.append(link);
+    }});
+    return evidence;
+  }}
   summary.textContent = `Kilde for ${{label}}`;
   const wording = text("p", fact.evidence.wording);
   const link = document.createElement("a");

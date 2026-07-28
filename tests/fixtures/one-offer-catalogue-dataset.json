@@ -99,30 +99,6 @@
           "wording": "Månedlig ydelse 3.795 kr."
         }
       },
-      "upfrontCashRequirement": {
-        "state": "known",
-        "valueDkk": 15990,
-        "evidence": {
-          "sourceUrl": "https://example.test/ioniq-5",
-          "wording": "Førstegangsydelse 15.990 kr."
-        }
-      },
-      "nominalBaseOutlay": {
-        "state": "known",
-        "valueDkk": 152610,
-        "evidence": {
-          "sourceUrl": "https://example.test/ioniq-5",
-          "wording": "36 betalinger og førstegangsydelse."
-        }
-      },
-      "nominalMonthlyEquivalent": {
-        "state": "known",
-        "valueDkk": 4239,
-        "evidence": {
-          "sourceUrl": "https://example.test/ioniq-5",
-          "wording": "152.610 kr. fordelt over 36 måneder."
-        }
-      },
       "termMonths": {
         "state": "known",
         "value": 36,
@@ -149,7 +125,32 @@
       },
       "baseCashFlowStream": [
         {
-          "meaning": "Fixturebetaling med ufuldstændig beløbsdokumentation."
+          "meaning": "Førstegangsydelse",
+          "direction": "payment",
+          "amountDkk": 15990,
+          "amountBasis": "including_vat",
+          "timing": "acceptance_to_handover",
+          "recurrenceCount": 1,
+          "refundability": "not_refundable",
+          "includedInBase": true,
+          "evidence": {
+            "sourceUrl": "https://example.test/ioniq-5",
+            "wording": "Førstegangsydelse 15.990 kr."
+          }
+        },
+        {
+          "meaning": "Månedlig ydelse",
+          "direction": "payment",
+          "amountDkk": 3795,
+          "amountBasis": "including_vat",
+          "timing": "recurring",
+          "recurrenceCount": 36,
+          "refundability": "not_refundable",
+          "includedInBase": true,
+          "evidence": {
+            "sourceUrl": "https://example.test/ioniq-5",
+            "wording": "Månedlig ydelse 3.795 kr. i 36 måneder."
+          }
         }
       ],
       "sourceMetadata": {

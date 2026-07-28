@@ -163,6 +163,9 @@ class ProviderWithdrawalTest(unittest.TestCase):
             source_option="--fleasing-catalogue-url",
             source_path="/biler/",
         )
+        self.assertEqual(run.withdrawal.returncode, 0, run.withdrawal.stderr)
+        self.assertEqual(run.refresh.returncode, 0, run.refresh.stderr)
+        self.assertEqual(run.build.returncode, 0, run.build.stderr)
         dataset = json.loads(run.dataset_path.read_text(encoding="utf-8"))
         projection = json.loads(
             (run.site_path / "projection.json").read_text(encoding="utf-8")
@@ -179,9 +182,6 @@ class ProviderWithdrawalTest(unittest.TestCase):
             if path.name != "projection.json"
         )
 
-        self.assertEqual(run.withdrawal.returncode, 0, run.withdrawal.stderr)
-        self.assertEqual(run.refresh.returncode, 0, run.refresh.stderr)
-        self.assertEqual(run.build.returncode, 0, run.build.stderr)
         self.assertEqual(dataset["coverageEnded"][0]["name"], "Terminalen")
         self.assertEqual(projection["coverageEnded"], dataset["coverageEnded"])
         self.assertNotIn("terminalen", json.dumps(dataset_without_ended_fact).lower())
