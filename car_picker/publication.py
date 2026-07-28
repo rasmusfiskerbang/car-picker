@@ -3,7 +3,9 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import subprocess
 import tempfile
+import uuid
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, cast
@@ -30,6 +32,8 @@ STATIC_ARTIFACT_FILENAMES = {
     "projection.json",
     "styles.css",
 }
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+FRONTEND_ROOT = REPOSITORY_ROOT / "frontend"
 FORBIDDEN_ARTIFACT_KEYS = {
     "contentSha256",
     "hash",
@@ -193,7 +197,7 @@ def validate_presentation_projection(projection: Mapping[str, Any]) -> None:
 
 
 def write_site_atomically(output_path: Path, projection: Mapping[str, Any]) -> None:
-    output_path = output_path.resolve()
+    output_path = output_path.absolute()
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(
         prefix=".car-picker-site-", dir=output_path.parent
@@ -208,11 +212,33 @@ def write_site_atomically(output_path: Path, projection: Mapping[str, Any]) -> N
             json.dumps(PRESENTATION_SCHEMA, ensure_ascii=False, separators=(",", ":")),
             encoding="utf-8",
         )
-        (staging_path / "index.html").write_text(index_html(), encoding="utf-8")
-        (staging_path / "app.js").write_text(browser_app(), encoding="utf-8")
-        (staging_path / "styles.css").write_text(stylesheet(), encoding="utf-8")
+        build_frontend(staging_path)
         verify_static_artifact(staging_path)
         replace_directory(staging_path, output_path)
+
+
+def build_frontend(staging_path: Path) -> None:
+    """Generate the browser contract input and compile the production application."""
+    generated_schema = FRONTEND_ROOT / "src/generated/presentation-schema.json"
+    generated_schema.write_text(
+        json.dumps(PRESENTATION_SCHEMA, ensure_ascii=False, separators=(",", ":")),
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        ["pnpm", "build"],
+        cwd=FRONTEND_ROOT,
+        env=os.environ | {"CAR_PICKER_SITE_OUTPUT": str(staging_path)},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        detail = "\n".join(
+            output
+            for output in (result.stdout.strip(), result.stderr.strip())
+            if output
+        )
+        raise ValueError(f"frontend build failed: {detail}")
 
 
 def verify_static_artifact(site_path: Path) -> None:
@@ -232,15 +258,9 @@ def verify_static_artifact(site_path: Path) -> None:
         )
     if contains_forbidden_artifact_key(projection):
         raise ValueError("static artifact projection contains internal metadata")
-    app = (site_path / "app.js").read_text(encoding="utf-8")
     index = (site_path / "index.html").read_text(encoding="utf-8")
-    if (
-        'fetch("projection.json"' not in app
-        or "hashchange" not in app
-        or 'src="app.js"' not in index
-    ):
+    if 'type="module"' not in index or 'src="./app.js"' not in index:
         raise ValueError("static artifact browser application is incomplete")
-    validate_javascript_delimiters(app)
 
 
 def validate_javascript_delimiters(source: str) -> None:
@@ -303,19 +323,32 @@ def contains_forbidden_artifact_key(value: Any) -> bool:
 
 
 def replace_directory(staging_path: Path, output_path: Path) -> None:
-    backup_path = output_path.with_name(f".{output_path.name}.previous")
-    if backup_path.exists():
-        shutil.rmtree(backup_path)
-    if output_path.exists():
-        os.replace(output_path, backup_path)
+    """Publish an immutable artifact through one atomic pointer replacement."""
+    if output_path.exists() and not output_path.is_symlink():
+        raise ValueError(
+            "existing static artifact predates atomic publication; "
+            "move it aside before rebuilding"
+        )
+    identifier = uuid.uuid4().hex
+    artifact_path = output_path.with_name(f".{output_path.name}.artifact-{identifier}")
+    next_link = output_path.with_name(f".{output_path.name}.next-{identifier}")
+    previous_artifact = output_path.resolve() if output_path.is_symlink() else None
+    os.replace(staging_path, artifact_path)
     try:
-        os.replace(staging_path, output_path)
+        next_link.symlink_to(artifact_path.name, target_is_directory=True)
+        os.replace(next_link, output_path)
     except BaseException:
-        if backup_path.exists():
-            os.replace(backup_path, output_path)
+        if next_link.is_symlink():
+            next_link.unlink()
+        if artifact_path.exists():
+            shutil.rmtree(artifact_path)
         raise
-    if backup_path.exists():
-        shutil.rmtree(backup_path)
+    if (
+        previous_artifact is not None
+        and previous_artifact.parent == output_path.parent
+        and previous_artifact.name.startswith(f".{output_path.name}.artifact-")
+    ):
+        shutil.rmtree(previous_artifact)
 
 
 def object_value(value: Any, name: str) -> Mapping[str, Any]:

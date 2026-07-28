@@ -1,0 +1,161 @@
+:root {
+  color: #20221f;
+  background: #f3f0e9;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  font-synthesis: none;
+  line-height: 1.5;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+a {
+  color: #35513c;
+  font-weight: 650;
+}
+
+.page {
+  width: min(100% - 2rem, 72rem);
+  margin: 0 auto;
+  padding: 4rem 0 2rem;
+}
+
+.hero {
+  max-width: 46rem;
+  margin-bottom: 2rem;
+}
+
+.hero h1 {
+  margin: 0;
+  font-family: Georgia, serif;
+  font-size: clamp(3rem, 9vw, 6rem);
+  font-weight: 500;
+  letter-spacing: -0.055em;
+  line-height: 0.95;
+}
+
+.eyebrow {
+  margin: 0 0 0.5rem;
+  color: #65705f;
+  font-size: 0.75rem;
+  font-weight: 750;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.offer-list {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.card {
+  overflow: hidden;
+  border: 1px solid #d3d0c8;
+  border-radius: 1rem;
+  background: #fffefa;
+  box-shadow: 0 1rem 3rem rgb(63 55 40 / 8%);
+}
+
+.card-header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.5rem;
+  border-bottom: 1px solid #e4e1d9;
+}
+
+.card-header h2 {
+  margin: 0;
+  font-family: Georgia, serif;
+  font-size: clamp(1.6rem, 4vw, 2.4rem);
+  font-weight: 500;
+}
+
+.card-content {
+  padding: 1.5rem;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+  margin: 0;
+}
+
+.fact-row {
+  padding: 1rem 0;
+  border-bottom: 1px solid #e4e1d9;
+}
+
+.fact-row:nth-child(odd) {
+  padding-right: 1rem;
+}
+
+.fact-row dt {
+  color: #65705f;
+  font-size: 0.85rem;
+}
+
+.fact-row dd {
+  margin: 0.2rem 0 0;
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+.calculation {
+  margin-top: 1.25rem;
+  padding: 1rem;
+  border-radius: 0.75rem;
+  background: #edf0e7;
+}
+
+.calculation summary {
+  cursor: pointer;
+  font-weight: 750;
+}
+
+footer {
+  padding: 2rem 0;
+  color: #65705f;
+  font-size: 0.85rem;
+}
+
+.message {
+  width: min(100% - 2rem, 40rem);
+  margin: 20vh auto;
+  padding: 2rem;
+  border: 1px solid #d3d0c8;
+  border-radius: 1rem;
+  background: #fffefa;
+}
+
+@media (max-width: 560px) {
+  .page {
+    width: min(100% - 1rem, 72rem);
+    padding-top: 2rem;
+  }
+
+  .card-header {
+    display: block;
+  }
+
+  .card-header a {
+    display: inline-block;
+    margin-top: 1rem;
+  }
+
+  .facts {
+    grid-template-columns: 1fr;
+  }
+
+  .fact-row:nth-child(odd) {
+    padding-right: 0;
+  }
+}

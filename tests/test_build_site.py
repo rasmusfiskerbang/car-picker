@@ -421,7 +421,6 @@ class BuildSiteTest(unittest.TestCase):
             projection = json.loads(
                 (site_path / "projection.json").read_text(encoding="utf-8")
             )
-            app_source = (site_path / "app.js").read_text(encoding="utf-8")
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(projection["generatedAt"], "2026-07-22T12:00:00Z")
@@ -429,22 +428,8 @@ class BuildSiteTest(unittest.TestCase):
             projection["coverage"]["providers"],
             dataset["coverage"]["providers"],
         )
-        for copy in (
-            "Katalogets dækning",
-            "Katalogdatasættet blev genereret",
-            "Kataloget dækker muligvis ikke hele det danske marked.",
-            "kandidater holdt tilbage",
-            "Tilbud kan være ændret eller udløbet siden data blev indsamlet.",
-        ):
-            self.assertIn(copy, app_source)
         for hidden_detail in ("quarantineReasons", "parserMetadata", "hash"):
             self.assertNotIn(hidden_detail, json.dumps(projection["coverage"]))
-        for route in (
-            "catalogue.append(filters, comparison, offers, coverage(projection.coverage, projection.coverageEnded, projection.generatedAt), footer(projection.generatedAt));",
-            "page.append(back, offerCard(offer), footer(projection.generatedAt));",
-            'page.append(back, heading("Sammenlign tilbud", 1), comparisonTable(offers), footer(projection.generatedAt));',
-        ):
-            self.assertIn(route, app_source)
 
     def test_build_site_derives_values_and_one_cash_flow_breakdown(self) -> None:
         """The public site build exposes service-derived totals from sourced events."""
@@ -506,7 +491,6 @@ class BuildSiteTest(unittest.TestCase):
             projection = json.loads(
                 (site_path / "projection.json").read_text(encoding="utf-8")
             )
-            app_source = (site_path / "app.js").read_text(encoding="utf-8")
 
         rendered_offer = projection["offers"][0]
         self.assertEqual(rendered_offer["upfrontCashRequirement"]["valueDkk"], 16000)
@@ -516,10 +500,6 @@ class BuildSiteTest(unittest.TestCase):
             rendered_offer["nominalBaseOutlay"]["calculation"]["method"],
             "base_cash_flow_stream",
         )
-        self.assertIn("Oplyst af udbyderen", app_source)
-        self.assertIn("Beregnet af tjenesten", app_source)
-        self.assertIn("Betalingsstrøm bag beregningerne", app_source)
-        self.assertIn("normal afslutningsmekanisme", app_source)
         self.assertEqual(
             [event["meaning"] for event in rendered_offer["cashFlowBreakdown"]],
             [
@@ -604,7 +584,6 @@ class BuildSiteTest(unittest.TestCase):
             projection = json.loads(
                 (site_path / "projection.json").read_text(encoding="utf-8")
             )
-            app_source = (site_path / "app.js").read_text(encoding="utf-8")
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(
@@ -614,22 +593,6 @@ class BuildSiteTest(unittest.TestCase):
         self.assertEqual(
             projection["offers"][1]["residualRiskAllocation"]["value"], "lessee"
         )
-        for control in (
-            "Søg efter bil eller udbyder",
-            "Restværdirisiko",
-            "Højeste kontante behov ved start",
-            "Højeste fulde løbetid",
-            "Højeste kilometer om året",
-            "Køretøj",
-            "Ingen tilbud matcher dine filtre",
-            "Filtrering er ikke personlig rangering",
-            "Sammenlign valgte tilbud",
-            "Sammenlign tilbud",
-            "comparison-scroll",
-            "#compare=",
-            "#offer=",
-        ):
-            self.assertIn(control, app_source)
 
     def test_build_site_exposes_only_auditable_calculation_examples_for_supported_exposures(
         self,
@@ -656,7 +619,6 @@ class BuildSiteTest(unittest.TestCase):
             projection = json.loads(
                 (site_path / "projection.json").read_text(encoding="utf-8")
             )
-            app_source = (site_path / "app.js").read_text(encoding="utf-8")
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(
@@ -676,22 +638,6 @@ class BuildSiteTest(unittest.TestCase):
                 },
             ],
         )
-        for control in (
-            "Dit beregningseksempel",
-            "Dette er den kommende leasingtagers beregningseksempel, ikke en prognose.",
-            "Beregningen ændrer ikke tilbudets viste basisbeløb eller rækkefølge.",
-            "kan ikke beregnes uden en dokumenteret regel og alle nødvendige input",
-            "standardizedScenarioCalculation",
-            "residual_value_minus_sale_proceeds",
-            "residual_shortfall",
-            "requiredInputKinds",
-            "residual_value_dkk",
-            "sale_proceeds_dkk",
-            "scenarioCanBeCalculated",
-            "calculateScenarioExample",
-        ):
-            self.assertIn(control, app_source)
-        self.assertNotIn("requiredInputNames", app_source)
 
     def test_build_site_rejects_exposure_input_kinds_that_do_not_align_with_their_labels(
         self,

@@ -89,12 +89,11 @@ class StaticArtifactTest(unittest.TestCase):
             site_path = Path(temporary_directory) / "site"
             build_site(FIXTURE_DATASET, site_path)
             initial_app = (site_path / "app.js").read_bytes()
-            malformed_browser_app = 'fetch("projection.json"); window.addEventListener("hashchange", () => {;'
-
             with patch(
-                "car_picker.publication.browser_app", return_value=malformed_browser_app
+                "car_picker.publication.build_frontend",
+                side_effect=ValueError("frontend build failed"),
             ):
-                with self.assertRaisesRegex(ValueError, "unclosed syntax delimiters"):
+                with self.assertRaisesRegex(ValueError, "frontend build failed"):
                     build_site(FIXTURE_DATASET, site_path)
 
             final_app = (site_path / "app.js").read_bytes()

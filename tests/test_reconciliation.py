@@ -37,7 +37,6 @@ class ProviderAggregateReconciliationTest(unittest.TestCase):
             projection = json.loads(
                 (site_path / "projection.json").read_text(encoding="utf-8")
             )
-            app_source = (site_path / "app.js").read_text(encoding="utf-8")
 
         self.assertEqual(all_result.returncode, 0, all_result.stderr)
         diagnostics = json.loads(all_result.stdout)
@@ -88,7 +87,6 @@ class ProviderAggregateReconciliationTest(unittest.TestCase):
             projection["offers"][2]["nominalMonthlyEquivalent"]["blockingFacts"],
             ["providerAdvertisedAggregateMismatch"],
         )
-        self.assertIn("providerAdvertisedAggregateMismatch", app_source)
 
 
 def aggregate_dataset() -> dict[str, object]:

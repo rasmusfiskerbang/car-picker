@@ -37,3 +37,18 @@ Run the full test suite with:
 ```console
 uv run pytest
 ```
+
+The production browser application lives under `frontend/`. Install its locked
+dependencies and Chromium once, then run its type and real-browser checks:
+
+```console
+cd frontend
+pnpm install --frozen-lockfile
+pnpm exec playwright install chromium
+pnpm typecheck
+pnpm test:e2e
+```
+
+`pnpm test:e2e` first builds the fixture through the public `build-site`
+command, then tests that completed static artifact at desktop and mobile
+viewports.
