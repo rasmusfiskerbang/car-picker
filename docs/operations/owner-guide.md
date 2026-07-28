@@ -135,6 +135,11 @@ After changes to adapters, schemas, projection code, or operating configuration:
 4. Inspect refresh warnings and run aggregate diagnostics before serving or
    deploying the completed artifact.
 
+Before a release, follow the [fixed real-offer acceptance
+procedure](fixed-real-offer-acceptance.md). Its dated, version-controlled record
+is required even when a changed designated source prevents the acceptance from
+passing; in that case it must record the blocker and an explicit non-approval.
+
 For every release, record the legal-gate result. Releases on or after 20
 November 2026 require the completed, committed consumer-credit revalidation
 described above.
