@@ -7,7 +7,7 @@ name = "car-picker"
 version = "0.1.0"
 description = "Evidence-backed Danish private-leasing catalogue"
 requires-python = ">=3.14"
-dependencies = ["pydantic>=2.12,<3"]
+dependencies = ["pydantic>=2.12,<3", "typer>=0.21,<1"]
 
 [dependency-groups]
 dev = [

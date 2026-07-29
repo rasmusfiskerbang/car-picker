@@ -1,19 +1,19 @@
 from __future__ import annotations
 
-import argparse
 import json
 import socket
 from collections.abc import Mapping
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from socketserver import BaseServer
-from typing import Any, cast
+from typing import Annotated, Any, cast
 from urllib.parse import urlparse
+
+import typer
 
 from car_picker.catalogue_model import CatalogueDataset
 from car_picker.collection import (
     FLEASING_CATALOGUE_URL,
-    PROVIDER_NAMES,
     TERMINALEN_CATALOGUE_URL,
     refresh_all_providers,
 )
@@ -40,147 +40,179 @@ from car_picker.provider_withdrawal import (
 from car_picker.publication import build_site, verify_static_artifact
 
 
-def parse_arguments() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        prog="car-picker",
-        description="Build the static evidence-backed leasing catalogue.",
-    )
-    subcommands = parser.add_subparsers(dest="command", required=True)
-    build = subcommands.add_parser("build-site", help="Build a static catalogue site.")
-    build.add_argument(
-        "--dataset", required=True, type=Path, help="Canonical catalogue dataset JSON."
-    )
-    build.add_argument(
-        "--output", required=True, type=Path, help="Static site output directory."
-    )
-    build.add_argument(
-        "--provider-control", default=DEFAULT_PROVIDER_CONTROL, type=Path
-    )
-    complete_refresh = subcommands.add_parser(
-        "refresh-catalogue", help="Refresh the complete covered-provider catalogue."
-    )
-    complete_refresh.add_argument(
-        "--dataset", required=True, type=Path, help="Active catalogue dataset JSON."
-    )
-    complete_refresh.add_argument(
-        "--fleasing-catalogue-url", default=FLEASING_CATALOGUE_URL
-    )
-    complete_refresh.add_argument(
-        "--terminalen-catalogue-url", default=TERMINALEN_CATALOGUE_URL
-    )
-    complete_refresh.add_argument(
-        "--provider-control", default=DEFAULT_PROVIDER_CONTROL, type=Path
-    )
-    complete_refresh.add_argument(
-        "--provider-access", default=DEFAULT_PROVIDER_ACCESS, type=Path
-    )
-    withdraw = subcommands.add_parser(
-        "withdraw-provider",
-        help="Record an authenticated provider withdrawal and disable retrieval.",
-    )
-    withdraw.add_argument("--provider", required=True, choices=PROVIDER_NAMES)
-    withdraw.add_argument(
-        "--provider-control", default=DEFAULT_PROVIDER_CONTROL, type=Path
-    )
-    withdraw.add_argument(
-        "--received-at",
-        required=True,
-        help="Authenticated request receipt time as ISO 8601.",
-    )
-    withdraw.add_argument(
-        "--authentication-note",
-        required=True,
-        help="How the request was authenticated.",
-    )
-    diagnose = subcommands.add_parser(
-        "diagnose-aggregates", help="Diagnose provider aggregate reconciliation."
-    )
-    diagnose.add_argument(
-        "--dataset", required=True, type=Path, help="Canonical catalogue dataset JSON."
-    )
-    diagnose.add_argument(
-        "--offer", help="One offer identity to diagnose; omit for every offer."
-    )
-    validate = subcommands.add_parser(
-        "validate", help="Validate schemas and generated-content boundaries."
-    )
-    validate.add_argument(
-        "--dataset", required=True, type=Path, help="Canonical catalogue dataset JSON."
-    )
-    validate.add_argument(
-        "--repository", default=Path("."), type=Path, help="Git checkout to inspect."
-    )
-    validate.add_argument(
-        "--provider-control", default=DEFAULT_PROVIDER_CONTROL, type=Path
-    )
-    validate.add_argument(
-        "--provider-access", default=DEFAULT_PROVIDER_ACCESS, type=Path
-    )
-    validate.add_argument("--legal-record", default=DEFAULT_LEGAL_RECORD, type=Path)
-    serve = subcommands.add_parser(
-        "serve-site", help="Serve a completed static site on the local network."
-    )
-    serve.add_argument(
-        "--site", required=True, type=Path, help="Completed static site directory."
-    )
-    serve.add_argument(
-        "--port", type=int, default=4173, help="TCP port to serve (default: 4173)."
-    )
-    return parser.parse_args()
+app = typer.Typer(
+    help="Build the static evidence-backed leasing catalogue.",
+    no_args_is_help=True,
+    rich_markup_mode=None,
+)
 
 
-def main() -> None:
-    arguments = parse_arguments()
-    if arguments.command == "build-site":
-        validate_site_directory(arguments.output, "--output")
-        control = read_provider_control_or_exit(arguments.provider_control)
-        validate_dataset_for_withdrawals_or_exit(arguments.dataset, control)
-        build_site(arguments.dataset, arguments.output)
-        record_site_build_completion_or_exit(
-            arguments.provider_control, current_timestamp()
+@app.command("build-site", help="Build a static catalogue site.")
+def build_site_command(
+    dataset: Annotated[
+        Path,
+        typer.Option(help="Canonical catalogue dataset JSON."),
+    ],
+    output: Annotated[
+        Path,
+        typer.Option(help="Static site output directory."),
+    ],
+    provider_control: Annotated[
+        Path,
+        typer.Option(help="Provider withdrawal control JSON."),
+    ] = DEFAULT_PROVIDER_CONTROL,
+) -> None:
+    validate_site_directory(output, "--output")
+    control = read_provider_control_or_exit(provider_control)
+    validate_dataset_for_withdrawals_or_exit(dataset, control)
+    build_site(dataset, output)
+    record_site_build_completion_or_exit(provider_control, current_timestamp())
+
+
+@app.command(
+    "refresh-catalogue",
+    help="Refresh the complete covered-provider catalogue.",
+)
+def refresh_catalogue_command(
+    dataset: Annotated[
+        Path,
+        typer.Option(help="Active catalogue dataset JSON."),
+    ],
+    fleasing_catalogue_url: Annotated[
+        str,
+        typer.Option(help="Fleasing designated catalogue URL."),
+    ] = FLEASING_CATALOGUE_URL,
+    terminalen_catalogue_url: Annotated[
+        str,
+        typer.Option(help="Terminalen designated catalogue URL."),
+    ] = TERMINALEN_CATALOGUE_URL,
+    provider_control: Annotated[
+        Path,
+        typer.Option(help="Provider withdrawal control JSON."),
+    ] = DEFAULT_PROVIDER_CONTROL,
+    provider_access: Annotated[
+        Path,
+        typer.Option(help="Provider access decision JSON."),
+    ] = DEFAULT_PROVIDER_ACCESS,
+) -> None:
+    validate_fleasing_catalogue_url(fleasing_catalogue_url)
+    validate_terminalen_catalogue_url(terminalen_catalogue_url)
+    control = read_provider_control_or_exit(provider_control)
+    active_providers = active_provider_names(control)
+    access = read_provider_access_or_exit(provider_access)
+    validate_access_before_refresh_or_exit(access, active_providers)
+    refreshed_dataset = refresh_all_providers(
+        dataset,
+        fleasing_catalogue_url,
+        terminalen_catalogue_url,
+        active_providers=active_providers,
+        ended_providers=coverage_ended_facts(control),
+    )
+    record_refresh_completion_or_exit(
+        provider_control, cast(str, refreshed_dataset["generatedAt"])
+    )
+    typer.echo(refresh_reconciliation_summary(refreshed_dataset))
+
+
+@app.command(
+    "withdraw-provider",
+    help="Record an authenticated provider withdrawal and disable retrieval.",
+)
+def withdraw_provider_command(
+    provider: Annotated[
+        CoveredProvider,
+        typer.Option(help="Covered provider to withdraw."),
+    ],
+    received_at: Annotated[
+        str,
+        typer.Option(help="Authenticated request receipt time as ISO 8601."),
+    ],
+    authentication_note: Annotated[
+        str,
+        typer.Option(help="How the request was authenticated."),
+    ],
+    provider_control: Annotated[
+        Path,
+        typer.Option(help="Provider withdrawal control JSON."),
+    ] = DEFAULT_PROVIDER_CONTROL,
+) -> None:
+    withdraw_provider_or_exit(
+        provider_control,
+        provider,
+        received_at,
+        authentication_note,
+    )
+
+
+@app.command(
+    "diagnose-aggregates",
+    help="Diagnose provider aggregate reconciliation.",
+)
+def diagnose_aggregates_command(
+    dataset: Annotated[
+        Path,
+        typer.Option(help="Canonical catalogue dataset JSON."),
+    ],
+    offer: Annotated[
+        str | None,
+        typer.Option(help="One offer identity to diagnose; omit for every offer."),
+    ] = None,
+) -> None:
+    typer.echo(
+        json.dumps(
+            aggregate_diagnostics(dataset, offer),
+            ensure_ascii=False,
         )
-    elif arguments.command == "refresh-catalogue":
-        validate_fleasing_catalogue_url(arguments.fleasing_catalogue_url)
-        validate_terminalen_catalogue_url(arguments.terminalen_catalogue_url)
-        control = read_provider_control_or_exit(arguments.provider_control)
-        active_providers = active_provider_names(control)
-        access = read_provider_access_or_exit(arguments.provider_access)
-        validate_access_before_refresh_or_exit(access, active_providers)
-        dataset = refresh_all_providers(
-            arguments.dataset,
-            arguments.fleasing_catalogue_url,
-            arguments.terminalen_catalogue_url,
-            active_providers=active_providers,
-            ended_providers=coverage_ended_facts(control),
-        )
-        record_refresh_completion_or_exit(
-            arguments.provider_control, dataset["generatedAt"]
-        )
-        print(refresh_reconciliation_summary(dataset))
-    elif arguments.command == "withdraw-provider":
-        withdraw_provider_or_exit(
-            arguments.provider_control,
-            arguments.provider,
-            arguments.received_at,
-            arguments.authentication_note,
-        )
-    elif arguments.command == "diagnose-aggregates":
-        print(
-            json.dumps(
-                aggregate_diagnostics(arguments.dataset, arguments.offer),
-                ensure_ascii=False,
-            )
-        )
-    elif arguments.command == "validate":
-        validate_owner_checkout_or_exit(
-            arguments.dataset,
-            arguments.repository,
-            arguments.provider_control,
-            arguments.provider_access,
-            arguments.legal_record,
-        )
-    elif arguments.command == "serve-site":
-        serve_site(arguments.site, arguments.port)
+    )
+
+
+@app.command("validate", help="Validate schemas and generated-content boundaries.")
+def validate_command(
+    dataset: Annotated[
+        Path,
+        typer.Option(help="Canonical catalogue dataset JSON."),
+    ],
+    repository: Annotated[
+        Path,
+        typer.Option(help="Git checkout to inspect."),
+    ] = Path("."),
+    provider_control: Annotated[
+        Path,
+        typer.Option(help="Provider withdrawal control JSON."),
+    ] = DEFAULT_PROVIDER_CONTROL,
+    provider_access: Annotated[
+        Path,
+        typer.Option(help="Provider access decision JSON."),
+    ] = DEFAULT_PROVIDER_ACCESS,
+    legal_record: Annotated[
+        Path,
+        typer.Option(help="Legal release record JSON."),
+    ] = DEFAULT_LEGAL_RECORD,
+) -> None:
+    validate_owner_checkout_or_exit(
+        dataset,
+        repository,
+        provider_control,
+        provider_access,
+        legal_record,
+    )
+
+
+@app.command(
+    "serve-site",
+    help="Serve a completed static site on the local network.",
+)
+def serve_site_command(
+    site: Annotated[
+        Path,
+        typer.Option(help="Completed static site directory."),
+    ],
+    port: Annotated[
+        int,
+        typer.Option(min=1, max=65535, help="TCP port to serve."),
+    ] = 4173,
+) -> None:
+    serve_site(site, port)
 
 
 def read_provider_control_or_exit(path: Path) -> dict[str, object]:
@@ -394,6 +426,10 @@ def validate_terminalen_catalogue_url(catalogue_url: str) -> None:
     raise SystemExit(
         "--terminalen-catalogue-url must be Terminalen's designated catalogue or a local fixture server"
     )
+
+
+def main() -> None:
+    app()
 
 
 if __name__ == "__main__":
