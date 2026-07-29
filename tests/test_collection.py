@@ -75,6 +75,60 @@ def candidate(
 
 
 class CollectionTest(unittest.TestCase):
+    def test_refresh_rejects_a_provider_without_an_allowed_access_decision(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            temporary_path = Path(directory)
+            dataset_path = temporary_path / "catalogue-dataset.json"
+            access_path = temporary_path / "provider-access.json"
+            access_path.write_text(
+                json.dumps(
+                    {
+                        "schemaVersion": "provider-access/v1",
+                        "providers": [
+                            {
+                                "name": "Fleasing",
+                                "decision": "paused",
+                                "checkedAt": "2026-07-29",
+                                "sourceAudit": "docs/source-audits/fleasing.md",
+                            },
+                            {
+                                "name": "Terminalen",
+                                "decision": "allowed",
+                                "checkedAt": "2026-07-29",
+                                "sourceAudit": "docs/source-audits/terminalen.md",
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "car_picker",
+                    "refresh-catalogue",
+                    "--dataset",
+                    str(dataset_path),
+                    "--provider-access",
+                    str(access_path),
+                ],
+                cwd=REPOSITORY_ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "Fleasing provider access decision must be allowed before refresh",
+            result.stderr,
+        )
+        self.assertFalse(dataset_path.exists())
+
     def test_public_cli_has_no_one_provider_dataset_writer(self) -> None:
         result = subprocess.run(
             [sys.executable, "-m", "car_picker", "refresh-fleasing"],

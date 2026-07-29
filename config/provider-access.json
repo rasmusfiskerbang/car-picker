@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "provider-access/v1",
+  "providers": [
+    {
+      "name": "Fleasing",
+      "decision": "allowed",
+      "checkedAt": "2026-07-29",
+      "sourceAudit": "docs/source-audits/fleasing.md"
+    },
+    {
+      "name": "Terminalen",
+      "decision": "allowed",
+      "checkedAt": "2026-07-29",
+      "sourceAudit": "docs/source-audits/terminalen.md"
+    }
+  ]
+}

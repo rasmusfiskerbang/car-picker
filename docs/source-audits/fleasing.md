@@ -1,6 +1,7 @@
 # Fleasing designated offer-source audit
 
-Checked 22 July 2026 for the first bounded collection implementation.
+Originally checked 22 July 2026; access decision revalidated 29 July 2026 under
+[ADR-0001](../adr/0001-public-provider-access.md).
 
 ## Designated source
 
@@ -21,20 +22,24 @@ The adapter therefore quarantines such candidates instead of inferring an active
 catalogue offer from residual-value wording. Obtain an explicitly applicable
 first-party source before changing that admission decision.
 
-## Access check
+## Access decision
 
-The checked <https://fleasing.dk/robots.txt> permits public paths and disallows
-`/wp-admin/` except `admin-ajax.php`. The designated catalogue and detail paths are
-therefore not disallowed by the current robots file.
+- Decision: **allowed**
+- `robots.txt`: checked 29 July 2026; public paths remain permitted,
+  `/wp-admin/` is disallowed, and `/wp-admin/admin-ajax.php` is allowed. The
+  designated catalogue and detail paths are outside the disallowed boundary.
+- Published terms surfaces: the public catalogue, footer, sitemap, privacy, and
+  cookie material disclosed no explicit prohibition on bounded automated
+  collection or minimized factual reuse.
+- Authentication or access control: `robots.txt` and the designated source used
+  by the owner refresh were publicly accessible without authentication during
+  the check.
+- Applicable restrictions: do not access WordPress administration.
 
-The current catalogue footer and sitemap were checked alongside the robots file.
-They link Fleasing's <https://fleasing.dk/privatlivspolitik/>, but no public
-commercial or content-reuse terms page was linked. The commonly named
-<https://fleasing.dk/handelsbetingelser/> path also returned 404 when checked.
-No public reuse permission was found. Public access and a permissive robots file
-are not permission to redistribute provider content: obtain and record written
-permission or a documented feed agreement before running a production refresh.
-
-Recheck the robots file and relevant terms on a retrieval failure, material source
-change, or provider contact. Do not bypass an explicit access control; stop the
-source and record the boundary instead.
+ADR-0001 allows the bounded first-party source without affirmative written
+permission because no applicable opt-out was found. Do not call Bilinfo,
+FindLeasing, WordPress administration, or another third-party or unrelated
+endpoint. Stop on an applicable prohibition, authentication requirement, bot
+challenge, persistent authorization denial, rate limit, or provider instruction.
+Recheck this decision after a material source or terms change, access failure, or
+provider contact.

@@ -84,11 +84,11 @@ treated as current provider evidence.
 - `Required source-access preflight was missed`: release blocker and procedural
   defect. The Fleasing source audit was not reviewed before the live command,
   and Terminalen was fetched once more after failure before its current terms,
-  robots policy, and access boundaries were rechecked. The existing Fleasing
-  audit says no public reuse permission was found and requires written
-  permission or a documented feed agreement before a production refresh. Stop
-  further collection until the owner has reviewed and documented both
-  providers' current access basis.
+  robots policy, and access boundaries were rechecked. This remains a procedural
+  defect in that run. The repository has since adopted
+  [ADR-0001](../adr/0001-public-provider-access.md), under which absence of
+  affirmative written permission is not a blocker; both providers still require
+  current source-audit decisions before another live refresh.
 - `Terminalen designated catalogue structure changed`: release blocker. Reassess
   the designated model pages and their exact-offer evidence only after checking
   the provider's current terms, robots policy, and access boundaries. Update
