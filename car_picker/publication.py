@@ -10,6 +10,8 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, cast
 
+from pydantic import BaseModel, JsonValue
+
 from car_picker.catalogue_model import (
     CatalogueDataset,
     CatalogueOffer,
@@ -155,7 +157,7 @@ def project_derived_money_fact(
     }
 
 
-def serialize_fact(value: Any) -> dict[str, Any]:
+def serialize_fact(value: BaseModel | None) -> dict[str, Any]:
     if value is None:
         raise ValueError("admitted catalogue offer requires public comparison facts")
     return cast(
@@ -311,7 +313,7 @@ def validate_javascript_delimiters(source: str) -> None:
         )
 
 
-def contains_forbidden_artifact_key(value: Any) -> bool:
+def contains_forbidden_artifact_key(value: object) -> bool:
     if isinstance(value, Mapping):
         return any(
             key in FORBIDDEN_ARTIFACT_KEYS or contains_forbidden_artifact_key(item)
@@ -351,8 +353,8 @@ def replace_directory(staging_path: Path, output_path: Path) -> None:
         shutil.rmtree(previous_artifact)
 
 
-def object_value(value: Any, name: str) -> Mapping[str, Any]:
-    if not isinstance(value, Mapping):
+def object_value(value: JsonValue, name: str) -> dict[str, JsonValue]:
+    if not isinstance(value, dict):
         raise ValueError(f"{name} must be an object")
     return value
 

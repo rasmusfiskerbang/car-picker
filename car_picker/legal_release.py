@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+from pydantic import JsonValue
+
 from car_picker.owner_operations import validate_version_controlled_file
 
 
@@ -67,7 +69,7 @@ def read_legal_record(path: Path) -> dict[str, Any]:
     return value
 
 
-def parse_date(value: Any, name: str) -> date:
+def parse_date(value: JsonValue, name: str) -> date:
     if not isinstance(value, str):
         raise ValueError(f"{name} must be an ISO 8601 date")
     try:
@@ -76,7 +78,7 @@ def parse_date(value: Any, name: str) -> date:
         raise ValueError(f"{name} must be an ISO 8601 date") from error
 
 
-def validate_revalidation(value: Any, release_date: date) -> tuple[str, str, str]:
+def validate_revalidation(value: JsonValue, release_date: date) -> tuple[str, str, str]:
     if not isinstance(value, dict) or set(value) != {
         "reviewedOn",
         "sources",
@@ -88,12 +90,12 @@ def validate_revalidation(value: Any, release_date: date) -> tuple[str, str, str
         raise ValueError(
             "completed consumer-credit revalidation has unexpected or missing fields"
         )
-    reviewed_on = parse_date(value["reviewedOn"], "revalidation reviewedOn")
+    reviewed_on = parse_date(value.get("reviewedOn"), "revalidation reviewedOn")
     if not CHANGE_HORIZON <= reviewed_on <= release_date:
         raise ValueError(
             "revalidation reviewedOn must be on or after the change horizon and no later than release"
         )
-    sources = value["sources"]
+    sources = value.get("sources")
     if not isinstance(sources, list) or not sources:
         raise ValueError(
             "completed consumer-credit revalidation requires official sources"
@@ -109,7 +111,7 @@ def validate_revalidation(value: Any, release_date: date) -> tuple[str, str, str
         "implementationImpact",
     ):
         require_non_empty_string(value.get(field_name), field_name)
-    sign_off = value["ownerSignOff"]
+    sign_off = value.get("ownerSignOff")
     if not isinstance(sign_off, dict) or set(sign_off) != {"name", "signedOn"}:
         raise ValueError("consumer-credit revalidation requires dated owner sign-off")
     owner_name = require_non_empty_string(sign_off.get("name"), "ownerSignOff.name")
@@ -121,7 +123,7 @@ def validate_revalidation(value: Any, release_date: date) -> tuple[str, str, str
     return reviewed_on.isoformat(), owner_name, signed_on.isoformat()
 
 
-def validate_source(value: Any, reviewed_on: date) -> str:
+def validate_source(value: JsonValue, reviewed_on: date) -> str:
     if not isinstance(value, dict) or set(value) != {
         "kind",
         "title",
@@ -133,7 +135,10 @@ def validate_source(value: Any, reviewed_on: date) -> str:
     }:
         raise ValueError("consumer-credit source has unexpected or missing fields")
     kind = value.get("kind")
-    if kind not in {"official_law", "official_guidance"}:
+    if not isinstance(kind, str) or kind not in {
+        "official_law",
+        "official_guidance",
+    }:
         raise ValueError(
             "consumer-credit source kind must be official_law or official_guidance"
         )
@@ -164,7 +169,7 @@ def validate_source(value: Any, reviewed_on: date) -> str:
     return kind
 
 
-def require_non_empty_string(value: Any, name: str) -> str:
+def require_non_empty_string(value: JsonValue, name: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{name} must be a non-empty string")
     return value.strip()

@@ -34,14 +34,6 @@ target-version = "py314"
 select = ["E4", "E7", "E9", "F", "ANN"]
 
 [tool.ruff.lint.per-file-ignores]
-# JSON enters these parsing and calculation boundaries as untyped data and is
-# narrowed before use.
-"car_picker/comparison.py" = ["ANN401"]
-"car_picker/fleasing.py" = ["ANN401"]
-"car_picker/legal_release.py" = ["ANN401"]
-"car_picker/provider_withdrawal.py" = ["ANN401"]
-"car_picker/publication.py" = ["ANN401"]
-"car_picker/terminalen.py" = ["ANN401"]
 # This throwaway HTTP handler must mirror the variadic stdlib constructor.
 "prototype/private-comparison/serve.py" = ["ANN002", "ANN003"]
 

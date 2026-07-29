@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeGuard
+
+from pydantic import JsonValue
 
 if TYPE_CHECKING:
     from car_picker.catalogue_model import CatalogueOffer, CashFlowEvent
@@ -218,18 +220,20 @@ def provider_aggregate_assertion(offer: Mapping[str, Any]) -> dict[str, Any] | N
     }
 
 
-def recurrence_counts(events: Any) -> list[int]:
+def recurrence_counts(events: JsonValue) -> list[int]:
     if not isinstance(events, list):
         return []
-    return [
-        event.get("recurrenceCount", 1)
-        for event in events
-        if isinstance(event, Mapping)
-        and isinstance(event.get("recurrenceCount", 1), int)
-    ]
+    counts: list[int] = []
+    for event in events:
+        if not isinstance(event, Mapping):
+            continue
+        count = event.get("recurrenceCount", 1)
+        if isinstance(count, int):
+            counts.append(count)
+    return counts
 
 
-def reconstructed_events(events: Any) -> list[dict[str, Any]]:
+def reconstructed_events(events: JsonValue) -> list[dict[str, Any]]:
     if not isinstance(events, list):
         return []
     return [
@@ -246,28 +250,32 @@ def reconstructed_events(events: Any) -> list[dict[str, Any]]:
     ]
 
 
-def vat_bases(events: Any) -> list[str]:
+def vat_bases(events: JsonValue) -> list[str]:
     if not isinstance(events, list):
         return []
-    return sorted(
-        {
-            event["amountBasis"]
-            for event in events
-            if isinstance(event, Mapping) and isinstance(event.get("amountBasis"), str)
-        }
-    )
+    bases: set[str] = set()
+    for event in events:
+        if not isinstance(event, Mapping):
+            continue
+        basis = event.get("amountBasis")
+        if isinstance(basis, str):
+            bases.add(basis)
+    return sorted(bases)
 
 
 def aggregate_evidence_references(
-    assertion: Mapping[str, Any] | None, events: Any
+    assertion: Mapping[str, Any] | None, events: JsonValue
 ) -> list[dict[str, str]]:
     references: list[dict[str, str]] = []
     if assertion is not None:
         references.append(dict(assertion["evidence"]))
     if isinstance(events, list):
         for event in events:
-            if isinstance(event, Mapping) and has_evidence(event.get("evidence")):
-                references.append(dict(event["evidence"]))
+            if not isinstance(event, Mapping):
+                continue
+            evidence = event.get("evidence")
+            if has_evidence(evidence):
+                references.append(dict(evidence))
     return references
 
 
@@ -300,7 +308,7 @@ def calculate_upfront_cash_requirement(events: list[Any]) -> dict[str, Any]:
 
 
 def calculate_nominal_base_outlay(
-    events: list[Any], completion_blockers: Any
+    events: list[Any], completion_blockers: JsonValue
 ) -> dict[str, Any]:
     blocking_facts = invalid_event_facts(events)
     blocking_facts.extend(blocking_fact_list(completion_blockers, "baseCashFlowStream"))
@@ -312,7 +320,7 @@ def calculate_nominal_base_outlay(
 
 
 def calculate_nominal_monthly_equivalent(
-    nominal_outlay: Mapping[str, Any], term_months: Any
+    nominal_outlay: Mapping[str, Any], term_months: JsonValue
 ) -> dict[str, Any]:
     if nominal_outlay["state"] != "known":
         blocking_facts = list(nominal_outlay["blockingFacts"])
@@ -387,11 +395,11 @@ def event_blocking_facts(event: Mapping[str, Any]) -> list[str]:
     return ["baseCashFlowStream"]
 
 
-def blocking_fact_list(value: Any, fallback: str) -> list[str]:
+def blocking_fact_list(value: JsonValue, fallback: str) -> list[str]:
     if isinstance(value, list) and all(
         isinstance(item, str) and item for item in value
     ):
-        return value
+        return [item for item in value if isinstance(item, str)]
     return [] if value is None else [fallback]
 
 
@@ -420,13 +428,13 @@ def has_event_evidence(event: Mapping[str, Any]) -> bool:
     return has_evidence(event.get("evidence"))
 
 
-def has_evidence(evidence: Any) -> bool:
+def has_evidence(evidence: JsonValue) -> TypeGuard[Mapping[str, str]]:
     return (
         isinstance(evidence, Mapping)
         and isinstance(evidence.get("sourceUrl"), str)
-        and bool(evidence["sourceUrl"])
+        and bool(evidence.get("sourceUrl"))
         and isinstance(evidence.get("wording"), str)
-        and bool(evidence["wording"])
+        and bool(evidence.get("wording"))
     )
 
 

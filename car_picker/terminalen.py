@@ -8,6 +8,8 @@ from html.parser import HTMLParser
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
+from pydantic import JsonValue
+
 from car_picker.fleasing import StructuralSourceError, TextHttpClient
 
 
@@ -274,7 +276,7 @@ def event(
     }
 
 
-def known(value: Any, evidence: dict[str, str]) -> dict[str, Any]:
+def known(value: JsonValue, evidence: dict[str, str]) -> dict[str, Any]:
     return {"state": "known", "value": value, "evidence": evidence}
 
 
@@ -574,13 +576,13 @@ def required_int(value: Mapping[str, Any], key: str) -> int:
     return item
 
 
-def object_value(value: Any, name: str) -> Mapping[str, Any]:
-    if not isinstance(value, Mapping):
+def object_value(value: JsonValue, name: str) -> dict[str, JsonValue]:
+    if not isinstance(value, dict):
         raise StructuralSourceError(f"{name} must be an object")
     return value
 
 
-def list_value(value: Any, name: str) -> list[Any]:
+def list_value(value: JsonValue, name: str) -> list[JsonValue]:
     if not isinstance(value, list):
         raise StructuralSourceError(f"{name} must be an array")
     return value

@@ -9,6 +9,8 @@ from html.parser import HTMLParser
 from typing import Any, Protocol
 from urllib.parse import parse_qs, urljoin, urlparse
 
+from pydantic import JsonValue
+
 
 PARSER_VERSION = "fleasing-html-v3"
 
@@ -569,7 +571,7 @@ def source_document(url: str, content: str, retrieved_at: str) -> dict[str, str]
     }
 
 
-def known_fact(value: Any, source_url: str, wording: str) -> dict[str, Any]:
+def known_fact(value: JsonValue, source_url: str, wording: str) -> dict[str, Any]:
     return {"state": "known", "value": value, "evidence": evidence(source_url, wording)}
 
 

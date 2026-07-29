@@ -6,6 +6,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from pydantic import JsonValue
+
 from car_picker.collection import PROVIDER_NAMES, write_json_atomically
 
 
@@ -56,7 +58,7 @@ def validate_provider_control(control: Mapping[str, Any]) -> None:
         )
 
 
-def validate_withdrawal_record(value: Any) -> None:
+def validate_withdrawal_record(value: JsonValue) -> None:
     if not isinstance(value, dict):
         raise ValueError("withdrawal record must be an object")
     required_strings = (
@@ -68,10 +70,10 @@ def validate_withdrawal_record(value: Any) -> None:
     )
     if (
         not all(
-            isinstance(value.get(field), str) and value[field]
+            isinstance(value.get(field), str) and value.get(field)
             for field in required_strings
         )
-        or value["provider"] not in PROVIDER_NAMES
+        or value.get("provider") not in PROVIDER_NAMES
     ):
         raise ValueError("withdrawal record is missing required operational facts")
     for field in (
@@ -82,9 +84,9 @@ def validate_withdrawal_record(value: Any) -> None:
         "siteBuildCompletedAt",
     ):
         if field in value:
-            parse_timestamp(value[field], field)
+            parse_timestamp(value.get(field), field)
     if "completedWithinDeadline" in value and not isinstance(
-        value["completedWithinDeadline"], bool
+        value.get("completedWithinDeadline"), bool
     ):
         raise ValueError("completedWithinDeadline must be a boolean")
     if ("siteBuildCompletedAt" in value) != ("completedWithinDeadline" in value):
@@ -251,7 +253,7 @@ def validate_dataset_for_withdrawals(
         raise ValueError("site build dataset still contains a withdrawn provider")
 
 
-def parse_timestamp(value: Any, name: str) -> datetime:
+def parse_timestamp(value: JsonValue, name: str) -> datetime:
     if not isinstance(value, str) or not value:
         raise ValueError(f"{name} must be an ISO 8601 timestamp")
     try:
