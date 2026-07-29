@@ -311,3 +311,188 @@ test("an unavailable headline amount gives the precise blocking explanation", as
     "Obligatorisk slutbetaling er ikke oplyst.",
   );
 });
+
+test("offer detail exposes independent terms, evidence, and scenario calculations", async ({
+  page,
+}) => {
+  const presentation = structuredClone(builtPresentation);
+  if (presentation.offers[0].exposureScenarios.state === "known") {
+    presentation.offers[0].exposureScenarios.value[0].capDkk = 300;
+  }
+  await servePresentation(page, presentation);
+  await page.goto("/");
+
+  await page
+    .getByRole("link", {
+      name: "Se detaljer for Hyundai IONIQ 5 Essential 84 kWh",
+    })
+    .click();
+
+  await expect(page).toHaveURL(
+    `/#/offer/${encodeURIComponent(builtPresentation.offers[0].offerIdentity)}`,
+  );
+  const detail = page.locator(".detail-page");
+  await expect(
+    detail.getByRole("heading", {
+      name: "Bilen afleveres til udbyderen ved normalt udløb",
+    }),
+  ).toBeVisible();
+  await expect(detail).toContainText("Udbyderen bærer restværdirisikoen");
+  await expect(detail).toContainText("Registreringsafgiften er betalt fuldt");
+  await expect(detail).toContainText("Operationel privatleasing");
+  await expect(detail).toContainText("Privatleasing med aflevering ved udløb.");
+  await expect(detail).toContainText("service: inkluderet");
+  await expect(detail).toContainText("insurance: påkrævet eksternt");
+  await expect(detail).toContainText("excess_mileage");
+
+  await detail.getByText("Kilde for Registreringsafgift").click();
+  await expect(
+    detail.getByText("Registreringsafgiften er betalt fuldt."),
+  ).toBeVisible();
+
+  await detail.getByLabel("excess_distance_km").fill("250");
+  await expect(detail.getByRole("status")).toHaveText(
+    "Regnestykke: min(excess_distance_km (250) × 2 kr., loft 300 kr.) = 300 kr.",
+  );
+  await expect(detail).toContainText(
+    "Beregningseksemplet ændrer ikke tilbudets basisbeløb.",
+  );
+});
+
+test("selected offers compare in aligned rows without hiding unavailable values", async ({
+  page,
+}) => {
+  const presentation = presentationWithSeveralOffers();
+  presentation.offers[1].registrationTaxTreatment = {
+    state: "not_stated",
+    evidence: {
+      sourceUrl: "https://example.test/bmw-i4",
+      wording: "Registreringsafgift er ikke oplyst.",
+    },
+  };
+  await servePresentation(page, presentation);
+  await page.goto("/");
+
+  await page
+    .getByLabel("Vælg Hyundai IONIQ 5 Essential 84 kWh til sammenligning")
+    .check();
+  await page
+    .getByLabel("Vælg BMW i4 M50 til sammenligning")
+    .check();
+  await page.getByRole("link", { name: "Sammenlign 2 tilbud" }).click();
+
+  await expect(page).toHaveURL(
+    `/#/compare/${encodeURIComponent(
+      builtPresentation.offers[0].offerIdentity,
+    )},fleasing%3Abmw-i4`,
+  );
+  const table = page.getByRole("table", { name: "Sammenligning af tilbud" });
+  await expect(table.getByRole("row")).toHaveCount(16);
+  const registrationTax = table.getByRole("row", {
+    name: /Registreringsafgift/,
+  });
+  await expect(registrationTax).toContainText(
+    "Registreringsafgiften er betalt fuldt",
+  );
+  await expect(registrationTax).toContainText("Ikke oplyst af udbyderen");
+
+  await page.reload();
+  await expect(
+    page.getByRole("table", { name: "Sammenligning af tilbud" }),
+  ).toBeVisible();
+});
+
+for (const viewport of viewports) {
+  test(`${viewport.name} detail and comparison routes retain equivalent material facts`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    const presentation = presentationWithSeveralOffers();
+    presentation.offers[1].registrationTaxTreatment = {
+      state: "not_stated",
+      evidence: {
+        sourceUrl: "https://example.test/bmw-i4",
+        wording: "Registreringsafgift er ikke oplyst.",
+      },
+    };
+    await servePresentation(page, presentation);
+
+    await page.goto("/#/");
+    await page.reload();
+    await expect(
+      page.getByRole("region", { name: "Katalogtilbud" }),
+    ).toBeVisible();
+
+    await page.goto(
+      `/#/offer/${encodeURIComponent(
+        builtPresentation.offers[0].offerIdentity,
+      )}`,
+    );
+    await page.reload();
+    await expect(page.getByText("Service og eksterne omkostninger")).toBeVisible();
+    await expect(page.getByText("Betingede eksponeringer")).toBeVisible();
+    await expect(page.locator(".detail-page")).toContainText(
+      "Udbyderen bærer restværdirisikoen",
+    );
+    await expect(page.locator(".detail-page")).toContainText(
+      "Registreringsafgiften er betalt fuldt",
+    );
+    await expect(page.locator(".detail-page")).toContainText(
+      "Operationel privatleasing",
+    );
+    await expect(page.locator(".detail-page")).toContainText(
+      "Privatleasing med aflevering ved udløb.",
+    );
+    await expect(page.locator(".detail-page")).toContainText(
+      "insurance: påkrævet eksternt",
+    );
+    await expect(page.locator(".detail-page")).toContainText("excess_mileage");
+    await expect(
+      page.getByText("Kilde for Registreringsafgift"),
+    ).toBeVisible();
+    await expect(page.getByText("Se beregning og kildegrundlag")).toBeVisible();
+
+    await page.goto(
+      `/#/compare/${encodeURIComponent(
+        builtPresentation.offers[0].offerIdentity,
+      )},fleasing%3Abmw-i4`,
+    );
+    await page.reload();
+    const scrollRegion = page.getByTestId("comparison-scroll");
+    await expect(scrollRegion).toHaveCSS("overflow-x", "auto");
+    await expect(
+      scrollRegion.getByRole("row", { name: /Normal afslutning/ }),
+    ).toContainText("Bilen afleveres til udbyderen ved normalt udløb");
+    await expect(
+      scrollRegion.getByRole("row", { name: /Leasingform/ }),
+    ).toContainText("Operationel privatleasing");
+    await expect(
+      scrollRegion.getByRole("row", { name: /Restværdirisiko/ }),
+    ).toContainText("Udbyderen bærer restværdirisikoen");
+    await expect(
+      scrollRegion.getByRole("row", { name: /Registreringsafgift/ }),
+    ).toContainText("Ikke oplyst af udbyderen");
+    await expect(
+      scrollRegion.getByRole("row", { name: /Serviceordninger/ }),
+    ).toContainText("service: inkluderet");
+    await expect(
+      scrollRegion.getByRole("row", { name: /Betingede eksponeringer/ }),
+    ).toContainText("excess_mileage");
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth > window.innerWidth,
+      ),
+    ).toBe(false);
+    if (viewport.name === "mobile") {
+      await expect(scrollRegion.locator("tbody th").first()).toHaveCSS(
+        "position",
+        "sticky",
+      );
+      expect(
+        await scrollRegion.evaluate(
+          (element) => element.scrollWidth > element.clientWidth,
+        ),
+      ).toBe(true);
+    }
+  });
+}
