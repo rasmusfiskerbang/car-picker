@@ -146,6 +146,9 @@ class CollectionTest(unittest.TestCase):
             "/biler/": (FLEASING_FIXTURES / "catalogue.html").read_text(
                 encoding="utf-8"
             ),
+            "/flexleasing/": (FLEASING_FIXTURES / "flexleasing.html").read_text(
+                encoding="utf-8"
+            ),
             "/bil/?aston-martin-db9-volante-aut&vid=442795427": (
                 FLEASING_FIXTURES / "aston-martin-db9.html"
             ).read_text(encoding="utf-8"),
@@ -196,8 +199,11 @@ class CollectionTest(unittest.TestCase):
             [row["name"] for row in dataset["coverage"]["providers"]],
             ["Fleasing", "Terminalen"],
         )
-        self.assertEqual(len(dataset["catalogueOffers"]), 2)
-        self.assertEqual(len(dataset["quarantinedCandidates"]), 2)
+        self.assertEqual(
+            [offer["provider"] for offer in dataset["catalogueOffers"]],
+            ["Fleasing", "Fleasing", "Terminalen", "Terminalen"],
+        )
+        self.assertEqual(dataset["quarantinedCandidates"], [])
         self.assertIn(
             "WARNING provider aggregate reconciliation mismatch:", result.stdout
         )
@@ -209,6 +215,9 @@ class CollectionTest(unittest.TestCase):
         fleasing_detail_path = "/bil/?porsche-taycan&vid=982451736"
         responses = {
             "/biler/": (f'<a href="{fleasing_detail_path}">Porsche Taycan</a>'),
+            "/flexleasing/": (FLEASING_FIXTURES / "flexleasing.html").read_text(
+                encoding="utf-8"
+            ),
             fleasing_detail_path: (
                 FLEASING_FIXTURES / "porsche-taycan-configurations.html"
             ).read_text(encoding="utf-8"),
@@ -340,12 +349,10 @@ class CollectionTest(unittest.TestCase):
         self.assertEqual(
             terminalen_offers[0]["providerFormLabel"]["value"], "Privatleasing"
         )
+        self.assertEqual(terminalen_offers[0]["nominalBaseOutlay"]["valueDkk"], 117065)
         self.assertEqual(
-            terminalen_offers[0]["nominalBaseOutlay"]["state"], "not_stated"
-        )
-        self.assertIn(
-            "providerAdvertisedAggregateMismatch",
-            terminalen_offers[0]["nominalBaseOutlay"]["blockingFacts"],
+            terminalen_offers[0]["aggregateReconciliation"]["unexplainedDifferenceDkk"],
+            130,
         )
         self.assertEqual(
             terminalen_offers[0]["advertisedMonthlyPayment"]["evidence"]["sourceUrl"],

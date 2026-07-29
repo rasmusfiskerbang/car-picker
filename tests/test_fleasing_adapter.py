@@ -11,6 +11,7 @@ from car_picker.fleasing import (
     catalogue_detail_urls,
     map_detail_page,
 )
+from car_picker.provider_scope import FLEASING_FLEXLEASING_URL
 
 
 FIXTURE_DIRECTORY = Path(__file__).resolve().parent / "fixtures/fleasing"
@@ -27,6 +28,8 @@ class FixtureHttpClient:
 
     def get_text(self, url: str) -> str:
         self.requested_urls.append(url)
+        if url == FLEASING_FLEXLEASING_URL:
+            return (FIXTURE_DIRECTORY / "flexleasing.html").read_text(encoding="utf-8")
         return self.responses[url]
 
 
@@ -65,7 +68,12 @@ class FleasingAdapterTest(unittest.TestCase):
 
         self.assertEqual(
             client.requested_urls,
-            [CATALOGUE_URL, DETAIL_URL, MISSING_MONTHLY_DETAIL_URL],
+            [
+                CATALOGUE_URL,
+                FLEASING_FLEXLEASING_URL,
+                DETAIL_URL,
+                MISSING_MONTHLY_DETAIL_URL,
+            ],
         )
         self.assertEqual(
             [
@@ -73,17 +81,17 @@ class FleasingAdapterTest(unittest.TestCase):
                 for candidate in candidates
             ],
             [
-                ("fleasing:442795427:private-b3e29d362bda", "quarantined"),
-                ("fleasing:771869804:private-390493d196b5", "quarantined"),
+                ("fleasing:442795427:private-b3e29d362bda", "admitted"),
+                ("fleasing:771869804:private-390493d196b5", "admitted"),
             ],
         )
         candidate = candidates[0]
         self.assertEqual(candidate["advertisedMonthlyPayment"]["valueDkk"], 15865)
         self.assertEqual(candidate["termMonths"]["value"], 12)
-        self.assertEqual(candidate["baseCashFlowBlockers"], ["normalEndMechanism"])
+        self.assertIsNone(candidate["baseCashFlowBlockers"])
         self.assertEqual(
             calculate_comparison_values(candidate)["nominalBaseOutlay"],
-            {"state": "not_stated", "blockingFacts": ["normalEndMechanism"]},
+            {"state": "known", "valueDkk": 333193},
         )
         self.assertEqual(
             candidate["baseCashFlowStream"],
@@ -134,29 +142,130 @@ class FleasingAdapterTest(unittest.TestCase):
             },
         )
         self.assertEqual(
-            candidate["sourceMetadata"]["parserVersion"], "fleasing-html-v3"
+            candidate["sourceMetadata"]["parserVersion"], "fleasing-html-v4"
         )
         self.assertEqual(
             len(candidate["sourceMetadata"]["documents"][0]["contentSha256"]), 64
         )
         self.assertEqual(
-            candidate["quarantineReasons"],
-            [
-                {"fact": "passengerCarScope", "state": "not_stated"},
-                {"fact": "supportedLeasingForm", "state": "unclear"},
-            ],
+            candidate["privateConsumerEligibility"]["evidence"],
+            {
+                "sourceUrl": DETAIL_URL,
+                "wording": "12 måneders privatleasing",
+            },
         )
         self.assertEqual(
-            candidates[1]["quarantineReasons"],
-            [
-                {"fact": "passengerCarScope", "state": "not_stated"},
-                {"fact": "supportedLeasingForm", "state": "unclear"},
-            ],
+            candidate["passengerCarScope"]["evidence"],
+            {
+                "sourceUrl": CATALOGUE_URL,
+                "wording": 'href="/biler/" Personbiler',
+            },
         )
+        self.assertEqual(
+            candidate["supportedLeasingForm"],
+            {
+                "state": "known",
+                "value": "financial",
+                "evidence": {
+                    "sourceUrl": FLEASING_FLEXLEASING_URL,
+                    "wording": (
+                        "Du kan se vores aktuelle udvalg af flexleasing biler på "
+                        "vores hjemmeside; Privatleasing (operationel leasing) og "
+                        "flexleasing (finansiel leasing)"
+                    ),
+                },
+            },
+        )
+        self.assertEqual(
+            candidate["normalEndMechanism"],
+            {
+                "state": "known",
+                "value": "designate_third_party_buyer",
+                "evidence": {
+                    "sourceUrl": FLEASING_FLEXLEASING_URL,
+                    "wording": (
+                        "Til gengæld har du selv ansvar for at sælge bilen efter "
+                        "endt leasingperiode, medmindre du selv vil købe bilen"
+                    ),
+                },
+            },
+        )
+        self.assertNotIn("quarantineReasons", candidate)
+        self.assertNotIn("quarantineReasons", candidates[1])
         self.assertEqual(candidates[1]["baseCashFlowStream"][1]["amountDkk"], None)
         self.assertEqual(
             candidates[1]["baseCashFlowStream"][1]["blockingFacts"],
             ["advertisedMonthlyPayment"],
+        )
+
+    def test_unqualified_private_consumer_payments_are_vat_inclusive(self) -> None:
+        catalogue_html = f"""
+            <a href="/biler/">Personbiler</a>
+            <a href="{DETAIL_URL}">Aston Martin DB9</a>
+        """
+        detail_html = (FIXTURE_DIRECTORY / "aston-martin-db9.html").read_text(
+            encoding="utf-8"
+        )
+        detail_html = detail_html.replace(
+            "Ydelse pr. måned 15.865 kr. /inkl. moms",
+            "Ydelse pr. måned 15.865 kr.",
+        ).replace(
+            "Udbetaling 142.813 kr. /inkl. moms",
+            "Udbetaling 142.813 kr.",
+        )
+        client = FixtureHttpClient(
+            {
+                CATALOGUE_URL: catalogue_html,
+                DETAIL_URL: detail_html,
+            }
+        )
+
+        candidate = FleasingAdapter(
+            client, retrieved_at="2026-07-29T12:00:00Z"
+        ).collect()[0]
+
+        self.assertEqual(candidate["admissionOutcome"], "admitted")
+        self.assertEqual(candidate["advertisedMonthlyPayment"]["valueDkk"], 15865)
+        self.assertEqual(
+            [event["amountBasis"] for event in candidate["baseCashFlowStream"]],
+            ["including_vat", "including_vat"],
+        )
+
+    def test_explicitly_vat_excluding_private_payments_are_quarantined(self) -> None:
+        catalogue_html = f"""
+            <a href="/biler/">Personbiler</a>
+            <a href="{DETAIL_URL}">Aston Martin DB9</a>
+        """
+        detail_html = (FIXTURE_DIRECTORY / "aston-martin-db9.html").read_text(
+            encoding="utf-8"
+        )
+        detail_html = detail_html.replace(
+            "Ydelse pr. måned 15.865 kr. /inkl. moms",
+            "Ydelse pr. måned 15.865 kr. /ex. moms",
+        ).replace(
+            "Udbetaling 142.813 kr. /inkl. moms",
+            "Udbetaling 142.813 kr. /ex. moms",
+        )
+        client = FixtureHttpClient(
+            {
+                CATALOGUE_URL: catalogue_html,
+                DETAIL_URL: detail_html,
+            }
+        )
+
+        candidate = FleasingAdapter(
+            client, retrieved_at="2026-07-29T12:00:00Z"
+        ).collect()[0]
+
+        self.assertEqual(candidate["admissionOutcome"], "quarantined")
+        self.assertEqual(candidate["advertisedMonthlyPayment"]["state"], "conflicting")
+        self.assertIn(
+            {
+                "fact": "baseCashFlowStream",
+                "state": "conflicting",
+                "code": "private_consumer_price_excludes_vat",
+            },
+            candidate["quarantineReasons"],
         )
 
     def test_collects_each_explicit_private_configuration_as_an_admitted_offer(
@@ -258,7 +367,12 @@ class FleasingAdapterTest(unittest.TestCase):
 
         self.assertEqual(
             client.requested_urls,
-            [CATALOGUE_URL, DETAIL_URL, MISSING_MONTHLY_DETAIL_URL],
+            [
+                CATALOGUE_URL,
+                FLEASING_FLEXLEASING_URL,
+                DETAIL_URL,
+                MISSING_MONTHLY_DETAIL_URL,
+            ],
         )
         self.assertEqual(
             [
@@ -267,7 +381,7 @@ class FleasingAdapterTest(unittest.TestCase):
             ],
             [
                 ("fleasing:442795427:detail-unavailable", "quarantined"),
-                ("fleasing:771869804:private-390493d196b5", "quarantined"),
+                ("fleasing:771869804:private-390493d196b5", "admitted"),
             ],
         )
         stale_candidate = candidates[0]

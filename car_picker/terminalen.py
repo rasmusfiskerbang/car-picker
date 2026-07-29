@@ -191,7 +191,9 @@ def map_model_page(
     model = required_string(vehicle, "model")
     vehicle_wording = json.dumps(vehicle, ensure_ascii=False, separators=(",", ":"))
     passenger_car_scope = passenger_car_fact(api_url, vehicle)
-    current_availability = availability_fact(api_url, payload)
+    current_availability = availability_fact(
+        api_url, payload, private_eligibility_wording
+    )
     documents = [
         source_document(catalogue_url, catalogue_html, retrieved_at),
         source_document(page_url, page_html, retrieved_at),
@@ -243,7 +245,7 @@ def map_configuration(
     aggregate = required_int(row, "aggregatePaymentDkk")
     card_evidence = evidence(api_url, wording)
     vehicle_evidence = evidence(api_url, vehicle_wording)
-    vat_basis = amount_basis(legal_wording)
+    vat_basis, vat_conflict = private_consumer_amount_basis(legal_wording)
     payment_evidence = combined_evidence(api_url, wording, legal_wording)
     mileage = mileage_fact(api_url, legal_wording)
     end_fee = inspection_fee(legal_wording)
@@ -308,14 +310,8 @@ def map_configuration(
         "sourceMetadata": {"parserVersion": PARSER_VERSION, "documents": documents},
     }
     reasons = admission_reasons(candidate)
-    if vat_basis != "including_vat":
-        reasons.append(
-            {
-                "fact": "baseCashFlowStream",
-                "state": "not_stated",
-                "code": "vat_basis_not_established",
-            }
-        )
+    if vat_conflict is not None:
+        reasons.append(vat_conflict)
     candidate["admissionOutcome"] = "quarantined" if reasons else "admitted"
     if reasons:
         candidate["quarantineReasons"] = reasons
@@ -417,8 +413,7 @@ def private_lease_rows(
                         end_wording = text
             if block.get("alias") == "richtext":
                 text = html_text(required_string(block, "text"))
-                if "Samlet betaling" in text:
-                    legal_wording = text
+                legal_wording = f"{legal_wording}; {text}" if legal_wording else text
     return (
         rows,
         private_eligibility_wording,
@@ -474,12 +469,39 @@ def integer_in(value: str, pattern: str) -> int:
     return int(match.group(1))
 
 
-def amount_basis(legal_wording: str) -> str:
-    return (
-        "including_vat"
-        if re.search(r"inkl\.?\s*moms", legal_wording, flags=re.IGNORECASE)
-        else "not_stated"
-    )
+def private_consumer_amount_basis(
+    wording: str,
+) -> tuple[str, dict[str, str] | None]:
+    """Apply ADR-0002 after the source establishes private-consumer eligibility."""
+    states_in_wording: set[str] = set()
+    if re.search(r"\binkl(?:\.|usive)?\s*moms\b", wording, flags=re.IGNORECASE):
+        states_in_wording.add("including_vat")
+    if re.search(
+        r"\b(?:ekskl|excl|ex)(?:\.)?\s*moms\b|\buden\s+moms\b",
+        wording,
+        flags=re.IGNORECASE,
+    ):
+        states_in_wording.add("excluding_vat")
+
+    if len(states_in_wording) > 1:
+        return (
+            "not_stated",
+            {
+                "fact": "baseCashFlowStream",
+                "state": "conflicting",
+                "code": "vat_basis_conflicting",
+            },
+        )
+    if states_in_wording == {"excluding_vat"}:
+        return (
+            "excluding_vat",
+            {
+                "fact": "baseCashFlowStream",
+                "state": "conflicting",
+                "code": "private_consumer_price_excludes_vat",
+            },
+        )
+    return "including_vat", None
 
 
 def combined_evidence(
@@ -504,6 +526,28 @@ def mileage_fact(source_url: str, legal_wording: str) -> dict[str, Any]:
 def passenger_car_fact(source_url: str, vehicle: Mapping[str, Any]) -> dict[str, Any]:
     vehicle_type = vehicle.get("vehicleType")
     if vehicle_type is None:
+        body_type = vehicle.get("bodyType")
+        if isinstance(body_type, str) and body_type.casefold() == "suv":
+            return known(
+                True,
+                evidence(
+                    source_url,
+                    json.dumps(
+                        {"bodyType": body_type},
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    ),
+                ),
+            )
+        if body_type is not None:
+            return unclear(
+                source_url,
+                json.dumps(
+                    {"bodyType": body_type},
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ),
+            )
         return not_stated(source_url, json.dumps(vehicle, ensure_ascii=False))
     if not isinstance(vehicle_type, str):
         return unclear(source_url, json.dumps({"vehicleType": vehicle_type}))
@@ -522,7 +566,11 @@ def passenger_car_fact(source_url: str, vehicle: Mapping[str, Any]) -> dict[str,
     return unclear(source_url, vehicle_type)
 
 
-def availability_fact(source_url: str, payload: Mapping[str, Any]) -> dict[str, Any]:
+def availability_fact(
+    source_url: str,
+    payload: Mapping[str, Any],
+    private_eligibility_wording: str,
+) -> dict[str, Any]:
     is_current = payload.get("isCurrent")
     wording = json.dumps(
         {"isCurrent": is_current},
@@ -530,7 +578,20 @@ def availability_fact(source_url: str, payload: Mapping[str, Any]) -> dict[str, 
         separators=(",", ":"),
     )
     if is_current is None:
-        return not_stated(source_url, wording)
+        page_identity = {
+            "url": payload.get("url"),
+            "template": payload.get("template"),
+        }
+        return known(
+            True,
+            evidence(
+                source_url,
+                (
+                    f"{json.dumps(page_identity, ensure_ascii=False, separators=(',', ':'))}; "
+                    f"{private_eligibility_wording}"
+                ),
+            ),
+        )
     if is_current is True:
         return known(True, evidence(source_url, wording))
     return unclear(source_url, wording)

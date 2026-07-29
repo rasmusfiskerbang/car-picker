@@ -20,7 +20,7 @@ async function servePresentation(
 }
 
 function presentationWithSeveralOffers(): CataloguePresentation {
-  const terminalenOffer = builtPresentation.offers[0];
+  const terminalenOffer = structuredClone(builtPresentation.offers[0]);
   const fleasingOffer = structuredClone(terminalenOffer);
   fleasingOffer.offerIdentity = "fleasing:bmw-i4";
   fleasingOffer.provider = "Fleasing";
@@ -310,6 +310,61 @@ test("an unavailable headline amount gives the precise blocking explanation", as
   await expect(fact).toContainText(
     "Obligatorisk slutbetaling er ikke oplyst.",
   );
+});
+
+test("an aggregate mismatch keeps calculated amounts and shows an unexplained difference warning", async ({
+  page,
+}) => {
+  const presentation = presentationWithSeveralOffers();
+  const offer = presentation.offers[0];
+  offer.aggregateReconciliation = {
+    status: "mismatch",
+    providerAdvertisedAggregate: {
+      valueDkk: 152390,
+      evidence: {
+        sourceUrl: "https://example.test/ioniq-5",
+        wording: "Samlet betaling 152.390 kr.",
+      },
+    },
+    reconstructedNominalBaseOutlayDkk: 152610,
+    unexplainedDifferenceDkk: -220,
+    toleranceDkk: 1,
+  };
+  await servePresentation(page, presentation);
+  await page.goto("/");
+
+  const warning = page.getByRole("complementary", {
+    name: "Advarsel om samlet betaling",
+  });
+  await expect(warning).toContainText(
+    "Udbyderens total og vores beregning stemmer ikke.",
+  );
+  await expect(warning).toContainText("Uforklaret forskel: 220 kr.");
+  await expect(warning).toContainText("Udbyderens total er lavere.");
+  await expect(
+    page.getByText("152.610 kr.", { exact: true }).first(),
+  ).toBeVisible();
+
+  await page
+    .getByRole("link", {
+      name: "Se detaljer for Hyundai IONIQ 5 Essential 84 kWh",
+    })
+    .click();
+  await expect(
+    page.getByRole("complementary", {
+      name: "Advarsel om samlet betaling",
+    }),
+  ).toContainText("Årsagen er ukendt");
+
+  await page.goto("/");
+  await page
+    .getByLabel("Vælg Hyundai IONIQ 5 Essential 84 kWh til sammenligning")
+    .check();
+  await page.getByLabel("Vælg BMW i4 M50 til sammenligning").check();
+  await page.getByRole("link", { name: "Sammenlign 2 tilbud" }).click();
+  await expect(
+    page.getByRole("row", { name: /Advarsel om samlet betaling/ }),
+  ).toContainText("Uforklaret forskel: 220 kr.");
 });
 
 test("offer detail exposes independent terms, evidence, and scenario calculations", async ({

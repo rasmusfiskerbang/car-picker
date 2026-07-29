@@ -74,8 +74,9 @@ For a live dataset, replace both paths with `var/catalogue-dataset.json` and an
 exact identity copied from that dataset or a refresh warning. Diagnostics report
 provider assertions, reconstructed cash-flow events, difference, tolerance,
 recurrence, VAT basis, evidence references, and investigation prompts. A
-mismatch suppresses the affected derived values; diagnostics do not edit the
-dataset.
+mismatch leaves the reconstructed derived values available and appears in the
+browser as an unexplained aggregate-difference warning; diagnostics do not edit
+the dataset or choose one total as a correction for the other.
 
 ## Failure guarantees
 

@@ -59,14 +59,6 @@ def calculate_catalogue_offer_comparison(
             )
         )
     )
-    assertion = offer.provider_advertised_aggregate
-    if (
-        assertion is not None
-        and nominal_outlay["state"] == "known"
-        and abs(assertion.value_dkk - nominal_outlay["valueDkk"])
-        > ORDINARY_ROUNDING_TOLERANCE_DKK
-    ):
-        nominal_outlay = unavailable_value("providerAdvertisedAggregateMismatch")
     monthly_equivalent = calculate_nominal_monthly_equivalent(
         nominal_outlay,
         offer.term_months.model_dump(mode="json", by_alias=True),
@@ -145,8 +137,6 @@ def calculate_comparison_values(offer: Mapping[str, Any]) -> dict[str, dict[str,
     nominal_outlay = calculate_nominal_base_outlay(
         events, offer.get("baseCashFlowBlockers")
     )
-    if reconcile_provider_advertised_aggregate(offer)["status"] == "mismatch":
-        nominal_outlay = unavailable_value("providerAdvertisedAggregateMismatch")
     monthly_equivalent = calculate_nominal_monthly_equivalent(
         nominal_outlay, offer.get("termMonths")
     )

@@ -227,6 +227,13 @@ class BuildSiteTest(unittest.TestCase):
                             "blockingFacts": [],
                         },
                     },
+                    "aggregateReconciliation": {
+                        "status": "not_available",
+                        "providerAdvertisedAggregate": None,
+                        "reconstructedNominalBaseOutlayDkk": 152610,
+                        "unexplainedDifferenceDkk": None,
+                        "toleranceDkk": 1,
+                    },
                     "termMonths": {
                         "state": "known",
                         "value": 36,

@@ -18,7 +18,10 @@ from car_picker.catalogue_model import (
     KnownFact,
     VehicleSpecification,
 )
-from car_picker.comparison import calculate_catalogue_offer_comparison
+from car_picker.comparison import (
+    calculate_catalogue_offer_comparison,
+    reconcile_provider_advertised_aggregate,
+)
 from car_picker.presentation_model import (
     CataloguePresentation,
     presentation_json_schema,
@@ -109,6 +112,7 @@ def project_offer(offer: CatalogueOffer) -> dict[str, Any]:
             comparison_values["nominalMonthlyEquivalent"], offer
         ),
         "operationReadiness": comparison_values["operationReadiness"],
+        "aggregateReconciliation": project_aggregate_reconciliation(offer),
         "termMonths": serialize_fact(offer.term_months),
         "annualMileageKm": serialize_fact(offer.annual_mileage_km),
         "normalEndMechanism": serialize_fact(offer.normal_end_mechanism),
@@ -127,6 +131,29 @@ def project_offer(offer: CatalogueOffer) -> dict[str, Any]:
         for event in offer.base_cash_flow_stream
     ]
     return projected_offer
+
+
+def project_aggregate_reconciliation(offer: CatalogueOffer) -> dict[str, Any]:
+    diagnostic = reconcile_provider_advertised_aggregate(
+        offer.model_dump(mode="json", by_alias=True)
+    )
+    assertion = diagnostic["providerAdvertisedAggregate"]
+    return {
+        "status": diagnostic["status"],
+        "providerAdvertisedAggregate": (
+            None
+            if assertion is None
+            else {
+                "valueDkk": assertion["valueDkk"],
+                "evidence": assertion["evidence"],
+            }
+        ),
+        "reconstructedNominalBaseOutlayDkk": diagnostic[
+            "reconstructedNominalBaseOutlayDkk"
+        ],
+        "unexplainedDifferenceDkk": diagnostic["differenceDkk"],
+        "toleranceDkk": diagnostic["toleranceDkk"],
+    }
 
 
 def project_derived_money_fact(

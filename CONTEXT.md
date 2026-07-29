@@ -76,6 +76,10 @@ _Avoid_: Opportunistic evidence hierarchy, fallback source, arbitrary related pa
 The current-catalogue-dataset record of where an offer fact came from: the first-party source document and the exact source fragment or wording that supports its normalized value or evidentiary state. Several facts may share one source document, and each fact points back to its own supporting evidence. Evidence is discarded when the catalogue dataset is successfully replaced.
 _Avoid_: Unattributed value, copied description, detached excerpt
 
+**Private-consumer VAT basis**:
+The VAT treatment of an advertised amount explicitly offered to a private individual. An unqualified private-consumer price is VAT-inclusive; explicit excluding or contradictory VAT wording takes precedence and remains visible.
+_Avoid_: Unknown VAT basis for an unqualified private price, silent gross-up
+
 **Base cash-flow stream**:
 The single time-ordered source of truth for payments and receipts a prospective lessee faces when a leasing offer runs to normal completion. Each amount appears once as an event with its source meaning, direction, amount basis, contract-relative timing or recurrence, and refundability where relevant. It contains unavoidable contractual amounts and the payment and expected return of refundable deposits, but excludes conditional or uncertain amounts; a provider-advertised aggregate total is a separate sourced assertion.
 _Avoid_: Total expense, monthly-price field, duplicated payment fields
@@ -95,6 +99,10 @@ _Avoid_: Monthly payment, advertised monthly price, average instalment
 **Derived comparison value**:
 A reproducible result calculated from the current evidence-backed offer facts, such as nominal base outlay, nominal monthly equivalent, or operation readiness. It is not a provider-stated offer fact and is recalculated as needed rather than becoming part of the leasing offer.
 _Avoid_: Provider price, persisted offer fact, authoritative total
+
+**Unexplained aggregate difference**:
+The signed difference between a provider-advertised aggregate and the nominal base outlay reconstructed from the same offer's documented cash flows when they do not reconcile. Its cause remains unknown; neither amount overwrites the other.
+_Avoid_: Residual value, calculation blocker, corrected provider total
 
 **Exposure scenario**:
 A possible payment or receipt caused by a conditional or uncertain event, represented by its standardized kind, trigger, required inputs, and any sourced formula, rate, cap, or fixed amount. Voluntary end options remain end mechanisms; an unquantified exposure stays visible without an invented cost or probability, and unusual obligations remain representable without being forced into an unrelated kind.

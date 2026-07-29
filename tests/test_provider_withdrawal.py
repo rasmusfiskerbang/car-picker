@@ -147,6 +147,9 @@ class ProviderWithdrawalTest(unittest.TestCase):
             "/biler/": (FLEASING_FIXTURES / "catalogue.html").read_text(
                 encoding="utf-8"
             ),
+            "/flexleasing/": (FLEASING_FIXTURES / "flexleasing.html").read_text(
+                encoding="utf-8"
+            ),
             "/bil/?aston-martin-db9-volante-aut&vid=442795427": (
                 FLEASING_FIXTURES / "aston-martin-db9.html"
             ).read_text(encoding="utf-8"),

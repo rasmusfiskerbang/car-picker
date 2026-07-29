@@ -80,12 +80,28 @@ class ProviderAggregateReconciliationTest(unittest.TestCase):
             projection["offers"][1]["nominalMonthlyEquivalent"]["valueDkk"], 2000
         )
         self.assertEqual(
-            projection["offers"][2]["nominalBaseOutlay"]["blockingFacts"],
-            ["providerAdvertisedAggregateMismatch"],
+            projection["offers"][2]["nominalBaseOutlay"]["valueDkk"],
+            24000,
         )
         self.assertEqual(
-            projection["offers"][2]["nominalMonthlyEquivalent"]["blockingFacts"],
-            ["providerAdvertisedAggregateMismatch"],
+            projection["offers"][2]["nominalMonthlyEquivalent"]["valueDkk"],
+            2000,
+        )
+        self.assertEqual(
+            projection["offers"][2]["aggregateReconciliation"],
+            {
+                "status": "mismatch",
+                "providerAdvertisedAggregate": {
+                    "valueDkk": 24002,
+                    "evidence": {
+                        "sourceUrl": "https://example.test/ioniq-5",
+                        "wording": "Samlet betaling 24002 kr.",
+                    },
+                },
+                "reconstructedNominalBaseOutlayDkk": 24000,
+                "unexplainedDifferenceDkk": 2,
+                "toleranceDkk": 1,
+            },
         )
 
 

@@ -382,6 +382,49 @@ class TerminalenAdapterTest(unittest.TestCase):
             [{"fact": "passengerCarScope", "state": "not_stated"}],
         )
 
+    def test_uses_the_current_private_model_page_when_legacy_flags_are_absent(
+        self,
+    ) -> None:
+        payload = json.loads(
+            (FIXTURES / "inster-price-page.json").read_text(encoding="utf-8")
+        )
+        del payload["vehicleData"]["vehicleType"]
+        del payload["isCurrent"]
+        payload["vehicleData"].update(
+            {
+                "bodyType": "SUV",
+                "numberOfDoors": "5",
+                "vehicleSeatingCapacity": "5",
+            }
+        )
+        client = FixtureHttpClient(
+            {
+                CATALOGUE_URL: (FIXTURES / "catalogue.html").read_text(
+                    encoding="utf-8"
+                ),
+                PRICE_URL: (FIXTURES / "inster-price-page.html").read_text(
+                    encoding="utf-8"
+                ),
+                API_URL: json.dumps(payload),
+            }
+        )
+
+        candidate = TerminalenAdapter(
+            client, retrieved_at="2026-07-29T08:00:00Z"
+        ).collect(CATALOGUE_URL)[0]
+
+        self.assertEqual(candidate["admissionOutcome"], "admitted")
+        self.assertEqual(candidate["passengerCarScope"]["state"], "known")
+        self.assertEqual(
+            candidate["passengerCarScope"]["evidence"]["wording"],
+            '{"bodyType":"SUV"}',
+        )
+        self.assertEqual(candidate["currentAvailability"]["state"], "known")
+        self.assertIn(
+            '"template":"modelSubpage"',
+            candidate["currentAvailability"]["evidence"]["wording"],
+        )
+
     def test_rejects_an_api_response_for_another_model_path(self) -> None:
         payload = json.loads(
             (FIXTURES / "inster-price-page.json").read_text(encoding="utf-8")
@@ -404,7 +447,9 @@ class TerminalenAdapterTest(unittest.TestCase):
                 CATALOGUE_URL
             )
 
-    def test_preserves_missing_vat_and_mileage_as_not_stated(self) -> None:
+    def test_treats_an_unqualified_private_consumer_price_as_vat_inclusive(
+        self,
+    ) -> None:
         payload = json.loads(
             (FIXTURES / "inster-price-page.json").read_text(encoding="utf-8")
         )
@@ -431,7 +476,40 @@ class TerminalenAdapterTest(unittest.TestCase):
         self.assertEqual(candidate["annualMileageKm"]["state"], "not_stated")
         self.assertTrue(
             all(
-                event["amountBasis"] == "not_stated"
+                event["amountBasis"] == "including_vat"
+                for event in candidate["baseCashFlowStream"]
+            )
+        )
+        self.assertEqual(candidate["admissionOutcome"], "admitted")
+        self.assertNotIn("quarantineReasons", candidate)
+
+    def test_quarantines_a_private_consumer_price_that_explicitly_excludes_vat(
+        self,
+    ) -> None:
+        payload = json.loads(
+            (FIXTURES / "inster-price-page.json").read_text(encoding="utf-8")
+        )
+        legal = payload["grid"][0]["content"][3]
+        legal["text"] = "<p>Alle beløb er ekskl. moms.</p>"
+        client = FixtureHttpClient(
+            {
+                CATALOGUE_URL: (FIXTURES / "catalogue.html").read_text(
+                    encoding="utf-8"
+                ),
+                PRICE_URL: (FIXTURES / "inster-price-page.html").read_text(
+                    encoding="utf-8"
+                ),
+                API_URL: json.dumps(payload),
+            }
+        )
+
+        candidate = TerminalenAdapter(
+            client, retrieved_at="2026-07-22T12:00:00Z"
+        ).collect(CATALOGUE_URL)[0]
+
+        self.assertTrue(
+            all(
+                event["amountBasis"] == "excluding_vat"
                 for event in candidate["baseCashFlowStream"]
             )
         )
@@ -439,8 +517,8 @@ class TerminalenAdapterTest(unittest.TestCase):
         self.assertIn(
             {
                 "fact": "baseCashFlowStream",
-                "state": "not_stated",
-                "code": "vat_basis_not_established",
+                "state": "conflicting",
+                "code": "private_consumer_price_excludes_vat",
             },
             candidate["quarantineReasons"],
         )

@@ -7,6 +7,7 @@ Originally checked 22 July 2026; access decision revalidated 29 July 2026 under
 
 - Catalogue: <https://fleasing.dk/biler/>
 - Detail pages: the catalogue's same-site `/bil/?...&vid=<id>` links only.
+- Supporting explanation: <https://fleasing.dk/flexleasing/>.
 - The adapter uses the `vid` value as the provider source identity and an explicit
   private, VAT-inclusive configuration key as the source-local part of the offer
   identity.
@@ -16,11 +17,25 @@ undocumented API, or any third-party embedded source. It retains normalized fact
 short source wording, source URLs, content hashes, retrieval time, and parser
 version; fetched documents are not written to the active catalogue dataset.
 
-The checked detail shape provides a private, VAT-inclusive monthly payment and
-term, but does not itself establish passenger-car scope or a supported leasing form.
-The adapter therefore quarantines such candidates instead of inferring an active
-catalogue offer from residual-value wording. Obtain an explicitly applicable
-first-party source before changing that admission decision.
+## Applicability and normalization
+
+- The catalogue's own `Personbiler` navigation label applies passenger-car scope
+  to the detail links enumerated from that exact catalogue page. A detail-level
+  contradictory vehicle type takes precedence.
+- The detail page's private-pricing tab and configuration-specific
+  `privatleasing` wording establish private-consumer eligibility. The adapter
+  does not treat an unlabelled gross amount alone as private eligibility.
+- The supporting explanation explicitly calls the site's current inventory
+  flexleasing cars, identifies flexleasing as financial leasing, states that the
+  lessee is responsible for selling the car at the end unless buying it, and
+  describes monthly proportional registration tax. Those facts apply only when
+  a linked passenger-car detail contains the matching private configuration and
+  an explicit residual value excluding VAT and registration tax. An explicit
+  conflicting detail-level form or vehicle type is not overridden.
+- Private-configuration payments explicitly state their VAT basis. If that
+  wording later becomes unqualified, [ADR-0002](../adr/0002-unqualified-private-prices-include-vat.md)
+  applies only after the same configuration has established private-consumer
+  eligibility.
 
 ## Access decision
 
