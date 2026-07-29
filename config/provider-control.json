@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "provider-control/v1",
+  "providers": [
+    {
+      "name": "Fleasing",
+      "retrievalEnabled": true
+    },
+    {
+      "name": "Terminalen",
+      "retrievalEnabled": true
+    }
+  ],
+  "withdrawals": []
+}

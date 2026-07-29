@@ -1,0 +1,6 @@
+/var/
+**/site/
+**/.site.artifact-*/
+**/catalogue-dataset.json
+__pycache__/
+*.py[cod]

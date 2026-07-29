@@ -1,0 +1,33 @@
+{
+  "name": "car-picker-frontend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "pnpm generate-contract && tsc -b && vite build",
+    "generate-contract": "json2ts -i src/generated/presentation-schema.json -o src/generated/presentation.ts --bannerComment '/* Generated from Python presentation schema. Do not edit. */'",
+    "test:e2e": "cd .. && .venv/bin/python -m car_picker build-site --dataset tests/fixtures/one-offer-catalogue-dataset.json --output var/site && cd frontend && playwright test",
+    "typecheck": "tsc -b --pretty false"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.83.0",
+    "@tanstack/react-router": "^1.130.2",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.468.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "tailwind-merge": "^3.3.0",
+    "zod": "^4.0.14"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.54.1",
+    "@types/node": "^24.1.0",
+    "@types/react": "^19.1.9",
+    "@types/react-dom": "^19.1.7",
+    "@vitejs/plugin-react": "^4.7.0",
+    "json-schema-to-typescript": "^15.0.4",
+    "typescript": "^5.8.3",
+    "vite": "^7.0.6"
+  },
+  "packageManager": "pnpm@11.9.0"
+}
