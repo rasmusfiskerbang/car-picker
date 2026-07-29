@@ -6,7 +6,7 @@ covered provider contact already on file.
 1. Record the request and stop future retrieval immediately:
 
    ```sh
-   python3 -m car_picker withdraw-provider \
+   uv run -m car_picker withdraw-provider \
      --provider Fleasing \
      --received-at 2026-07-28T10:00:00Z \
      --authentication-note "Authenticated against the provider contact on file."
@@ -21,13 +21,13 @@ covered provider contact already on file.
    source metadata from it:
 
    ```sh
-   python3 -m car_picker refresh-catalogue --dataset var/catalogue-dataset.json
+   uv run -m car_picker refresh-catalogue --dataset var/catalogue-dataset.json
    ```
 
 3. Build the site separately:
 
    ```sh
-   python3 -m car_picker build-site \
+   uv run -m car_picker build-site \
      --dataset var/catalogue-dataset.json \
      --output site
    ```

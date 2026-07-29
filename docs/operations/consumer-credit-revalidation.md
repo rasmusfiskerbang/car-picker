@@ -25,7 +25,7 @@ that will then apply.
 The normal owner validation includes the legal gate:
 
 ```sh
-python3 -m car_picker validate \
+uv run -m car_picker validate \
   --dataset var/catalogue-dataset.json \
   --repository .
 ```
