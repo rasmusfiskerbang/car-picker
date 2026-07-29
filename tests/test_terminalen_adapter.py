@@ -30,6 +30,124 @@ class FixtureHttpClient:
 
 
 class TerminalenAdapterTest(unittest.TestCase):
+    def test_skips_a_model_price_page_without_private_lease_offers(self) -> None:
+        catalogue = json.loads(
+            (
+                '<script id="terminalen-ncg-state" type="application/json">'
+                f'{{"{NAVIGATION_STATE_KEY}":{{"body":[]}}}}'
+                "</script>"
+            )
+            .split(">", 1)[1]
+            .split("</script>", 1)[0]
+        )
+        empty_path = "/nye-biler/hyundai/hyundai-bayon/pris-og-udstyr"
+        empty_url = f"https://www.terminalen.dk{empty_path}"
+        empty_api_url = (
+            f"https://www.terminalen.dk/api/page/url?url={empty_path}&culture=da-DK"
+        )
+        catalogue[NAVIGATION_STATE_KEY]["body"] = [
+            {
+                "children": [
+                    {
+                        "url": empty_path,
+                        "template": "modelSubpage",
+                        "children": [],
+                    },
+                    {
+                        "url": PRICE_PATH,
+                        "template": "modelSubpage",
+                        "children": [],
+                    },
+                ]
+            }
+        ]
+        catalogue_html = (
+            '<script id="terminalen-ncg-state" type="application/json">'
+            f"{json.dumps(catalogue)}"
+            "</script>"
+        )
+        empty_payload = json.loads(
+            (FIXTURES / "inster-price-page.json").read_text(encoding="utf-8")
+        )
+        empty_payload["url"] = empty_path
+        empty_payload["grid"] = []
+        del empty_payload["pimModelId"]
+        del empty_payload["vehicleData"]
+        client = FixtureHttpClient(
+            {
+                CATALOGUE_URL: catalogue_html,
+                empty_url: "<p>No current private lease offer.</p>",
+                empty_api_url: json.dumps(empty_payload),
+                PRICE_URL: (FIXTURES / "inster-price-page.html").read_text(
+                    encoding="utf-8"
+                ),
+                API_URL: (FIXTURES / "inster-price-page.json").read_text(
+                    encoding="utf-8"
+                ),
+            }
+        )
+
+        candidates = TerminalenAdapter(
+            client, retrieved_at="2026-07-29T08:00:00Z"
+        ).collect(CATALOGUE_URL)
+
+        self.assertEqual(len(candidates), 2)
+        self.assertEqual(
+            client.requested_urls,
+            [
+                CATALOGUE_URL,
+                empty_url,
+                empty_api_url,
+                PRICE_URL,
+                API_URL,
+            ],
+        )
+
+    def test_collects_a_card_that_states_monthly_payment_below_upfront_heading(
+        self,
+    ) -> None:
+        payload = json.loads(
+            (FIXTURES / "inster-price-page.json").read_text(encoding="utf-8")
+        )
+        private_content = payload["grid"][0]["content"]
+        private_content.insert(
+            2,
+            {
+                "alias": "imagetextpicker",
+                "columns": [
+                    {
+                        "title": "IONIQ 5 Essential",
+                        "text": "<p>Fra 279.995 kr. Inkl. standardudstyr.</p>",
+                    }
+                ],
+            },
+        )
+        price_cards = private_content[3]["columns"]
+        price_cards[1]["text"] = (
+            "<h2>14.995 kr.</h2>"
+            "<p>Månedlig ydelse fra 3.995 kr./md.<br>"
+            "Periode: 36 mdr.<br>"
+            "Samlet betaling i perioden: 159.595 kr.</p>"
+        )
+        client = FixtureHttpClient(
+            {
+                CATALOGUE_URL: (FIXTURES / "catalogue.html").read_text(
+                    encoding="utf-8"
+                ),
+                PRICE_URL: (FIXTURES / "inster-price-page.html").read_text(
+                    encoding="utf-8"
+                ),
+                API_URL: json.dumps(payload),
+            }
+        )
+
+        candidates = TerminalenAdapter(
+            client, retrieved_at="2026-07-29T08:00:00Z"
+        ).collect(CATALOGUE_URL)
+
+        self.assertEqual(candidates[1]["advertisedMonthlyPayment"]["valueDkk"], 3995)
+        self.assertEqual(candidates[1]["baseCashFlowStream"][0]["amountDkk"], 14995)
+
     def test_discovers_deduplicated_model_price_pages_from_the_bounded_navigation_state(
         self,
     ) -> None:

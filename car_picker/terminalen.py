@@ -53,6 +53,10 @@ class TerminalenAdapter:
                     retrieved_at=self._retrieved_at,
                 )
             )
+        if not candidates:
+            raise StructuralSourceError(
+                "Terminalen designated model-price pages contain no private lease offers"
+            )
         return candidates
 
 
@@ -172,13 +176,6 @@ def map_model_page(
         )
     if payload.get("template") != "modelSubpage":
         raise StructuralSourceError("Terminalen page API is not a model-price page")
-    model_id = required_string(payload, "pimModelId")
-    vehicle = object_value(payload.get("vehicleData"), "Terminalen vehicleData")
-    brand = required_string(vehicle, "brand")
-    model = required_string(vehicle, "model")
-    vehicle_wording = json.dumps(vehicle, ensure_ascii=False, separators=(",", ":"))
-    passenger_car_scope = passenger_car_fact(api_url, vehicle)
-    current_availability = availability_fact(api_url, payload)
     (
         rows,
         private_eligibility_wording,
@@ -187,9 +184,14 @@ def map_model_page(
         end_wording,
     ) = private_lease_rows(payload)
     if not rows:
-        raise StructuralSourceError(
-            "Terminalen model-price API contains no private lease offers"
-        )
+        return []
+    model_id = required_string(payload, "pimModelId")
+    vehicle = object_value(payload.get("vehicleData"), "Terminalen vehicleData")
+    brand = required_string(vehicle, "brand")
+    model = required_string(vehicle, "model")
+    vehicle_wording = json.dumps(vehicle, ensure_ascii=False, separators=(",", ":"))
+    passenger_car_scope = passenger_car_fact(api_url, vehicle)
+    current_availability = availability_fact(api_url, payload)
     documents = [
         source_document(catalogue_url, catalogue_html, retrieved_at),
         source_document(page_url, page_html, retrieved_at),
@@ -388,20 +390,29 @@ def private_lease_rows(
                     raise StructuralSourceError(
                         "Terminalen private lease card block requires columns"
                     )
-                if not price_block_found:
+                column_values = [
+                    object_value(column, "Terminalen leasing column")
+                    for column in columns
+                ]
+                column_texts = [
+                    html_text(required_string(value, "text")) for value in column_values
+                ]
+                is_price_block = any(
+                    re.search(r"kr\.?\s*/\s*md", text, flags=re.IGNORECASE)
+                    and "Samlet betaling i perioden" in text
+                    for text in column_texts
+                )
+                if not price_block_found and is_price_block:
                     price_block_found = True
-                    for column in columns:
-                        value = object_value(column, "Terminalen leasing column")
+                    for value, text in zip(column_values, column_texts, strict=True):
                         rows.append(
                             lease_row(
                                 required_string(value, "title"),
-                                html_text(required_string(value, "text")),
+                                text,
                             )
                         )
                     continue
-                for column in columns:
-                    value = object_value(column, "Terminalen leasing column")
-                    text = html_text(required_string(value, "text"))
+                for value, text in zip(column_values, column_texts, strict=True):
                     if required_string(value, "title") == "Privatleasing":
                         end_wording = text
             if block.get("alias") == "richtext":
@@ -418,8 +429,10 @@ def private_lease_rows(
 
 
 def lease_row(title: str, text: str) -> dict[str, Any]:
-    monthly = money_in(text, r"([\d.]+)\s*kr\.?/md")
-    upfront = money_in(text, r"Udbetaling:\s*([\d.]+)\s*kr")
+    monthly = money_in(text, r"([\d.]+)\s*kr\.?\s*/\s*md")
+    upfront = optional_money_in(text, r"Udbetaling:\s*([\d.]+)\s*kr")
+    if upfront is None:
+        upfront = money_in(text, r"^([\d.]+)\s*kr\.")
     term = integer_in(text, r"Periode:\s*(\d+)\s*mdr")
     aggregate = money_in(text, r"Samlet betaling i perioden:\s*([\d.]+)\s*kr")
     configuration_values = f"{title}\n{monthly}\n{upfront}\n{term}\n{aggregate}\n{text}"
@@ -445,6 +458,11 @@ def money_in(value: str, pattern: str) -> int:
             "Terminalen leasing card is missing an explicit DKK amount"
         )
     return int(match.group(1).replace(".", ""))
+
+
+def optional_money_in(value: str, pattern: str) -> int | None:
+    match = re.search(pattern, value, flags=re.IGNORECASE)
+    return None if match is None else int(match.group(1).replace(".", ""))
 
 
 def integer_in(value: str, pattern: str) -> int:
