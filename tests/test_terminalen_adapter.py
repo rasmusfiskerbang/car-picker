@@ -4,7 +4,12 @@ import json
 import unittest
 from pathlib import Path
 
-from car_picker.terminalen import TerminalenAdapter
+from car_picker.fleasing import StructuralSourceError
+from car_picker.terminalen import (
+    NAVIGATION_STATE_KEY,
+    TerminalenAdapter,
+    model_price_urls,
+)
 
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures/terminalen"
@@ -25,6 +30,242 @@ class FixtureHttpClient:
 
 
 class TerminalenAdapterTest(unittest.TestCase):
+    def test_skips_a_model_price_page_without_private_lease_offers(self) -> None:
+        catalogue = json.loads(
+            (
+                '<script id="terminalen-ncg-state" type="application/json">'
+                f'{{"{NAVIGATION_STATE_KEY}":{{"body":[]}}}}'
+                "</script>"
+            )
+            .split(">", 1)[1]
+            .split("</script>", 1)[0]
+        )
+        empty_path = "/nye-biler/hyundai/hyundai-bayon/pris-og-udstyr"
+        empty_url = f"https://www.terminalen.dk{empty_path}"
+        empty_api_url = (
+            f"https://www.terminalen.dk/api/page/url?url={empty_path}&culture=da-DK"
+        )
+        catalogue[NAVIGATION_STATE_KEY]["body"] = [
+            {
+                "children": [
+                    {
+                        "url": empty_path,
+                        "template": "modelSubpage",
+                        "children": [],
+                    },
+                    {
+                        "url": PRICE_PATH,
+                        "template": "modelSubpage",
+                        "children": [],
+                    },
+                ]
+            }
+        ]
+        catalogue_html = (
+            '<script id="terminalen-ncg-state" type="application/json">'
+            f"{json.dumps(catalogue)}"
+            "</script>"
+        )
+        empty_payload = json.loads(
+            (FIXTURES / "inster-price-page.json").read_text(encoding="utf-8")
+        )
+        empty_payload["url"] = empty_path
+        empty_payload["grid"] = []
+        del empty_payload["pimModelId"]
+        del empty_payload["vehicleData"]
+        client = FixtureHttpClient(
+            {
+                CATALOGUE_URL: catalogue_html,
+                empty_url: "<p>No current private lease offer.</p>",
+                empty_api_url: json.dumps(empty_payload),
+                PRICE_URL: (FIXTURES / "inster-price-page.html").read_text(
+                    encoding="utf-8"
+                ),
+                API_URL: (FIXTURES / "inster-price-page.json").read_text(
+                    encoding="utf-8"
+                ),
+            }
+        )
+
+        candidates = TerminalenAdapter(
+            client, retrieved_at="2026-07-29T08:00:00Z"
+        ).collect(CATALOGUE_URL)
+
+        self.assertEqual(len(candidates), 2)
+        self.assertEqual(
+            client.requested_urls,
+            [
+                CATALOGUE_URL,
+                empty_url,
+                empty_api_url,
+                PRICE_URL,
+                API_URL,
+            ],
+        )
+
+    def test_collects_a_card_that_states_monthly_payment_below_upfront_heading(
+        self,
+    ) -> None:
+        payload = json.loads(
+            (FIXTURES / "inster-price-page.json").read_text(encoding="utf-8")
+        )
+        private_content = payload["grid"][0]["content"]
+        private_content.insert(
+            2,
+            {
+                "alias": "imagetextpicker",
+                "columns": [
+                    {
+                        "title": "IONIQ 5 Essential",
+                        "text": "<p>Fra 279.995 kr. Inkl. standardudstyr.</p>",
+                    }
+                ],
+            },
+        )
+        price_cards = private_content[3]["columns"]
+        price_cards[1]["text"] = (
+            "<h2>14.995 kr.</h2>"
+            "<p>Månedlig ydelse fra 3.995 kr./md.<br>"
+            "Periode: 36 mdr.<br>"
+            "Samlet betaling i perioden: 159.595 kr.</p>"
+        )
+        client = FixtureHttpClient(
+            {
+                CATALOGUE_URL: (FIXTURES / "catalogue.html").read_text(
+                    encoding="utf-8"
+                ),
+                PRICE_URL: (FIXTURES / "inster-price-page.html").read_text(
+                    encoding="utf-8"
+                ),
+                API_URL: json.dumps(payload),
+            }
+        )
+
+        candidates = TerminalenAdapter(
+            client, retrieved_at="2026-07-29T08:00:00Z"
+        ).collect(CATALOGUE_URL)
+
+        self.assertEqual(candidates[1]["advertisedMonthlyPayment"]["valueDkk"], 3995)
+        self.assertEqual(candidates[1]["baseCashFlowStream"][0]["amountDkk"], 14995)
+
+    def test_discovers_deduplicated_model_price_pages_from_the_bounded_navigation_state(
+        self,
+    ) -> None:
+        catalogue_html = (FIXTURES / "catalogue.html").read_text(encoding="utf-8")
+
+        urls = model_price_urls(catalogue_html, CATALOGUE_URL)
+
+        self.assertEqual(urls, [PRICE_URL])
+
+    def test_rejects_unrelated_urls_and_nodes_that_are_not_model_subpages(
+        self,
+    ) -> None:
+        state = {
+            "G./api/navigation?culture=da-DK&levels=10": {
+                "body": [
+                    {
+                        "children": [
+                            {
+                                "url": PRICE_PATH,
+                                "template": "otherTemplate",
+                            },
+                            {
+                                "url": (
+                                    "/nye-biler/hyundai/hyundai-inster/"
+                                    "pris-og-udstyr?tracking=1"
+                                ),
+                                "template": "modelSubpage",
+                            },
+                            {
+                                "url": f"{PRICE_PATH}#offers",
+                                "template": "modelSubpage",
+                            },
+                            {
+                                "url": (
+                                    "https://other.example/nye-biler/hyundai/"
+                                    "hyundai-inster/pris-og-udstyr"
+                                ),
+                                "template": "modelSubpage",
+                            },
+                            {
+                                "url": "/nye-biler/kia/ev3/pris-og-udstyr",
+                                "template": "modelSubpage",
+                            },
+                        ]
+                    }
+                ]
+            }
+        }
+        catalogue_html = (
+            '<script id="terminalen-ncg-state" type="application/json">'
+            f"{json.dumps(state)}"
+            "</script>"
+        )
+
+        self.assertEqual(model_price_urls(catalogue_html, CATALOGUE_URL), [])
+
+    def test_rejects_malformed_embedded_navigation_state(self) -> None:
+        catalogue_html = (
+            '<script id="terminalen-ncg-state" type="application/json">'
+            '{"G./api/navigation?culture=da-DK&levels=10":'
+            "</script>"
+        )
+
+        with self.assertRaisesRegex(
+            StructuralSourceError,
+            "Terminalen catalogue navigation state is malformed",
+        ):
+            model_price_urls(catalogue_html, CATALOGUE_URL)
+
+    def test_rejects_malformed_navigation_children_even_beside_a_valid_page(
+        self,
+    ) -> None:
+        state = {
+            "G./api/navigation?culture=da-DK&levels=10": {
+                "body": [
+                    {"children": "not-an-array"},
+                    {
+                        "url": PRICE_PATH,
+                        "template": "modelSubpage",
+                        "children": [],
+                    },
+                ]
+            }
+        }
+        catalogue_html = (
+            '<script id="terminalen-ncg-state" type="application/json">'
+            f"{json.dumps(state)}"
+            "</script>"
+        )
+
+        with self.assertRaisesRegex(
+            StructuralSourceError,
+            "Terminalen catalogue navigation node children must be an array",
+        ):
+            model_price_urls(catalogue_html, CATALOGUE_URL)
+
+    def test_ignores_incidental_model_price_text_outside_the_navigation_state(
+        self,
+    ) -> None:
+        catalogue_html = (
+            f"<p>{PRICE_PATH}</p>"
+            '<script type="application/json">'
+            f'{{"url":"{PRICE_PATH}","template":"modelSubpage"}}'
+            "</script>"
+            '<script id="terminalen-ncg-state" type="application/json">'
+            f'{{"{NAVIGATION_STATE_KEY}":{{"body":[]}}}}'
+            "</script>"
+        )
+
+        self.assertEqual(model_price_urls(catalogue_html, CATALOGUE_URL), [])
+
+    def test_rejects_a_missing_designated_navigation_state(self) -> None:
+        with self.assertRaisesRegex(
+            StructuralSourceError,
+            "Terminalen catalogue is missing its designated navigation state",
+        ):
+            model_price_urls(f"<p>{PRICE_PATH}</p>", CATALOGUE_URL)
+
     def test_collects_each_explicit_private_vat_inclusive_configuration_from_its_same_path_api_response(
         self,
     ) -> None:
@@ -141,6 +382,49 @@ class TerminalenAdapterTest(unittest.TestCase):
             [{"fact": "passengerCarScope", "state": "not_stated"}],
         )
 
+    def test_uses_the_current_private_model_page_when_legacy_flags_are_absent(
+        self,
+    ) -> None:
+        payload = json.loads(
+            (FIXTURES / "inster-price-page.json").read_text(encoding="utf-8")
+        )
+        del payload["vehicleData"]["vehicleType"]
+        del payload["isCurrent"]
+        payload["vehicleData"].update(
+            {
+                "bodyType": "SUV",
+                "numberOfDoors": "5",
+                "vehicleSeatingCapacity": "5",
+            }
+        )
+        client = FixtureHttpClient(
+            {
+                CATALOGUE_URL: (FIXTURES / "catalogue.html").read_text(
+                    encoding="utf-8"
+                ),
+                PRICE_URL: (FIXTURES / "inster-price-page.html").read_text(
+                    encoding="utf-8"
+                ),
+                API_URL: json.dumps(payload),
+            }
+        )
+
+        candidate = TerminalenAdapter(
+            client, retrieved_at="2026-07-29T08:00:00Z"
+        ).collect(CATALOGUE_URL)[0]
+
+        self.assertEqual(candidate["admissionOutcome"], "admitted")
+        self.assertEqual(candidate["passengerCarScope"]["state"], "known")
+        self.assertEqual(
+            candidate["passengerCarScope"]["evidence"]["wording"],
+            '{"bodyType":"SUV"}',
+        )
+        self.assertEqual(candidate["currentAvailability"]["state"], "known")
+        self.assertIn(
+            '"template":"modelSubpage"',
+            candidate["currentAvailability"]["evidence"]["wording"],
+        )
+
     def test_rejects_an_api_response_for_another_model_path(self) -> None:
         payload = json.loads(
             (FIXTURES / "inster-price-page.json").read_text(encoding="utf-8")
@@ -163,7 +447,9 @@ class TerminalenAdapterTest(unittest.TestCase):
                 CATALOGUE_URL
             )
 
-    def test_preserves_missing_vat_and_mileage_as_not_stated(self) -> None:
+    def test_treats_an_unqualified_private_consumer_price_as_vat_inclusive(
+        self,
+    ) -> None:
         payload = json.loads(
             (FIXTURES / "inster-price-page.json").read_text(encoding="utf-8")
         )
@@ -190,7 +476,40 @@ class TerminalenAdapterTest(unittest.TestCase):
         self.assertEqual(candidate["annualMileageKm"]["state"], "not_stated")
         self.assertTrue(
             all(
-                event["amountBasis"] == "not_stated"
+                event["amountBasis"] == "including_vat"
+                for event in candidate["baseCashFlowStream"]
+            )
+        )
+        self.assertEqual(candidate["admissionOutcome"], "admitted")
+        self.assertNotIn("quarantineReasons", candidate)
+
+    def test_quarantines_a_private_consumer_price_that_explicitly_excludes_vat(
+        self,
+    ) -> None:
+        payload = json.loads(
+            (FIXTURES / "inster-price-page.json").read_text(encoding="utf-8")
+        )
+        legal = payload["grid"][0]["content"][3]
+        legal["text"] = "<p>Alle beløb er ekskl. moms.</p>"
+        client = FixtureHttpClient(
+            {
+                CATALOGUE_URL: (FIXTURES / "catalogue.html").read_text(
+                    encoding="utf-8"
+                ),
+                PRICE_URL: (FIXTURES / "inster-price-page.html").read_text(
+                    encoding="utf-8"
+                ),
+                API_URL: json.dumps(payload),
+            }
+        )
+
+        candidate = TerminalenAdapter(
+            client, retrieved_at="2026-07-22T12:00:00Z"
+        ).collect(CATALOGUE_URL)[0]
+
+        self.assertTrue(
+            all(
+                event["amountBasis"] == "excluding_vat"
                 for event in candidate["baseCashFlowStream"]
             )
         )
@@ -198,8 +517,8 @@ class TerminalenAdapterTest(unittest.TestCase):
         self.assertIn(
             {
                 "fact": "baseCashFlowStream",
-                "state": "not_stated",
-                "code": "vat_basis_not_established",
+                "state": "conflicting",
+                "code": "private_consumer_price_excludes_vat",
             },
             candidate["quarantineReasons"],
         )

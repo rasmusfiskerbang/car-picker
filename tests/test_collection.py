@@ -75,6 +75,60 @@ def candidate(
 
 
 class CollectionTest(unittest.TestCase):
+    def test_refresh_rejects_a_provider_without_an_allowed_access_decision(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            temporary_path = Path(directory)
+            dataset_path = temporary_path / "catalogue-dataset.json"
+            access_path = temporary_path / "provider-access.json"
+            access_path.write_text(
+                json.dumps(
+                    {
+                        "schemaVersion": "provider-access/v1",
+                        "providers": [
+                            {
+                                "name": "Fleasing",
+                                "decision": "paused",
+                                "checkedAt": "2026-07-29",
+                                "sourceAudit": "docs/source-audits/fleasing.md",
+                            },
+                            {
+                                "name": "Terminalen",
+                                "decision": "allowed",
+                                "checkedAt": "2026-07-29",
+                                "sourceAudit": "docs/source-audits/terminalen.md",
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "car_picker",
+                    "refresh-catalogue",
+                    "--dataset",
+                    str(dataset_path),
+                    "--provider-access",
+                    str(access_path),
+                ],
+                cwd=REPOSITORY_ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "Fleasing provider access decision must be allowed before refresh",
+            result.stderr,
+        )
+        self.assertFalse(dataset_path.exists())
+
     def test_public_cli_has_no_one_provider_dataset_writer(self) -> None:
         result = subprocess.run(
             [sys.executable, "-m", "car_picker", "refresh-fleasing"],
@@ -90,6 +144,9 @@ class CollectionTest(unittest.TestCase):
     def test_refresh_catalogue_cli_publishes_both_covered_providers(self) -> None:
         responses = {
             "/biler/": (FLEASING_FIXTURES / "catalogue.html").read_text(
+                encoding="utf-8"
+            ),
+            "/flexleasing/": (FLEASING_FIXTURES / "flexleasing.html").read_text(
                 encoding="utf-8"
             ),
             "/bil/?aston-martin-db9-volante-aut&vid=442795427": (
@@ -142,8 +199,11 @@ class CollectionTest(unittest.TestCase):
             [row["name"] for row in dataset["coverage"]["providers"]],
             ["Fleasing", "Terminalen"],
         )
-        self.assertEqual(len(dataset["catalogueOffers"]), 2)
-        self.assertEqual(len(dataset["quarantinedCandidates"]), 2)
+        self.assertEqual(
+            [offer["provider"] for offer in dataset["catalogueOffers"]],
+            ["Fleasing", "Fleasing", "Terminalen", "Terminalen"],
+        )
+        self.assertEqual(dataset["quarantinedCandidates"], [])
         self.assertIn(
             "WARNING provider aggregate reconciliation mismatch:", result.stdout
         )
@@ -155,6 +215,9 @@ class CollectionTest(unittest.TestCase):
         fleasing_detail_path = "/bil/?porsche-taycan&vid=982451736"
         responses = {
             "/biler/": (f'<a href="{fleasing_detail_path}">Porsche Taycan</a>'),
+            "/flexleasing/": (FLEASING_FIXTURES / "flexleasing.html").read_text(
+                encoding="utf-8"
+            ),
             fleasing_detail_path: (
                 FLEASING_FIXTURES / "porsche-taycan-configurations.html"
             ).read_text(encoding="utf-8"),
@@ -286,12 +349,10 @@ class CollectionTest(unittest.TestCase):
         self.assertEqual(
             terminalen_offers[0]["providerFormLabel"]["value"], "Privatleasing"
         )
+        self.assertEqual(terminalen_offers[0]["nominalBaseOutlay"]["valueDkk"], 117065)
         self.assertEqual(
-            terminalen_offers[0]["nominalBaseOutlay"]["state"], "not_stated"
-        )
-        self.assertIn(
-            "providerAdvertisedAggregateMismatch",
-            terminalen_offers[0]["nominalBaseOutlay"]["blockingFacts"],
+            terminalen_offers[0]["aggregateReconciliation"]["unexplainedDifferenceDkk"],
+            130,
         )
         self.assertEqual(
             terminalen_offers[0]["advertisedMonthlyPayment"]["evidence"]["sourceUrl"],

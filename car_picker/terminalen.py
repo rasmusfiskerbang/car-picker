@@ -5,7 +5,7 @@ import json
 import re
 from collections.abc import Mapping
 from html.parser import HTMLParser
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urljoin, urlparse
 
 from pydantic import JsonValue
@@ -20,6 +20,7 @@ from car_picker.provider_contract import (
 
 
 PARSER_VERSION = "terminalen-model-price-v1"
+NAVIGATION_STATE_KEY = "G./api/navigation?culture=da-DK&levels=10"
 
 
 class TerminalenAdapter:
@@ -52,13 +53,44 @@ class TerminalenAdapter:
                     retrieved_at=self._retrieved_at,
                 )
             )
+        if not candidates:
+            raise StructuralSourceError(
+                "Terminalen designated model-price pages contain no private lease offers"
+            )
         return candidates
 
 
 def model_price_urls(catalogue_html: str, catalogue_url: str) -> list[str]:
-    parser = LinkParser()
+    parser = NavigationStateParser()
     parser.feed(catalogue_html)
     parser.close()
+    if parser.state_text is None:
+        raise StructuralSourceError(
+            "Terminalen catalogue is missing its designated navigation state"
+        )
+    try:
+        state = json.loads(parser.state_text)
+    except json.JSONDecodeError as error:
+        raise StructuralSourceError(
+            "Terminalen catalogue navigation state is malformed JSON"
+        ) from error
+    if not isinstance(state, Mapping):
+        raise StructuralSourceError(
+            "Terminalen catalogue navigation state is malformed: root must be an object"
+        )
+    navigation = state.get(NAVIGATION_STATE_KEY)
+    if navigation is None:
+        raise StructuralSourceError(
+            "Terminalen catalogue navigation state is missing its navigation response"
+        )
+    if not isinstance(navigation, Mapping) or not isinstance(
+        navigation.get("body"), list
+    ):
+        raise StructuralSourceError(
+            "Terminalen catalogue navigation state is malformed: "
+            "navigation body must be an array"
+        )
+
     origin = urlparse(catalogue_url)
     scope_prefix = (
         "/nye-biler/hyundai/"
@@ -66,7 +98,14 @@ def model_price_urls(catalogue_html: str, catalogue_url: str) -> list[str]:
         else origin.path.rstrip("/") + "/"
     )
     urls: list[str] = []
-    for href in parser.hrefs:
+    for node in navigation_nodes(navigation["body"]):
+        href = node.get("url")
+        if node.get("template") != "modelSubpage":
+            continue
+        if not isinstance(href, str) or not href:
+            raise StructuralSourceError(
+                "Terminalen catalogue modelSubpage requires a URL"
+            )
         url = urljoin(catalogue_url, href)
         parsed = urlparse(url)
         if (
@@ -74,13 +113,37 @@ def model_price_urls(catalogue_html: str, catalogue_url: str) -> list[str]:
             and parsed.hostname == origin.hostname
             and parsed.port == origin.port
             and parsed.path.startswith(scope_prefix)
-            and parsed.path.endswith("/pris-og-udstyr")
+            and re.fullmatch(
+                f"{re.escape(scope_prefix)}[^/]+/pris-og-udstyr", parsed.path
+            )
             and not parsed.query
             and not parsed.fragment
             and url not in urls
         ):
             urls.append(url)
     return urls
+
+
+def navigation_nodes(value: object) -> list[dict[str, Any]]:
+    nodes: list[dict[str, Any]] = []
+    if isinstance(value, list):
+        for child in value:
+            nodes.extend(navigation_nodes(child))
+    elif isinstance(value, dict):
+        node = cast(dict[str, Any], value)
+        nodes.append(node)
+        if "children" in node:
+            children = node["children"]
+            if not isinstance(children, list):
+                raise StructuralSourceError(
+                    "Terminalen catalogue navigation node children must be an array"
+                )
+            nodes.extend(navigation_nodes(children))
+    else:
+        raise StructuralSourceError(
+            "Terminalen catalogue navigation children must contain objects"
+        )
+    return nodes
 
 
 def model_page_api_url(page_url: str) -> str:
@@ -113,13 +176,6 @@ def map_model_page(
         )
     if payload.get("template") != "modelSubpage":
         raise StructuralSourceError("Terminalen page API is not a model-price page")
-    model_id = required_string(payload, "pimModelId")
-    vehicle = object_value(payload.get("vehicleData"), "Terminalen vehicleData")
-    brand = required_string(vehicle, "brand")
-    model = required_string(vehicle, "model")
-    vehicle_wording = json.dumps(vehicle, ensure_ascii=False, separators=(",", ":"))
-    passenger_car_scope = passenger_car_fact(api_url, vehicle)
-    current_availability = availability_fact(api_url, payload)
     (
         rows,
         private_eligibility_wording,
@@ -128,9 +184,16 @@ def map_model_page(
         end_wording,
     ) = private_lease_rows(payload)
     if not rows:
-        raise StructuralSourceError(
-            "Terminalen model-price API contains no private lease offers"
-        )
+        return []
+    model_id = required_string(payload, "pimModelId")
+    vehicle = object_value(payload.get("vehicleData"), "Terminalen vehicleData")
+    brand = required_string(vehicle, "brand")
+    model = required_string(vehicle, "model")
+    vehicle_wording = json.dumps(vehicle, ensure_ascii=False, separators=(",", ":"))
+    passenger_car_scope = passenger_car_fact(api_url, vehicle)
+    current_availability = availability_fact(
+        api_url, payload, private_eligibility_wording
+    )
     documents = [
         source_document(catalogue_url, catalogue_html, retrieved_at),
         source_document(page_url, page_html, retrieved_at),
@@ -182,7 +245,7 @@ def map_configuration(
     aggregate = required_int(row, "aggregatePaymentDkk")
     card_evidence = evidence(api_url, wording)
     vehicle_evidence = evidence(api_url, vehicle_wording)
-    vat_basis = amount_basis(legal_wording)
+    vat_basis, vat_conflict = private_consumer_amount_basis(legal_wording)
     payment_evidence = combined_evidence(api_url, wording, legal_wording)
     mileage = mileage_fact(api_url, legal_wording)
     end_fee = inspection_fee(legal_wording)
@@ -247,14 +310,8 @@ def map_configuration(
         "sourceMetadata": {"parserVersion": PARSER_VERSION, "documents": documents},
     }
     reasons = admission_reasons(candidate)
-    if vat_basis != "including_vat":
-        reasons.append(
-            {
-                "fact": "baseCashFlowStream",
-                "state": "not_stated",
-                "code": "vat_basis_not_established",
-            }
-        )
+    if vat_conflict is not None:
+        reasons.append(vat_conflict)
     candidate["admissionOutcome"] = "quarantined" if reasons else "admitted"
     if reasons:
         candidate["quarantineReasons"] = reasons
@@ -329,26 +386,34 @@ def private_lease_rows(
                     raise StructuralSourceError(
                         "Terminalen private lease card block requires columns"
                     )
-                if not price_block_found:
+                column_values = [
+                    object_value(column, "Terminalen leasing column")
+                    for column in columns
+                ]
+                column_texts = [
+                    html_text(required_string(value, "text")) for value in column_values
+                ]
+                is_price_block = any(
+                    re.search(r"kr\.?\s*/\s*md", text, flags=re.IGNORECASE)
+                    and "Samlet betaling i perioden" in text
+                    for text in column_texts
+                )
+                if not price_block_found and is_price_block:
                     price_block_found = True
-                    for column in columns:
-                        value = object_value(column, "Terminalen leasing column")
+                    for value, text in zip(column_values, column_texts, strict=True):
                         rows.append(
                             lease_row(
                                 required_string(value, "title"),
-                                html_text(required_string(value, "text")),
+                                text,
                             )
                         )
                     continue
-                for column in columns:
-                    value = object_value(column, "Terminalen leasing column")
-                    text = html_text(required_string(value, "text"))
+                for value, text in zip(column_values, column_texts, strict=True):
                     if required_string(value, "title") == "Privatleasing":
                         end_wording = text
             if block.get("alias") == "richtext":
                 text = html_text(required_string(block, "text"))
-                if "Samlet betaling" in text:
-                    legal_wording = text
+                legal_wording = f"{legal_wording}; {text}" if legal_wording else text
     return (
         rows,
         private_eligibility_wording,
@@ -359,8 +424,10 @@ def private_lease_rows(
 
 
 def lease_row(title: str, text: str) -> dict[str, Any]:
-    monthly = money_in(text, r"([\d.]+)\s*kr\.?/md")
-    upfront = money_in(text, r"Udbetaling:\s*([\d.]+)\s*kr")
+    monthly = money_in(text, r"([\d.]+)\s*kr\.?\s*/\s*md")
+    upfront = optional_money_in(text, r"Udbetaling:\s*([\d.]+)\s*kr")
+    if upfront is None:
+        upfront = money_in(text, r"^([\d.]+)\s*kr\.")
     term = integer_in(text, r"Periode:\s*(\d+)\s*mdr")
     aggregate = money_in(text, r"Samlet betaling i perioden:\s*([\d.]+)\s*kr")
     configuration_values = f"{title}\n{monthly}\n{upfront}\n{term}\n{aggregate}\n{text}"
@@ -388,6 +455,11 @@ def money_in(value: str, pattern: str) -> int:
     return int(match.group(1).replace(".", ""))
 
 
+def optional_money_in(value: str, pattern: str) -> int | None:
+    match = re.search(pattern, value, flags=re.IGNORECASE)
+    return None if match is None else int(match.group(1).replace(".", ""))
+
+
 def integer_in(value: str, pattern: str) -> int:
     match = re.search(pattern, value, flags=re.IGNORECASE)
     if match is None:
@@ -397,12 +469,39 @@ def integer_in(value: str, pattern: str) -> int:
     return int(match.group(1))
 
 
-def amount_basis(legal_wording: str) -> str:
-    return (
-        "including_vat"
-        if re.search(r"inkl\.?\s*moms", legal_wording, flags=re.IGNORECASE)
-        else "not_stated"
-    )
+def private_consumer_amount_basis(
+    wording: str,
+) -> tuple[str, dict[str, str] | None]:
+    """Apply ADR-0002 after the source establishes private-consumer eligibility."""
+    states_in_wording: set[str] = set()
+    if re.search(r"\binkl(?:\.|usive)?\s*moms\b", wording, flags=re.IGNORECASE):
+        states_in_wording.add("including_vat")
+    if re.search(
+        r"\b(?:ekskl|excl|ex)(?:\.)?\s*moms\b|\buden\s+moms\b",
+        wording,
+        flags=re.IGNORECASE,
+    ):
+        states_in_wording.add("excluding_vat")
+
+    if len(states_in_wording) > 1:
+        return (
+            "not_stated",
+            {
+                "fact": "baseCashFlowStream",
+                "state": "conflicting",
+                "code": "vat_basis_conflicting",
+            },
+        )
+    if states_in_wording == {"excluding_vat"}:
+        return (
+            "excluding_vat",
+            {
+                "fact": "baseCashFlowStream",
+                "state": "conflicting",
+                "code": "private_consumer_price_excludes_vat",
+            },
+        )
+    return "including_vat", None
 
 
 def combined_evidence(
@@ -427,6 +526,28 @@ def mileage_fact(source_url: str, legal_wording: str) -> dict[str, Any]:
 def passenger_car_fact(source_url: str, vehicle: Mapping[str, Any]) -> dict[str, Any]:
     vehicle_type = vehicle.get("vehicleType")
     if vehicle_type is None:
+        body_type = vehicle.get("bodyType")
+        if isinstance(body_type, str) and body_type.casefold() == "suv":
+            return known(
+                True,
+                evidence(
+                    source_url,
+                    json.dumps(
+                        {"bodyType": body_type},
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    ),
+                ),
+            )
+        if body_type is not None:
+            return unclear(
+                source_url,
+                json.dumps(
+                    {"bodyType": body_type},
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ),
+            )
         return not_stated(source_url, json.dumps(vehicle, ensure_ascii=False))
     if not isinstance(vehicle_type, str):
         return unclear(source_url, json.dumps({"vehicleType": vehicle_type}))
@@ -445,7 +566,11 @@ def passenger_car_fact(source_url: str, vehicle: Mapping[str, Any]) -> dict[str,
     return unclear(source_url, vehicle_type)
 
 
-def availability_fact(source_url: str, payload: Mapping[str, Any]) -> dict[str, Any]:
+def availability_fact(
+    source_url: str,
+    payload: Mapping[str, Any],
+    private_eligibility_wording: str,
+) -> dict[str, Any]:
     is_current = payload.get("isCurrent")
     wording = json.dumps(
         {"isCurrent": is_current},
@@ -453,7 +578,20 @@ def availability_fact(source_url: str, payload: Mapping[str, Any]) -> dict[str, 
         separators=(",", ":"),
     )
     if is_current is None:
-        return not_stated(source_url, wording)
+        page_identity = {
+            "url": payload.get("url"),
+            "template": payload.get("template"),
+        }
+        return known(
+            True,
+            evidence(
+                source_url,
+                (
+                    f"{json.dumps(page_identity, ensure_ascii=False, separators=(',', ':'))}; "
+                    f"{private_eligibility_wording}"
+                ),
+            ),
+        )
     if is_current is True:
         return known(True, evidence(source_url, wording))
     return unclear(source_url, wording)
@@ -564,13 +702,27 @@ def list_value(value: JsonValue, name: str) -> list[JsonValue]:
     return value
 
 
-class LinkParser(HTMLParser):
+class NavigationStateParser(HTMLParser):
     def __init__(self) -> None:
         super().__init__()
-        self.hrefs: list[str] = []
+        self._in_navigation_state = False
+        self._state_parts: list[str] = []
+        self.state_text: str | None = None
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if tag == "a":
-            href = dict(attrs).get("href")
-            if href:
-                self.hrefs.append(href)
+        attributes = dict(attrs)
+        if (
+            tag == "script"
+            and attributes.get("id") == "terminalen-ncg-state"
+            and attributes.get("type") == "application/json"
+        ):
+            self._in_navigation_state = True
+
+    def handle_data(self, data: str) -> None:
+        if self._in_navigation_state:
+            self._state_parts.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "script" and self._in_navigation_state:
+            self.state_text = "".join(self._state_parts)
+            self._in_navigation_state = False

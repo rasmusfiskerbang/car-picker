@@ -184,6 +184,29 @@ a {
   background: #edf0e7;
 }
 
+.aggregate-warning {
+  margin-top: 1.25rem;
+  padding: 1rem;
+  border: 1px solid #c88b43;
+  border-radius: 0.75rem;
+  color: #5f3d1a;
+  background: #fff1dc;
+}
+
+.aggregate-warning p {
+  margin: 0.4rem 0;
+}
+
+.detail-page > .aggregate-warning {
+  margin: 0 0 2rem;
+}
+
+.aggregate-warning-row th,
+.aggregate-warning-row td {
+  color: #5f3d1a;
+  background: #fff1dc;
+}
+
 .calculation summary {
   cursor: pointer;
   font-weight: 750;

@@ -20,6 +20,12 @@ from car_picker.collection import (
 from car_picker.comparison import reconcile_provider_advertised_aggregate
 from car_picker.legal_release import DEFAULT_LEGAL_RECORD, validate_legal_release
 from car_picker.owner_operations import validate_owner_checkout
+from car_picker.provider_access import (
+    DEFAULT_PROVIDER_ACCESS,
+    read_provider_access,
+    validate_access_before_refresh,
+)
+from car_picker.provider_scope import CoveredProvider
 from car_picker.provider_withdrawal import (
     DEFAULT_PROVIDER_CONTROL,
     active_provider_names,
@@ -65,6 +71,9 @@ def parse_arguments() -> argparse.Namespace:
     complete_refresh.add_argument(
         "--provider-control", default=DEFAULT_PROVIDER_CONTROL, type=Path
     )
+    complete_refresh.add_argument(
+        "--provider-access", default=DEFAULT_PROVIDER_ACCESS, type=Path
+    )
     withdraw = subcommands.add_parser(
         "withdraw-provider",
         help="Record an authenticated provider withdrawal and disable retrieval.",
@@ -104,6 +113,9 @@ def parse_arguments() -> argparse.Namespace:
     validate.add_argument(
         "--provider-control", default=DEFAULT_PROVIDER_CONTROL, type=Path
     )
+    validate.add_argument(
+        "--provider-access", default=DEFAULT_PROVIDER_ACCESS, type=Path
+    )
     validate.add_argument("--legal-record", default=DEFAULT_LEGAL_RECORD, type=Path)
     serve = subcommands.add_parser(
         "serve-site", help="Serve a completed static site on the local network."
@@ -131,11 +143,14 @@ def main() -> None:
         validate_fleasing_catalogue_url(arguments.fleasing_catalogue_url)
         validate_terminalen_catalogue_url(arguments.terminalen_catalogue_url)
         control = read_provider_control_or_exit(arguments.provider_control)
+        active_providers = active_provider_names(control)
+        access = read_provider_access_or_exit(arguments.provider_access)
+        validate_access_before_refresh_or_exit(access, active_providers)
         dataset = refresh_all_providers(
             arguments.dataset,
             arguments.fleasing_catalogue_url,
             arguments.terminalen_catalogue_url,
-            active_providers=active_provider_names(control),
+            active_providers=active_providers,
             ended_providers=coverage_ended_facts(control),
         )
         record_refresh_completion_or_exit(
@@ -161,6 +176,7 @@ def main() -> None:
             arguments.dataset,
             arguments.repository,
             arguments.provider_control,
+            arguments.provider_access,
             arguments.legal_record,
         )
     elif arguments.command == "serve-site":
@@ -174,14 +190,32 @@ def read_provider_control_or_exit(path: Path) -> dict[str, object]:
         raise SystemExit(str(error)) from error
 
 
+def read_provider_access_or_exit(path: Path) -> dict[str, Any]:
+    try:
+        return read_provider_access(path)
+    except (OSError, ValueError) as error:
+        raise SystemExit(str(error)) from error
+
+
+def validate_access_before_refresh_or_exit(
+    access: Mapping[str, Any], active_providers: tuple[CoveredProvider, ...]
+) -> None:
+    try:
+        validate_access_before_refresh(access, active_providers)
+    except ValueError as error:
+        raise SystemExit(str(error)) from error
+
+
 def validate_owner_checkout_or_exit(
     dataset_path: Path,
     repository_path: Path,
     provider_control_path: Path,
+    provider_access_path: Path,
     legal_record_path: Path,
 ) -> None:
     try:
         validate_owner_checkout(dataset_path, repository_path, provider_control_path)
+        read_provider_access(provider_access_path)
         legal_status = validate_legal_release(
             legal_record_path,
             repository_path,

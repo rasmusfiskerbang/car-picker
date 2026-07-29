@@ -74,8 +74,9 @@ For a live dataset, replace both paths with `var/catalogue-dataset.json` and an
 exact identity copied from that dataset or a refresh warning. Diagnostics report
 provider assertions, reconstructed cash-flow events, difference, tolerance,
 recurrence, VAT basis, evidence references, and investigation prompts. A
-mismatch suppresses the affected derived values; diagnostics do not edit the
-dataset.
+mismatch leaves the reconstructed derived values available and appears in the
+browser as an unexplained aggregate-difference warning; diagnostics do not edit
+the dataset or choose one total as a correction for the other.
 
 ## Failure guarantees
 
@@ -113,13 +114,31 @@ Do not enrich an offer from third-party indexes, unlisted related pages, or a
 document whose applicability to that exact offer is uncertain. Missing source
 facts retain an explicit offer fact state.
 
-Public access and a permissive `robots.txt` are not permission to reuse content.
-Recheck the relevant provider terms and `robots.txt` after a retrieval failure,
-a material source change, or provider contact. Stop collection when an explicit
-access control, changed terms, or provider instruction blocks the designated
-route; never bypass a login, bot challenge, rate limit, or other access control.
-Review the current [Fleasing source audit](../source-audits/fleasing.md) before a
-live refresh and apply the same checks to Terminalen's bounded sources.
+Under [ADR-0001](../adr/0001-public-provider-access.md), public first-party facts
+may be collected unless an applicable robots rule, published term, technical
+access control, rate limit, or provider instruction explicitly prohibits the
+bounded use. Absence of a reuse licence and a generic copyright notice are not
+opt-outs. Same-provider APIs used by the public page are allowed only as exact,
+bounded structured representations; embedded third-party endpoints require
+their own access decision.
+
+Before a live refresh, review the current
+[Fleasing](../source-audits/fleasing.md) and
+[Terminalen](../source-audits/terminalen.md) source audits. Revalidate a provider
+after a material source or terms change, access failure, or provider contact.
+Ambiguous restrictions pause that provider for owner review. Never bypass a
+login, bot challenge, persistent authorization denial, rate limit, or other
+access control, and never rotate identity or choose another route to evade one.
+Record the current `allowed`, `paused`, or `blocked` decision, check date, and
+source-audit path in `config/provider-access.json`. Both `refresh-catalogue` and
+`validate` reject malformed access records, and refresh refuses to contact an
+enabled provider unless its decision is `allowed`.
+
+Keep collection low-frequency and bounded. Retain normalized facts, provenance,
+hashes, and only short audit wording; do not retain full fetched pages, personal
+or accidentally exposed data, images, or long descriptions. An authenticated
+provider instruction to stop overrides the public-source decision immediately;
+follow the provider withdrawal procedure below.
 
 ## Provider withdrawal and routine maintenance
 

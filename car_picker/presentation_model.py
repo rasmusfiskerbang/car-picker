@@ -8,7 +8,6 @@ from pydantic import Field, StringConstraints
 
 from car_picker.catalogue_model import (
     CatalogueModel,
-    EndedProviderCoverage,
     Evidence,
     ExposureScenario,
     ServiceArrangement,
@@ -117,6 +116,25 @@ class ComparisonOperationReadiness(CatalogueModel):
     nominal_monthly_equivalent: OperationReadiness
 
 
+class PresentationAggregateAssertion(CatalogueModel):
+    value_dkk: int = Field(ge=0)
+    evidence: Evidence
+
+
+class AggregateReconciliation(CatalogueModel):
+    status: Literal[
+        "not_available",
+        "not_reconstructed",
+        "matching",
+        "within_ordinary_rounding_tolerance",
+        "mismatch",
+    ]
+    provider_advertised_aggregate: PresentationAggregateAssertion | None
+    reconstructed_nominal_base_outlay_dkk: int | None
+    unexplained_difference_dkk: int | None
+    tolerance_dkk: int = Field(ge=0)
+
+
 class PresentationCoverageProvider(CatalogueModel):
     name: NonEmptyString
     designated_source: NonEmptyString
@@ -125,6 +143,11 @@ class PresentationCoverageProvider(CatalogueModel):
 
 class PresentationCoverage(CatalogueModel):
     providers: list[PresentationCoverageProvider]
+
+
+class PresentationEndedProviderCoverage(CatalogueModel):
+    name: NonEmptyString
+    coverage_ended_at: NonEmptyString
 
 
 class PresentationOffer(CatalogueModel):
@@ -144,6 +167,7 @@ class PresentationOffer(CatalogueModel):
     nominal_base_outlay: DerivedMoneyFact
     nominal_monthly_equivalent: DerivedMoneyFact
     operation_readiness: ComparisonOperationReadiness
+    aggregate_reconciliation: AggregateReconciliation
     term_months: PresentationValueFact
     annual_mileage_km: PresentationValueFact
     normal_end_mechanism: PresentationValueFact
@@ -160,7 +184,7 @@ class CataloguePresentation(CatalogueModel):
     schema_version: Literal["catalogue-presentation/v1"]
     generated_at: NonEmptyString
     coverage: PresentationCoverage
-    coverage_ended: list[EndedProviderCoverage]
+    coverage_ended: list[PresentationEndedProviderCoverage]
     offers: list[PresentationOffer]
 
 

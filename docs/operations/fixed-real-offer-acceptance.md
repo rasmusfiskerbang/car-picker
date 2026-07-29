@@ -14,6 +14,13 @@ published as an offer. A failed refresh is an acceptance blocker: record the
 provider, source URL, and the exact structural or access failure, then keep the
 prior completed artifact active.
 
+Before the refresh, confirm that every enabled provider has a current source audit
+whose decision is `allowed` under
+[ADR-0001](../adr/0001-public-provider-access.md). A material source or terms
+change, access failure, or provider contact makes the affected decision stale
+until the owner revalidates it. An explicit prohibition or access control blocks
+collection; absence of affirmative written permission does not.
+
 ## Fixed offer set
 
 Before opening the site, copy exact offer identities from the fresh dataset

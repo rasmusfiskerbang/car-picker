@@ -16,9 +16,10 @@ from car_picker.provider_contract import (
     source_document,
     unavailable_fact,
 )
+from car_picker.provider_scope import FLEASING_FLEXLEASING_URL
 
 
-PARSER_VERSION = "fleasing-html-v3"
+PARSER_VERSION = "fleasing-html-v4"
 
 
 class TextHttpClient(Protocol):
@@ -41,6 +42,15 @@ class DiscoveredOffer:
     source_fragment: str
 
 
+@dataclass(frozen=True)
+class FleasingSupportingEvidence:
+    source_url: str
+    source_html: str
+    form_wording: str
+    end_wording: str
+    registration_tax_wording: str
+
+
 class FleasingAdapter:
     """Map Fleasing's first-party vehicle page and its private-pricing tab."""
 
@@ -52,6 +62,11 @@ class FleasingAdapter:
         self, catalogue_url: str = "https://fleasing.dk/biler/"
     ) -> list[dict[str, Any]]:
         catalogue_html = self._http_client.get_text(catalogue_url)
+        supporting_url = urljoin(catalogue_url, "/flexleasing/")
+        supporting_html = self._http_client.get_text(supporting_url)
+        supporting_evidence = flexleasing_supporting_evidence(
+            supporting_html, supporting_url
+        )
         offers = catalogue_detail_offers(catalogue_html, catalogue_url)
         if not offers:
             raise StructuralSourceError(
@@ -68,6 +83,7 @@ class FleasingAdapter:
                     discovered_offer=offer,
                     detail_html=detail_html,
                     retrieved_at=self._retrieved_at,
+                    supporting_evidence=supporting_evidence,
                 )
             except UnavailablePrivateDetailError:
                 detail_candidates = [
@@ -77,6 +93,7 @@ class FleasingAdapter:
                         discovered_offer=offer,
                         detail_html=detail_html,
                         retrieved_at=self._retrieved_at,
+                        supporting_evidence=supporting_evidence,
                     )
                 ]
             candidates.extend(detail_candidates)
@@ -122,6 +139,7 @@ def map_detail_page(
     discovered_offer: DiscoveredOffer,
     detail_html: str,
     retrieved_at: str,
+    supporting_evidence: FleasingSupportingEvidence | None = None,
 ) -> dict[str, Any]:
     """Map the sole configuration exposed by a detail page."""
     candidates = map_detail_pages(
@@ -130,6 +148,7 @@ def map_detail_page(
         discovered_offer=discovered_offer,
         detail_html=detail_html,
         retrieved_at=retrieved_at,
+        supporting_evidence=supporting_evidence,
     )
     if len(candidates) != 1:
         raise StructuralSourceError(
@@ -145,6 +164,7 @@ def map_detail_pages(
     discovered_offer: DiscoveredOffer,
     detail_html: str,
     retrieved_at: str,
+    supporting_evidence: FleasingSupportingEvidence | None = None,
 ) -> list[dict[str, Any]]:
     detail = FleasingDetailParser()
     detail.feed(detail_html)
@@ -164,9 +184,23 @@ def map_detail_pages(
         "documents": [
             source_document(catalogue_url, catalogue_html, retrieved_at),
             source_document(discovered_offer.url, detail_html, retrieved_at),
+            *(
+                [
+                    source_document(
+                        supporting_evidence.source_url,
+                        supporting_evidence.source_html,
+                        retrieved_at,
+                    )
+                ]
+                if supporting_evidence is not None
+                else []
+            ),
         ],
     }
     vehicle = vehicle_specification(detail, discovered_offer.url)
+    catalogue_passenger_car_scope = passenger_car_catalogue_fact(
+        catalogue_html, catalogue_url
+    )
     configuration_id_counts = Counter(
         configuration_id
         for configuration_id, _ in detail.private_configurations
@@ -199,6 +233,8 @@ def map_detail_pages(
                 source_id=source_id,
                 source_metadata=source_metadata,
                 vehicle=vehicle,
+                catalogue_passenger_car_scope=catalogue_passenger_car_scope,
+                supporting_evidence=supporting_evidence,
             )
         )
     return candidates
@@ -215,12 +251,32 @@ def map_private_configuration(
     source_id: str,
     source_metadata: dict[str, Any],
     vehicle: dict[str, Any],
+    catalogue_passenger_car_scope: dict[str, Any],
+    supporting_evidence: FleasingSupportingEvidence | None,
 ) -> dict[str, Any]:
+    private_eligibility = private_consumer_eligibility_fact(
+        detail, discovered_offer.url
+    )
+    private_consumer_established = private_eligibility.get("state") == "known"
     monthly_payment = money_fact(
-        private_terms, "Ydelse pr. måned", discovered_offer.url
+        private_terms,
+        "Ydelse pr. måned",
+        discovered_offer.url,
+        private_consumer_established=private_consumer_established,
     )
     term_months = months_fact(private_terms, "Leasingperiode", discovered_offer.url)
-    upfront_payment = money_fact(private_terms, "Udbetaling", discovered_offer.url)
+    upfront_payment = money_fact(
+        private_terms,
+        "Udbetaling",
+        discovered_offer.url,
+        private_consumer_established=private_consumer_established,
+    )
+    supported_form = supported_leasing_form_fact(
+        detail, private_terms, discovered_offer.url, supporting_evidence
+    )
+    normal_end = normal_end_mechanism_fact(
+        private_terms, discovered_offer.url, supporting_evidence
+    )
     candidate = {
         "offerIdentity": f"fleasing:{source_id}:{configuration_key}",
         "provider": "Fleasing",
@@ -228,33 +284,35 @@ def map_private_configuration(
         "canonicalOfferUrl": discovered_offer.url,
         "sourceLocalConfigurationKey": configuration_key,
         "vehicleSpecification": vehicle,
-        "privateConsumerEligibility": private_consumer_eligibility_fact(
-            detail, discovered_offer.url
+        "privateConsumerEligibility": private_eligibility,
+        "passengerCarScope": passenger_car_fact(
+            detail,
+            discovered_offer.url,
+            catalogue_passenger_car_scope,
         ),
-        "passengerCarScope": passenger_car_fact(detail, discovered_offer.url),
         "currentAvailability": known_fact(
             True, catalogue_url, discovered_offer.source_fragment
         ),
-        "supportedLeasingForm": supported_leasing_form_fact(
-            detail, private_terms, discovered_offer.url
-        ),
+        "supportedLeasingForm": supported_form,
         "advertisedMonthlyPayment": monthly_payment,
         "termMonths": term_months,
         "baseCashFlowStream": base_cash_flow_stream(
             upfront_payment, monthly_payment, term_months
         ),
-        "baseCashFlowBlockers": ["normalEndMechanism"],
+        "baseCashFlowBlockers": (
+            None if normal_end.get("state") == "known" else ["normalEndMechanism"]
+        ),
         "annualMileageKm": not_stated_fact(
             discovered_offer.url, detail.private_tab_fragment
         ),
-        "normalEndMechanism": not_stated_fact(
-            discovered_offer.url, detail.private_tab_fragment
-        ),
+        "normalEndMechanism": normal_end,
         "residualRiskAllocation": residual_risk_allocation_fact(
             private_terms, discovered_offer.url
         ),
-        "registrationTaxTreatment": not_stated_fact(
-            discovered_offer.url, detail.private_tab_fragment
+        "registrationTaxTreatment": registration_tax_treatment_fact(
+            private_terms,
+            discovered_offer.url,
+            supporting_evidence,
         ),
         "serviceArrangements": not_stated_fact(
             discovered_offer.url, detail.private_tab_fragment
@@ -267,7 +325,11 @@ def map_private_configuration(
         ),
         "sourceMetadata": source_metadata,
     }
-    reasons = [*admission_reasons(candidate), *structural_reasons]
+    reasons = [
+        *admission_reasons(candidate),
+        *structural_reasons,
+        *private_consumer_vat_reasons(private_terms),
+    ]
     candidate["admissionOutcome"] = "quarantined" if reasons else "admitted"
     if reasons:
         candidate["quarantineReasons"] = reasons
@@ -281,6 +343,7 @@ def quarantined_unavailable_detail_candidate(
     discovered_offer: DiscoveredOffer,
     detail_html: str,
     retrieved_at: str,
+    supporting_evidence: FleasingSupportingEvidence | None = None,
 ) -> dict[str, Any]:
     """Retain a catalogue link whose detail page cannot support private-offer facts."""
     source_id = source_id_from_url(discovered_offer.url)
@@ -334,6 +397,17 @@ def quarantined_unavailable_detail_candidate(
             "documents": [
                 source_document(catalogue_url, catalogue_html, retrieved_at),
                 source_document(discovered_offer.url, detail_html, retrieved_at),
+                *(
+                    [
+                        source_document(
+                            supporting_evidence.source_url,
+                            supporting_evidence.source_html,
+                            retrieved_at,
+                        )
+                    ]
+                    if supporting_evidence is not None
+                    else []
+                ),
             ],
         },
     }
@@ -432,11 +506,20 @@ def private_consumer_eligibility_fact(
 ) -> dict[str, Any]:
     if detail.private_eligibility_fragment is not None:
         return known_fact(True, source_url, detail.private_eligibility_fragment)
+    private_description = re.search(
+        r"\b\d+\s+måneders\s+privatleasing\b",
+        detail.description_text,
+        flags=re.IGNORECASE,
+    )
+    if private_description is not None:
+        return known_fact(True, source_url, private_description.group(0))
     return not_stated_fact(source_url, detail.private_tab_fragment)
 
 
 def passenger_car_fact(
-    detail: "FleasingDetailParser", source_url: str
+    detail: "FleasingDetailParser",
+    source_url: str,
+    catalogue_fact: dict[str, Any],
 ) -> dict[str, Any]:
     vehicle_types = set(detail.vehicle_types)
     if len(vehicle_types) > 1:
@@ -448,6 +531,8 @@ def passenger_car_fact(
         return known_fact(True, source_url, "Køretøjstype Personbil")
     if detail.vehicle_types:
         return unclear_fact(source_url, f"Køretøjstype {detail.vehicle_types[0]}")
+    if catalogue_fact.get("state") == "known":
+        return catalogue_fact
     return not_stated_fact(source_url, detail.private_tab_fragment)
 
 
@@ -455,6 +540,7 @@ def supported_leasing_form_fact(
     detail: "FleasingDetailParser",
     private_terms: Mapping[str, str],
     source_url: str,
+    supporting_evidence: FleasingSupportingEvidence | None = None,
 ) -> dict[str, Any]:
     leasing_forms = {
         "Finansiel leasing": "financial",
@@ -474,7 +560,41 @@ def supported_leasing_form_fact(
         return known_fact(value, source_url, f"Leasingform {leasing_form}")
     if leasing_form:
         return unclear_fact(source_url, f"Leasingform {leasing_form}")
+    if private_terms.get("Restværdi") is not None and supporting_evidence is not None:
+        return known_fact(
+            "financial",
+            supporting_evidence.source_url,
+            supporting_evidence.form_wording,
+        )
     return residual_value_fact(private_terms, source_url)
+
+
+def normal_end_mechanism_fact(
+    private_terms: Mapping[str, str],
+    source_url: str,
+    supporting_evidence: FleasingSupportingEvidence | None,
+) -> dict[str, Any]:
+    if private_terms.get("Restværdi") is not None and supporting_evidence is not None:
+        return known_fact(
+            "designate_third_party_buyer",
+            supporting_evidence.source_url,
+            supporting_evidence.end_wording,
+        )
+    return not_stated_fact(source_url, 'id="privat"')
+
+
+def registration_tax_treatment_fact(
+    private_terms: Mapping[str, str],
+    source_url: str,
+    supporting_evidence: FleasingSupportingEvidence | None,
+) -> dict[str, Any]:
+    if private_terms.get("Restværdi") is not None and supporting_evidence is not None:
+        return known_fact(
+            "proportional",
+            supporting_evidence.source_url,
+            supporting_evidence.registration_tax_wording,
+        )
+    return not_stated_fact(source_url, 'id="privat"')
 
 
 def residual_risk_allocation_fact(
@@ -490,6 +610,73 @@ def residual_value_fact(
     if residual_value is None:
         return not_stated_fact(source_url, 'id="privat"')
     return unclear_fact(source_url, f"Restværdi {residual_value}")
+
+
+def passenger_car_catalogue_fact(
+    catalogue_html: str, catalogue_url: str
+) -> dict[str, Any]:
+    parser = CatalogueLinkParser()
+    parser.feed(catalogue_html)
+    parser.close()
+    for href, text in parser.links:
+        if (
+            urljoin(catalogue_url, href).rstrip("/") == catalogue_url.rstrip("/")
+            and text.casefold() == "personbiler"
+        ):
+            return known_fact(
+                True,
+                catalogue_url,
+                f'href="{href}" {text}',
+            )
+    return not_stated_fact(catalogue_url, "Personbiler")
+
+
+def flexleasing_supporting_evidence(
+    source_html: str,
+    source_url: str = FLEASING_FLEXLEASING_URL,
+) -> FleasingSupportingEvidence:
+    parser = PageTextParser()
+    parser.feed(source_html)
+    parser.close()
+    text = " ".join(parser.text_parts)
+    applicability = required_source_fragment(
+        text,
+        r"Du kan se vores aktuelle udvalg af flexleasing biler på vores hjemmeside",
+        "current flexleasing inventory applicability",
+    )
+    classification = required_source_fragment(
+        text,
+        r"Privatleasing\s*\(operationel leasing\)\s*og flexleasing\s*"
+        r"\(finansiel leasing\)",
+        "financial flexleasing classification",
+    )
+    end_wording = required_source_fragment(
+        text,
+        r"Til gengæld har du selv ansvar for at sælge bilen efter endt "
+        r"leasingperiode, medmindre du selv vil købe bilen",
+        "flexleasing end mechanism",
+    )
+    registration_tax_wording = required_source_fragment(
+        text,
+        r"Med flexleasing betales en månedlig afgift på bilen",
+        "proportional registration-tax treatment",
+    )
+    return FleasingSupportingEvidence(
+        source_url=source_url,
+        source_html=source_html,
+        form_wording=f"{applicability}; {classification}",
+        end_wording=end_wording,
+        registration_tax_wording=registration_tax_wording,
+    )
+
+
+def required_source_fragment(text: str, pattern: str, meaning: str) -> str:
+    match = re.search(pattern, text, flags=re.IGNORECASE)
+    if match is None:
+        raise StructuralSourceError(
+            f"Fleasing flexleasing explanation is missing {meaning}"
+        )
+    return match.group(0)
 
 
 def configuration_key_from_private_terms(private_terms: Mapping[str, str]) -> str:
@@ -568,13 +755,28 @@ def conflicting_fact(source_url: str, wording: str) -> dict[str, Any]:
 
 
 def money_fact(
-    private_terms: Mapping[str, str], label: str, source_url: str
+    private_terms: Mapping[str, str],
+    label: str,
+    source_url: str,
+    *,
+    private_consumer_established: bool,
 ) -> dict[str, Any]:
     wording = private_terms.get(label)
     if wording is None:
         return not_stated_fact(source_url, 'id="privat"')
     amount = dkk_amount(wording)
-    if amount is None or "inkl. moms" not in wording.lower():
+    vat_states = vat_states_in_wording(wording)
+    if amount is None:
+        return {
+            "state": "unclear",
+            "evidence": evidence(source_url, f"{label} {wording}"),
+        }
+    if len(vat_states) > 1 or vat_states == {"excluding_vat"}:
+        return {
+            "state": "conflicting",
+            "evidence": evidence(source_url, f"{label} {wording}"),
+        }
+    if not vat_states and not private_consumer_established:
         return {
             "state": "unclear",
             "evidence": evidence(source_url, f"{label} {wording}"),
@@ -584,6 +786,48 @@ def money_fact(
         "valueDkk": amount,
         "evidence": evidence(source_url, f"{label} {wording}"),
     }
+
+
+def private_consumer_vat_reasons(
+    private_terms: Mapping[str, str],
+) -> list[dict[str, str]]:
+    states = set().union(
+        *(
+            vat_states_in_wording(private_terms[label])
+            for label in ("Ydelse pr. måned", "Udbetaling")
+            if label in private_terms
+        )
+    )
+    if len(states) > 1:
+        return [
+            {
+                "fact": "baseCashFlowStream",
+                "state": "conflicting",
+                "code": "vat_basis_conflicting",
+            }
+        ]
+    if states == {"excluding_vat"}:
+        return [
+            {
+                "fact": "baseCashFlowStream",
+                "state": "conflicting",
+                "code": "private_consumer_price_excludes_vat",
+            }
+        ]
+    return []
+
+
+def vat_states_in_wording(wording: str) -> set[str]:
+    states: set[str] = set()
+    if re.search(r"\binkl(?:\.|usive)?\s*moms\b", wording, flags=re.IGNORECASE):
+        states.add("including_vat")
+    if re.search(
+        r"\b(?:ekskl|excl|ex)(?:\.)?\s*moms\b|\buden\s+moms\b",
+        wording,
+        flags=re.IGNORECASE,
+    ):
+        states.add("excluding_vat")
+    return states
 
 
 def months_fact(
@@ -635,6 +879,17 @@ class CatalogueLinkParser(HTMLParser):
             self._text_parts = []
 
 
+class PageTextParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.text_parts: list[str] = []
+
+    def handle_data(self, data: str) -> None:
+        text = " ".join(data.split())
+        if text:
+            self.text_parts.append(text)
+
+
 class FleasingDetailParser(HTMLParser):
     def __init__(self) -> None:
         super().__init__()
@@ -646,10 +901,13 @@ class FleasingDetailParser(HTMLParser):
         self.private_configurations: list[tuple[str | None, dict[str, str]]] = []
         self.private_tab_fragment = 'id="privat"'
         self.private_eligibility_fragment: str | None = None
+        self.description_text = ""
         self.vehicle_types: list[str] = []
         self.leasing_forms: list[str] = []
         self._vehicle_info_depth: int | None = None
         self._private_tab_depth: int | None = None
+        self._description_depth: int | None = None
+        self._description_parts: list[str] = []
         self._private_configuration_depth: int | None = None
         self._private_configuration_id: str | None = None
         self._private_terms: dict[str, str] = {}
@@ -667,6 +925,9 @@ class FleasingDetailParser(HTMLParser):
         if tag == "div" and attributes.get("id") == "privat":
             self.found_private_tab = True
             self._private_tab_depth = self._depth
+        if tag == "div" and attributes.get("id") == "description":
+            self._description_depth = self._depth
+            self._description_parts = []
         if self._in_private_tab() and tag == "ul":
             self._private_configuration_depth = self._depth
             self._private_configuration_id = attributes.get("data-configuration-id")
@@ -685,6 +946,8 @@ class FleasingDetailParser(HTMLParser):
             self._text_parts = []
 
     def handle_data(self, data: str) -> None:
+        if self._description_depth is not None:
+            self._description_parts.append(data)
         if self._capturing_tag is not None:
             self._text_parts.append(data)
 
@@ -722,6 +985,10 @@ class FleasingDetailParser(HTMLParser):
             self._vehicle_info_depth = None
         if self._private_tab_depth == self._depth:
             self._private_tab_depth = None
+        if self._description_depth == self._depth:
+            self.description_text = " ".join(" ".join(self._description_parts).split())
+            self._description_depth = None
+            self._description_parts = []
         self._depth -= 1
 
     def _in_vehicle_info(self) -> bool:

@@ -95,6 +95,44 @@ function factValue(
   return formatter("valueDkk" in fact ? fact.valueDkk : fact.value);
 }
 
+function aggregateWarningText(offer: PresentationOffer) {
+  const reconciliation = offer.aggregateReconciliation;
+  const aggregate = reconciliation.providerAdvertisedAggregate;
+  const reconstructed = reconciliation.reconstructedNominalBaseOutlayDkk;
+  const difference = reconciliation.unexplainedDifferenceDkk;
+  if (
+    reconciliation.status !== "mismatch" ||
+    aggregate === null ||
+    reconstructed === null ||
+    difference === null
+  ) {
+    return null;
+  }
+  const direction =
+    difference > 0
+      ? "Udbyderens total er højere."
+      : "Udbyderens total er lavere.";
+  return `Udbyderen oplyser ${money(aggregate.valueDkk)}, mens det dokumenterede basisudlæg giver ${money(reconstructed)}. Uforklaret forskel: ${money(Math.abs(difference))}. ${direction} Årsagen er ukendt; ingen af beløbene er automatisk rettet.`;
+}
+
+function AggregateWarning({ offer }: { offer: PresentationOffer }) {
+  const warning = aggregateWarningText(offer);
+  const aggregate = offer.aggregateReconciliation.providerAdvertisedAggregate;
+  if (warning === null || aggregate === null) return null;
+  return (
+    <aside
+      aria-label="Advarsel om samlet betaling"
+      className="aggregate-warning"
+    >
+      <strong>Udbyderens total og vores beregning stemmer ikke.</strong>
+      <p>{warning}</p>
+      <a href={aggregate.evidence.sourceUrl} rel="noreferrer">
+        Kilde til udbyderens samlede betaling
+      </a>
+    </aside>
+  );
+}
+
 function EvidenceDetails({
   label,
   fact,
@@ -256,6 +294,7 @@ function OfferCard({
             formatter={(value) => `${currency.format(Number(value))} km`}
           />
         </dl>
+        <AggregateWarning offer={offer} />
         <Calculation offer={offer} />
       </CardContent>
     </Card>
@@ -405,6 +444,7 @@ function OfferDetail({ offer }: { offer: PresentationOffer }) {
         </p>
         <h1>{end}</h1>
       </header>
+      <AggregateWarning offer={offer} />
       <section aria-labelledby="contract-heading">
         <h2 id="contract-heading">Aftalens uafhængige dimensioner</h2>
         <dl className="detail-facts">
@@ -516,6 +556,9 @@ function comparisonValue(offer: PresentationOffer, key: keyof PresentationOffer)
 }
 
 function Comparison({ offers }: { offers: PresentationOffer[] }) {
+  const hasAggregateWarning = offers.some(
+    (offer) => aggregateWarningText(offer) !== null,
+  );
   return (
     <main className="page comparison-page">
       <Link to="/">Tilbage til kataloget</Link>
@@ -533,6 +576,16 @@ function Comparison({ offers }: { offers: PresentationOffer[] }) {
             </tr>
           </thead>
           <tbody>
+            {hasAggregateWarning && (
+              <tr className="aggregate-warning-row">
+                <th scope="row">Advarsel om samlet betaling</th>
+                {offers.map((offer) => (
+                  <td key={offer.offerIdentity}>
+                    {aggregateWarningText(offer) ?? "Ingen afvigelse registreret"}
+                  </td>
+                ))}
+              </tr>
+            )}
             {comparisonFields.map(([label, key, formatter]) => (
               <tr key={key}>
                 <th scope="row">{label}</th>
