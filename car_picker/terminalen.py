@@ -419,9 +419,7 @@ def mileage_fact(source_url: str, legal_wording: str) -> dict[str, Any]:
     )
 
 
-def passenger_car_fact(
-    source_url: str, vehicle: Mapping[str, Any]
-) -> dict[str, Any]:
+def passenger_car_fact(source_url: str, vehicle: Mapping[str, Any]) -> dict[str, Any]:
     vehicle_type = vehicle.get("vehicleType")
     if vehicle_type is None:
         return not_stated(source_url, json.dumps(vehicle, ensure_ascii=False))
@@ -442,9 +440,7 @@ def passenger_car_fact(
     return unclear(source_url, vehicle_type)
 
 
-def availability_fact(
-    source_url: str, payload: Mapping[str, Any]
-) -> dict[str, Any]:
+def availability_fact(source_url: str, payload: Mapping[str, Any]) -> dict[str, Any]:
     is_current = payload.get("isCurrent")
     wording = json.dumps(
         {"isCurrent": is_current},

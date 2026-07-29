@@ -264,9 +264,7 @@ class CollectionTest(unittest.TestCase):
             117195,
         )
         terminalen_offers = [
-            offer
-            for offer in projection["offers"]
-            if offer["provider"] == "Terminalen"
+            offer for offer in projection["offers"] if offer["provider"] == "Terminalen"
         ]
         self.assertEqual(len(terminalen_offers), 2)
         self.assertEqual(

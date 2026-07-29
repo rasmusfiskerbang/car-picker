@@ -61,9 +61,7 @@ class TerminalenAdapterTest(unittest.TestCase):
         )
         self.assertTrue(candidates[0]["passengerCarScope"]["value"])
         self.assertTrue(candidates[0]["currentAvailability"]["value"])
-        self.assertEqual(
-            candidates[0]["supportedLeasingForm"]["value"], "operational"
-        )
+        self.assertEqual(candidates[0]["supportedLeasingForm"]["value"], "operational")
         self.assertEqual(candidates[0]["providerFormLabel"]["value"], "Privatleasing")
         self.assertNotEqual(
             candidates[0]["providerFormLabel"]["evidence"],
