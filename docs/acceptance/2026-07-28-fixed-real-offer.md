@@ -22,7 +22,7 @@ The run used the bounded first-party sources defined by the owner guide:
 - Fleasing catalogue: <https://fleasing.dk/biler/>
 - Terminalen catalogue: <https://www.terminalen.dk/nye-biler/hyundai>
 
-`uv run -m car_picker refresh-catalogue --dataset var/catalogue-dataset.json`
+`uv run car-picker refresh-catalogue --dataset var/catalogue-dataset.json`
 retried Fleasing and rejected the complete replacement. Its designated catalogue
 contained `https://fleasing.dk/bil/?bmw-m3-competition-dkg&vid=1904312905`, but
 that URL resolved to Fleasing's generic `/bil/` page rather than a page with

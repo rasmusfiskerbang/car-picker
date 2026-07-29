@@ -24,7 +24,7 @@ The run used the bounded first-party sources defined by the owner guide:
 - Fleasing catalogue: <https://fleasing.dk/biler/>
 - Terminalen catalogue: <https://www.terminalen.dk/nye-biler/hyundai>
 
-`uv run python -m car_picker refresh-catalogue --dataset
+`uv run car-picker refresh-catalogue --dataset
 var/catalogue-dataset.json` completed Fleasing collection far enough to begin
 Terminalen collection, then retried Terminalen and rejected the complete
 replacement. The reported blocker was:

@@ -25,7 +25,7 @@ that will then apply.
 The normal owner validation includes the legal gate:
 
 ```sh
-uv run -m car_picker validate \
+uv run car-picker validate \
   --dataset var/catalogue-dataset.json \
   --repository .
 ```

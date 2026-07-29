@@ -22,7 +22,7 @@ authorized by this record.
 
 ## Refresh and source checks
 
-`uv run python -m car_picker refresh-catalogue --dataset
+`uv run car-picker refresh-catalogue --dataset
 var/catalogue-dataset.json` completed both bounded first-party providers and
 reported:
 

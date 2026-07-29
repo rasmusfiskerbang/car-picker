@@ -10,15 +10,15 @@ The committed hand-minimized fixture does not contact a provider. Use it to
 verify the data contracts, automated checks, static build, and LAN server:
 
 ```sh
-uv run -m car_picker validate \
+uv run car-picker validate \
   --dataset tests/fixtures/one-offer-catalogue-dataset.json \
   --repository .
 uv run -m compileall -q car_picker tests
 uv run pytest
-uv run -m car_picker build-site \
+uv run car-picker build-site \
   --dataset tests/fixtures/one-offer-catalogue-dataset.json \
   --output var/site
-uv run -m car_picker serve-site --site var/site --port 4173
+uv run car-picker serve-site --site var/site --port 4173
 ```
 
 Open `http://127.0.0.1:4173/` on the owner computer. For another device on the
@@ -37,15 +37,15 @@ under a generated `site/` directory have entered history. It also enforces the
 Run collection and publication as separate operations:
 
 ```sh
-uv run -m car_picker refresh-catalogue \
+uv run car-picker refresh-catalogue \
   --dataset var/catalogue-dataset.json
-uv run -m car_picker validate \
+uv run car-picker validate \
   --dataset var/catalogue-dataset.json \
   --repository .
-uv run -m car_picker build-site \
+uv run car-picker build-site \
   --dataset var/catalogue-dataset.json \
   --output site
-uv run -m car_picker serve-site --site site --port 4173
+uv run car-picker serve-site --site site --port 4173
 ```
 
 The refresh is the only operation that contacts covered providers. It collects
@@ -58,14 +58,14 @@ the static artifact only after projection and artifact validation succeeds.
 Diagnose every catalogue offer:
 
 ```sh
-uv run -m car_picker diagnose-aggregates \
+uv run car-picker diagnose-aggregates \
   --dataset var/catalogue-dataset.json
 ```
 
 Diagnose one exact offer identity:
 
 ```sh
-uv run -m car_picker diagnose-aggregates \
+uv run car-picker diagnose-aggregates \
   --dataset tests/fixtures/one-offer-catalogue-dataset.json \
   --offer 'terminalen:ioniq-5:essential-84'
 ```
