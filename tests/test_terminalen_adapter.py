@@ -4,7 +4,12 @@ import json
 import unittest
 from pathlib import Path
 
-from car_picker.terminalen import TerminalenAdapter
+from car_picker.fleasing import StructuralSourceError
+from car_picker.terminalen import (
+    NAVIGATION_STATE_KEY,
+    TerminalenAdapter,
+    model_price_urls,
+)
 
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures/terminalen"
@@ -25,6 +30,124 @@ class FixtureHttpClient:
 
 
 class TerminalenAdapterTest(unittest.TestCase):
+    def test_discovers_deduplicated_model_price_pages_from_the_bounded_navigation_state(
+        self,
+    ) -> None:
+        catalogue_html = (FIXTURES / "catalogue.html").read_text(encoding="utf-8")
+
+        urls = model_price_urls(catalogue_html, CATALOGUE_URL)
+
+        self.assertEqual(urls, [PRICE_URL])
+
+    def test_rejects_unrelated_urls_and_nodes_that_are_not_model_subpages(
+        self,
+    ) -> None:
+        state = {
+            "G./api/navigation?culture=da-DK&levels=10": {
+                "body": [
+                    {
+                        "children": [
+                            {
+                                "url": PRICE_PATH,
+                                "template": "otherTemplate",
+                            },
+                            {
+                                "url": (
+                                    "/nye-biler/hyundai/hyundai-inster/"
+                                    "pris-og-udstyr?tracking=1"
+                                ),
+                                "template": "modelSubpage",
+                            },
+                            {
+                                "url": f"{PRICE_PATH}#offers",
+                                "template": "modelSubpage",
+                            },
+                            {
+                                "url": (
+                                    "https://other.example/nye-biler/hyundai/"
+                                    "hyundai-inster/pris-og-udstyr"
+                                ),
+                                "template": "modelSubpage",
+                            },
+                            {
+                                "url": "/nye-biler/kia/ev3/pris-og-udstyr",
+                                "template": "modelSubpage",
+                            },
+                        ]
+                    }
+                ]
+            }
+        }
+        catalogue_html = (
+            '<script id="terminalen-ncg-state" type="application/json">'
+            f"{json.dumps(state)}"
+            "</script>"
+        )
+
+        self.assertEqual(model_price_urls(catalogue_html, CATALOGUE_URL), [])
+
+    def test_rejects_malformed_embedded_navigation_state(self) -> None:
+        catalogue_html = (
+            '<script id="terminalen-ncg-state" type="application/json">'
+            '{"G./api/navigation?culture=da-DK&levels=10":'
+            "</script>"
+        )
+
+        with self.assertRaisesRegex(
+            StructuralSourceError,
+            "Terminalen catalogue navigation state is malformed",
+        ):
+            model_price_urls(catalogue_html, CATALOGUE_URL)
+
+    def test_rejects_malformed_navigation_children_even_beside_a_valid_page(
+        self,
+    ) -> None:
+        state = {
+            "G./api/navigation?culture=da-DK&levels=10": {
+                "body": [
+                    {"children": "not-an-array"},
+                    {
+                        "url": PRICE_PATH,
+                        "template": "modelSubpage",
+                        "children": [],
+                    },
+                ]
+            }
+        }
+        catalogue_html = (
+            '<script id="terminalen-ncg-state" type="application/json">'
+            f"{json.dumps(state)}"
+            "</script>"
+        )
+
+        with self.assertRaisesRegex(
+            StructuralSourceError,
+            "Terminalen catalogue navigation node children must be an array",
+        ):
+            model_price_urls(catalogue_html, CATALOGUE_URL)
+
+    def test_ignores_incidental_model_price_text_outside_the_navigation_state(
+        self,
+    ) -> None:
+        catalogue_html = (
+            f"<p>{PRICE_PATH}</p>"
+            '<script type="application/json">'
+            f'{{"url":"{PRICE_PATH}","template":"modelSubpage"}}'
+            "</script>"
+            '<script id="terminalen-ncg-state" type="application/json">'
+            f'{{"{NAVIGATION_STATE_KEY}":{{"body":[]}}}}'
+            "</script>"
+        )
+
+        self.assertEqual(model_price_urls(catalogue_html, CATALOGUE_URL), [])
+
+    def test_rejects_a_missing_designated_navigation_state(self) -> None:
+        with self.assertRaisesRegex(
+            StructuralSourceError,
+            "Terminalen catalogue is missing its designated navigation state",
+        ):
+            model_price_urls(f"<p>{PRICE_PATH}</p>", CATALOGUE_URL)
+
     def test_collects_each_explicit_private_vat_inclusive_configuration_from_its_same_path_api_response(
         self,
     ) -> None:

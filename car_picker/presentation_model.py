@@ -8,7 +8,6 @@ from pydantic import Field, StringConstraints
 
 from car_picker.catalogue_model import (
     CatalogueModel,
-    EndedProviderCoverage,
     Evidence,
     ExposureScenario,
     ServiceArrangement,
@@ -127,6 +126,11 @@ class PresentationCoverage(CatalogueModel):
     providers: list[PresentationCoverageProvider]
 
 
+class PresentationEndedProviderCoverage(CatalogueModel):
+    name: NonEmptyString
+    coverage_ended_at: NonEmptyString
+
+
 class PresentationOffer(CatalogueModel):
     offer_identity: NonEmptyString
     provider: NonEmptyString
@@ -160,7 +164,7 @@ class CataloguePresentation(CatalogueModel):
     schema_version: Literal["catalogue-presentation/v1"]
     generated_at: NonEmptyString
     coverage: PresentationCoverage
-    coverage_ended: list[EndedProviderCoverage]
+    coverage_ended: list[PresentationEndedProviderCoverage]
     offers: list[PresentationOffer]
 
 

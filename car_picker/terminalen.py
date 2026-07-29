@@ -5,7 +5,7 @@ import json
 import re
 from collections.abc import Mapping
 from html.parser import HTMLParser
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urljoin, urlparse
 
 from pydantic import JsonValue
@@ -20,6 +20,7 @@ from car_picker.provider_contract import (
 
 
 PARSER_VERSION = "terminalen-model-price-v1"
+NAVIGATION_STATE_KEY = "G./api/navigation?culture=da-DK&levels=10"
 
 
 class TerminalenAdapter:
@@ -56,9 +57,36 @@ class TerminalenAdapter:
 
 
 def model_price_urls(catalogue_html: str, catalogue_url: str) -> list[str]:
-    parser = LinkParser()
+    parser = NavigationStateParser()
     parser.feed(catalogue_html)
     parser.close()
+    if parser.state_text is None:
+        raise StructuralSourceError(
+            "Terminalen catalogue is missing its designated navigation state"
+        )
+    try:
+        state = json.loads(parser.state_text)
+    except json.JSONDecodeError as error:
+        raise StructuralSourceError(
+            "Terminalen catalogue navigation state is malformed JSON"
+        ) from error
+    if not isinstance(state, Mapping):
+        raise StructuralSourceError(
+            "Terminalen catalogue navigation state is malformed: root must be an object"
+        )
+    navigation = state.get(NAVIGATION_STATE_KEY)
+    if navigation is None:
+        raise StructuralSourceError(
+            "Terminalen catalogue navigation state is missing its navigation response"
+        )
+    if not isinstance(navigation, Mapping) or not isinstance(
+        navigation.get("body"), list
+    ):
+        raise StructuralSourceError(
+            "Terminalen catalogue navigation state is malformed: "
+            "navigation body must be an array"
+        )
+
     origin = urlparse(catalogue_url)
     scope_prefix = (
         "/nye-biler/hyundai/"
@@ -66,7 +94,14 @@ def model_price_urls(catalogue_html: str, catalogue_url: str) -> list[str]:
         else origin.path.rstrip("/") + "/"
     )
     urls: list[str] = []
-    for href in parser.hrefs:
+    for node in navigation_nodes(navigation["body"]):
+        href = node.get("url")
+        if node.get("template") != "modelSubpage":
+            continue
+        if not isinstance(href, str) or not href:
+            raise StructuralSourceError(
+                "Terminalen catalogue modelSubpage requires a URL"
+            )
         url = urljoin(catalogue_url, href)
         parsed = urlparse(url)
         if (
@@ -74,13 +109,37 @@ def model_price_urls(catalogue_html: str, catalogue_url: str) -> list[str]:
             and parsed.hostname == origin.hostname
             and parsed.port == origin.port
             and parsed.path.startswith(scope_prefix)
-            and parsed.path.endswith("/pris-og-udstyr")
+            and re.fullmatch(
+                f"{re.escape(scope_prefix)}[^/]+/pris-og-udstyr", parsed.path
+            )
             and not parsed.query
             and not parsed.fragment
             and url not in urls
         ):
             urls.append(url)
     return urls
+
+
+def navigation_nodes(value: object) -> list[dict[str, Any]]:
+    nodes: list[dict[str, Any]] = []
+    if isinstance(value, list):
+        for child in value:
+            nodes.extend(navigation_nodes(child))
+    elif isinstance(value, dict):
+        node = cast(dict[str, Any], value)
+        nodes.append(node)
+        if "children" in node:
+            children = node["children"]
+            if not isinstance(children, list):
+                raise StructuralSourceError(
+                    "Terminalen catalogue navigation node children must be an array"
+                )
+            nodes.extend(navigation_nodes(children))
+    else:
+        raise StructuralSourceError(
+            "Terminalen catalogue navigation children must contain objects"
+        )
+    return nodes
 
 
 def model_page_api_url(page_url: str) -> str:
@@ -564,13 +623,27 @@ def list_value(value: JsonValue, name: str) -> list[JsonValue]:
     return value
 
 
-class LinkParser(HTMLParser):
+class NavigationStateParser(HTMLParser):
     def __init__(self) -> None:
         super().__init__()
-        self.hrefs: list[str] = []
+        self._in_navigation_state = False
+        self._state_parts: list[str] = []
+        self.state_text: str | None = None
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if tag == "a":
-            href = dict(attrs).get("href")
-            if href:
-                self.hrefs.append(href)
+        attributes = dict(attrs)
+        if (
+            tag == "script"
+            and attributes.get("id") == "terminalen-ncg-state"
+            and attributes.get("type") == "application/json"
+        ):
+            self._in_navigation_state = True
+
+    def handle_data(self, data: str) -> None:
+        if self._in_navigation_state:
+            self._state_parts.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "script" and self._in_navigation_state:
+            self.state_text = "".join(self._state_parts)
+            self._in_navigation_state = False
