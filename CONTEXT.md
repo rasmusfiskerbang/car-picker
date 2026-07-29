@@ -48,9 +48,9 @@ _Avoid_: Complete offer, universally comparable offer, completeness percentage
 The evidentiary state of a comparison-relevant fact: `known` when the designated source supports a normalized value, `not_stated` when it omits the fact, `unclear` when its wording cannot support one interpretation, `conflicting` when it contradicts itself, or `not_applicable` when the fact genuinely does not apply. Every state retains its source wording and provenance; absence never implies zero, false, excluded, or not applicable.
 _Avoid_: Nullable field, missing value
 
-**Quarantined offer**:
+**Quarantined candidate**:
 A catalogue candidate retained only in the current catalogue dataset and withheld from the active comparison catalogue because a required admission fact is missing, uncertain, contradictory, or malformed. It carries structured quarantine reasons and supporting evidence so coverage and source quality remain explainable, then disappears when the catalogue dataset is replaced.
-_Avoid_: Bad offer, excluded listing
+_Avoid_: Quarantined offer, bad offer, excluded listing
 
 **Covered provider**:
 A Danish leasing company whose publicly available private-leasing offers are included in the tool's declared source scope.

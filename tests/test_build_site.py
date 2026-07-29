@@ -337,17 +337,18 @@ class BuildSiteTest(unittest.TestCase):
             )
 
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("must not persist derived comparison values", result.stderr)
+        self.assertIn("nominalBaseOutlay", result.stderr)
+        self.assertIn("Extra inputs are not permitted", result.stderr)
 
     def test_build_site_withholds_quarantined_candidates_from_the_active_catalogue(
         self,
     ) -> None:
-        """A quarantined offer remains in the dataset but cannot enter the static catalogue."""
+        """A quarantined candidate remains in the dataset but cannot enter the static catalogue."""
         dataset = json.loads(FIXTURE_DATASET.read_text(encoding="utf-8"))
-        quarantined_offer = json.loads(json.dumps(dataset["catalogueOffers"][0]))
-        quarantined_offer["offerIdentity"] = "terminalen:ioniq-5:quarantined"
-        quarantined_offer["admissionStatus"] = "quarantined"
-        quarantined_offer["quarantineReasons"] = [
+        quarantined_candidate = json.loads(json.dumps(dataset["catalogueOffers"][0]))
+        quarantined_candidate["offerIdentity"] = "terminalen:ioniq-5:quarantined"
+        quarantined_candidate["admissionOutcome"] = "quarantined"
+        quarantined_candidate["quarantineReasons"] = [
             {
                 "fact": "supportedLeasingForm",
                 "state": "unclear",
@@ -355,7 +356,7 @@ class BuildSiteTest(unittest.TestCase):
             }
         ]
         dataset["coverage"]["providers"][0]["quarantinedCandidateCount"] = 1
-        dataset["catalogueOffers"].append(quarantined_offer)
+        dataset["quarantinedCandidates"].append(quarantined_candidate)
 
         with tempfile.TemporaryDirectory() as temporary_directory:
             temporary_path = Path(temporary_directory)

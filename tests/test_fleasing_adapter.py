@@ -69,7 +69,7 @@ class FleasingAdapterTest(unittest.TestCase):
         )
         self.assertEqual(
             [
-                (candidate["offerIdentity"], candidate["admissionStatus"])
+                (candidate["offerIdentity"], candidate["admissionOutcome"])
                 for candidate in candidates
             ],
             [
@@ -151,7 +151,6 @@ class FleasingAdapterTest(unittest.TestCase):
             [
                 {"fact": "passengerCarScope", "state": "not_stated"},
                 {"fact": "supportedLeasingForm", "state": "unclear"},
-                {"fact": "advertisedMonthlyPayment", "state": "not_stated"},
             ],
         )
         self.assertEqual(candidates[1]["baseCashFlowStream"][1]["amountDkk"], None)
@@ -185,7 +184,7 @@ class FleasingAdapterTest(unittest.TestCase):
             [
                 (
                     candidate["sourceLocalConfigurationKey"],
-                    candidate["admissionStatus"],
+                    candidate["admissionOutcome"],
                     candidate["advertisedMonthlyPayment"]["valueDkk"],
                     candidate["termMonths"]["value"],
                 )
@@ -263,7 +262,7 @@ class FleasingAdapterTest(unittest.TestCase):
         )
         self.assertEqual(
             [
-                (candidate["offerIdentity"], candidate["admissionStatus"])
+                (candidate["offerIdentity"], candidate["admissionOutcome"])
                 for candidate in candidates
             ],
             [
@@ -281,13 +280,10 @@ class FleasingAdapterTest(unittest.TestCase):
         self.assertEqual(
             stale_candidate["quarantineReasons"],
             [
-                {"fact": "vehicleSpecification", "state": "not_stated"},
                 {"fact": "privateConsumerEligibility", "state": "not_stated"},
                 {"fact": "passengerCarScope", "state": "not_stated"},
                 {"fact": "currentAvailability", "state": "unclear"},
                 {"fact": "supportedLeasingForm", "state": "not_stated"},
-                {"fact": "advertisedMonthlyPayment", "state": "not_stated"},
-                {"fact": "termMonths", "state": "not_stated"},
             ],
         )
 
@@ -381,7 +377,7 @@ class FleasingAdapterTest(unittest.TestCase):
             len({candidate["offerIdentity"] for candidate in candidates}), 2
         )
         for candidate in candidates:
-            self.assertEqual(candidate["admissionStatus"], "quarantined")
+            self.assertEqual(candidate["admissionOutcome"], "quarantined")
             self.assertEqual(
                 candidate["quarantineReasons"],
                 [
@@ -415,7 +411,7 @@ class FleasingAdapterTest(unittest.TestCase):
         ).collect()
 
         for candidate in candidates:
-            self.assertEqual(candidate["admissionStatus"], "quarantined")
+            self.assertEqual(candidate["admissionOutcome"], "quarantined")
             self.assertIn(
                 {
                     "fact": "privateConsumerEligibility",
@@ -467,7 +463,7 @@ class FleasingAdapterTest(unittest.TestCase):
             len({candidate["offerIdentity"] for candidate in candidates}), 2
         )
         for candidate in candidates:
-            self.assertEqual(candidate["admissionStatus"], "quarantined")
+            self.assertEqual(candidate["admissionOutcome"], "quarantined")
             self.assertEqual(
                 candidate["quarantineReasons"],
                 [

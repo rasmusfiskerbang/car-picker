@@ -9,7 +9,13 @@ from html.parser import HTMLParser
 from typing import Any, Protocol
 from urllib.parse import parse_qs, urljoin, urlparse
 
-from pydantic import JsonValue
+from car_picker.provider_contract import (
+    admission_reasons,
+    evidence,
+    known_fact,
+    source_document,
+    unavailable_fact,
+)
 
 
 PARSER_VERSION = "fleasing-html-v3"
@@ -262,7 +268,7 @@ def map_private_configuration(
         "sourceMetadata": source_metadata,
     }
     reasons = [*admission_reasons(candidate), *structural_reasons]
-    candidate["admissionStatus"] = "quarantined" if reasons else "admitted"
+    candidate["admissionOutcome"] = "quarantined" if reasons else "admitted"
     if reasons:
         candidate["quarantineReasons"] = reasons
     return candidate
@@ -282,22 +288,25 @@ def quarantined_unavailable_detail_candidate(
         discovered_offer.url,
         'Missing required detail sections: class="vehicle-page-info" and id="privat".',
     )
-    unavailable_fact = {"state": "not_stated", "evidence": unavailable_evidence}
+    unavailable_detail_fact = {
+        "state": "not_stated",
+        "evidence": unavailable_evidence,
+    }
     candidate = {
         "offerIdentity": f"fleasing:{source_id}:detail-unavailable",
         "provider": "Fleasing",
         "providerSourceId": source_id,
         "canonicalOfferUrl": discovered_offer.url,
         "sourceLocalConfigurationKey": "detail-unavailable",
-        "vehicleSpecification": unavailable_fact,
-        "privateConsumerEligibility": unavailable_fact,
-        "passengerCarScope": unavailable_fact,
+        "vehicleSpecification": unavailable_detail_fact,
+        "privateConsumerEligibility": unavailable_detail_fact,
+        "passengerCarScope": unavailable_detail_fact,
         "currentAvailability": unclear_fact(
             catalogue_url, discovered_offer.source_fragment
         ),
-        "supportedLeasingForm": unavailable_fact,
-        "advertisedMonthlyPayment": unavailable_fact,
-        "termMonths": unavailable_fact,
+        "supportedLeasingForm": unavailable_detail_fact,
+        "advertisedMonthlyPayment": unavailable_detail_fact,
+        "termMonths": unavailable_detail_fact,
         "baseCashFlowStream": [
             {
                 "meaning": "Privat prisoplysning er ikke tilgængelig",
@@ -313,13 +322,13 @@ def quarantined_unavailable_detail_candidate(
             }
         ],
         "baseCashFlowBlockers": ["advertisedMonthlyPayment", "termMonths"],
-        "annualMileageKm": unavailable_fact,
-        "normalEndMechanism": unavailable_fact,
-        "residualRiskAllocation": unavailable_fact,
-        "registrationTaxTreatment": unavailable_fact,
-        "serviceArrangements": unavailable_fact,
-        "exclusions": unavailable_fact,
-        "exposureScenarios": unavailable_fact,
+        "annualMileageKm": unavailable_detail_fact,
+        "normalEndMechanism": unavailable_detail_fact,
+        "residualRiskAllocation": unavailable_detail_fact,
+        "registrationTaxTreatment": unavailable_detail_fact,
+        "serviceArrangements": unavailable_detail_fact,
+        "exclusions": unavailable_detail_fact,
+        "exposureScenarios": unavailable_detail_fact,
         "sourceMetadata": {
             "parserVersion": PARSER_VERSION,
             "documents": [
@@ -328,7 +337,7 @@ def quarantined_unavailable_detail_candidate(
             ],
         },
     }
-    candidate["admissionStatus"] = "quarantined"
+    candidate["admissionOutcome"] = "quarantined"
     candidate["quarantineReasons"] = admission_reasons(candidate)
     return candidate
 
@@ -483,23 +492,6 @@ def residual_value_fact(
     return unclear_fact(source_url, f"Restværdi {residual_value}")
 
 
-def admission_reasons(candidate: Mapping[str, Any]) -> list[dict[str, str]]:
-    required_facts = (
-        "vehicleSpecification",
-        "privateConsumerEligibility",
-        "passengerCarScope",
-        "currentAvailability",
-        "supportedLeasingForm",
-        "advertisedMonthlyPayment",
-        "termMonths",
-    )
-    return [
-        {"fact": fact_name, "state": candidate[fact_name]["state"]}
-        for fact_name in required_facts
-        if candidate[fact_name]["state"] != "known"
-    ]
-
-
 def configuration_key_from_private_terms(private_terms: Mapping[str, str]) -> str:
     selected_values = "\n".join(
         f"{label}:{value}" for label, value in sorted(private_terms.items())
@@ -563,28 +555,16 @@ def source_id_from_url(detail_url: str) -> str:
     return source_ids[0]
 
 
-def source_document(url: str, content: str, retrieved_at: str) -> dict[str, str]:
-    return {
-        "sourceUrl": url,
-        "contentSha256": hashlib.sha256(content.encode("utf-8")).hexdigest(),
-        "retrievedAt": retrieved_at,
-    }
-
-
-def known_fact(value: JsonValue, source_url: str, wording: str) -> dict[str, Any]:
-    return {"state": "known", "value": value, "evidence": evidence(source_url, wording)}
-
-
 def not_stated_fact(source_url: str, wording: str) -> dict[str, Any]:
-    return {"state": "not_stated", "evidence": evidence(source_url, wording)}
+    return unavailable_fact("not_stated", source_url, wording)
 
 
 def unclear_fact(source_url: str, wording: str) -> dict[str, Any]:
-    return {"state": "unclear", "evidence": evidence(source_url, wording)}
+    return unavailable_fact("unclear", source_url, wording)
 
 
 def conflicting_fact(source_url: str, wording: str) -> dict[str, Any]:
-    return {"state": "conflicting", "evidence": evidence(source_url, wording)}
+    return unavailable_fact("conflicting", source_url, wording)
 
 
 def money_fact(
@@ -630,10 +610,6 @@ def dkk_amount(wording: str) -> int | None:
     if match is None:
         return None
     return int(match.group(1).replace(".", ""))
-
-
-def evidence(source_url: str, wording: str) -> dict[str, str]:
-    return {"sourceUrl": source_url, "wording": wording}
 
 
 class CatalogueLinkParser(HTMLParser):

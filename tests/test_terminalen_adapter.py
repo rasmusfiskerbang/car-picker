@@ -56,7 +56,7 @@ class TerminalenAdapterTest(unittest.TestCase):
             )
         )
         self.assertEqual(
-            [candidate["admissionStatus"] for candidate in candidates],
+            [candidate["admissionOutcome"] for candidate in candidates],
             ["admitted", "admitted"],
         )
         self.assertTrue(candidates[0]["passengerCarScope"]["value"])
@@ -134,7 +134,7 @@ class TerminalenAdapterTest(unittest.TestCase):
             client, retrieved_at="2026-07-22T12:00:00Z"
         ).collect(CATALOGUE_URL)[0]
 
-        self.assertEqual(candidate["admissionStatus"], "quarantined")
+        self.assertEqual(candidate["admissionOutcome"], "quarantined")
         self.assertEqual(candidate["passengerCarScope"]["state"], "not_stated")
         self.assertEqual(
             candidate["quarantineReasons"],
@@ -194,7 +194,7 @@ class TerminalenAdapterTest(unittest.TestCase):
                 for event in candidate["baseCashFlowStream"]
             )
         )
-        self.assertEqual(candidate["admissionStatus"], "quarantined")
+        self.assertEqual(candidate["admissionOutcome"], "quarantined")
         self.assertIn(
             {
                 "fact": "baseCashFlowStream",
@@ -226,7 +226,7 @@ class TerminalenAdapterTest(unittest.TestCase):
             client, retrieved_at="2026-07-22T12:00:00Z"
         ).collect(CATALOGUE_URL)[0]
 
-        self.assertEqual(candidate["admissionStatus"], "quarantined")
+        self.assertEqual(candidate["admissionOutcome"], "quarantined")
         self.assertEqual(
             candidate["quarantineReasons"],
             [

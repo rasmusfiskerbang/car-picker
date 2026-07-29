@@ -10,6 +10,7 @@ from socketserver import BaseServer
 from typing import Any, cast
 from urllib.parse import urlparse
 
+from car_picker.catalogue_model import CatalogueDataset
 from car_picker.collection import (
     FLEASING_CATALOGUE_URL,
     PROVIDER_NAMES,
@@ -234,21 +235,24 @@ def aggregate_diagnostics(
         raise SystemExit(
             f"Cannot read canonical catalogue dataset at {dataset_path}: {error}"
         ) from error
-    offers = dataset.get("catalogueOffers") if isinstance(dataset, dict) else None
-    if not isinstance(offers, list):
-        raise SystemExit("Canonical catalogue dataset requires catalogueOffers")
+    try:
+        offers = CatalogueDataset.model_validate(dataset).catalogue_offers
+    except ValueError as error:
+        raise SystemExit(str(error)) from error
     selected = [
         offer
         for offer in offers
-        if isinstance(offer, dict)
-        and (offer_identity is None or offer.get("offerIdentity") == offer_identity)
+        if offer_identity is None or offer.offer_identity == offer_identity
     ]
     if offer_identity is not None and not selected:
         raise SystemExit(f"No catalogue offer has identity {offer_identity}")
     return {
         "schemaVersion": "aggregate-reconciliation-diagnostics/v1",
         "offers": [
-            reconcile_provider_advertised_aggregate(offer) for offer in selected
+            reconcile_provider_advertised_aggregate(
+                offer.model_dump(mode="json", by_alias=True, exclude_none=True)
+            )
+            for offer in selected
         ],
     }
 

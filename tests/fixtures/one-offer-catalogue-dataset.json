@@ -14,7 +14,7 @@
   "catalogueOffers": [
     {
       "offerIdentity": "terminalen:ioniq-5:essential-84",
-      "admissionStatus": "admitted",
+      "admissionOutcome": "admitted",
       "provider": "Terminalen",
       "privateConsumerEligibility": {
         "state": "known",
@@ -161,5 +161,6 @@
         ]
       }
     }
-  ]
+  ],
+  "quarantinedCandidates": []
 }

@@ -28,7 +28,7 @@ def candidate(
     value: dict[str, object] = {
         "provider": provider,
         "offerIdentity": identity,
-        "admissionStatus": status,
+        "admissionOutcome": status,
         "vehicleSpecification": {
             "state": "known",
             "value": {"make": "Fixture", "model": "Car"},
@@ -48,7 +48,19 @@ def candidate(
             "evidence": evidence,
         },
         "termMonths": {"state": "known", "value": 12, "evidence": evidence},
-        "baseCashFlowStream": [{"meaning": "Fixture payment"}],
+        "baseCashFlowStream": [
+            {
+                "meaning": "Fixture payment",
+                "direction": "payment",
+                "amountDkk": 1000,
+                "amountBasis": "including_vat",
+                "timing": "recurring",
+                "recurrenceCount": 12,
+                "refundability": "not_refundable",
+                "includedInBase": True,
+                "evidence": evidence,
+            }
+        ],
         "sourceMetadata": {"documents": [{"sourceUrl": evidence["sourceUrl"]}]},
     }
     if status == "quarantined":
@@ -130,7 +142,8 @@ class CollectionTest(unittest.TestCase):
             [row["name"] for row in dataset["coverage"]["providers"]],
             ["Fleasing", "Terminalen"],
         )
-        self.assertEqual(len(dataset["catalogueOffers"]), 4)
+        self.assertEqual(len(dataset["catalogueOffers"]), 2)
+        self.assertEqual(len(dataset["quarantinedCandidates"]), 2)
         self.assertIn(
             "WARNING provider aggregate reconciliation mismatch:", result.stdout
         )
@@ -225,7 +238,7 @@ class CollectionTest(unittest.TestCase):
         ]
         self.assertEqual(
             [
-                (candidate["offerIdentity"], candidate["admissionStatus"])
+                (candidate["offerIdentity"], candidate["admissionOutcome"])
                 for candidate in fleasing_candidates
             ],
             [
@@ -255,7 +268,7 @@ class CollectionTest(unittest.TestCase):
         self.assertEqual(len(terminalen_candidates), 2)
         self.assertTrue(
             all(
-                candidate["admissionStatus"] == "admitted"
+                candidate["admissionOutcome"] == "admitted"
                 for candidate in terminalen_candidates
             )
         )
@@ -326,7 +339,11 @@ class CollectionTest(unittest.TestCase):
         )
         self.assertEqual(
             [row["offerIdentity"] for row in dataset["catalogueOffers"]],
-            ["fleasing:one", "terminalen:one"],
+            ["terminalen:one"],
+        )
+        self.assertEqual(
+            [row["offerIdentity"] for row in dataset["quarantinedCandidates"]],
+            ["fleasing:one"],
         )
 
     def test_preserves_the_prior_dataset_when_terminalen_fails_after_fleasing_succeeds(
@@ -357,7 +374,7 @@ class CollectionTest(unittest.TestCase):
             path.write_text(prior, encoding="utf-8")
             partial = candidate("Terminalen", "terminalen:one")
             partial.pop("sourceMetadata")
-            with self.assertRaisesRegex(ValueError, "source documents"):
+            with self.assertRaisesRegex(ValueError, "sourceMetadata"):
                 refresh_catalogue(
                     path,
                     collect_fleasing=lambda: [candidate("Fleasing", "fleasing:one")],
@@ -366,6 +383,21 @@ class CollectionTest(unittest.TestCase):
                     sleep=lambda _: None,
                 )
             self.assertEqual(path.read_text(encoding="utf-8"), prior)
+
+    def test_rejects_a_candidate_with_an_unknown_admission_outcome(self) -> None:
+        pending = candidate("Terminalen", "terminalen:pending")
+        pending["admissionOutcome"] = "pending"
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "catalogue-dataset.json"
+            with self.assertRaisesRegex(ValueError, "valid admission outcome"):
+                refresh_catalogue(
+                    path,
+                    collect_fleasing=lambda: [candidate("Fleasing", "fleasing:one")],
+                    collect_terminalen=lambda: [pending],
+                    generated_at=lambda: "2026-07-22T12:00:00Z",
+                    sleep=lambda _: None,
+                )
 
 
 if __name__ == "__main__":

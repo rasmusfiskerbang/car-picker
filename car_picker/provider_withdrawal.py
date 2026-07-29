@@ -4,11 +4,12 @@ import json
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from pydantic import JsonValue
 
-from car_picker.collection import PROVIDER_NAMES, write_json_atomically
+from car_picker.collection import write_json_atomically
+from car_picker.provider_scope import CoveredProvider, PROVIDER_NAMES
 
 
 DEFAULT_PROVIDER_CONTROL = Path("config/provider-control.json")
@@ -93,9 +94,9 @@ def validate_withdrawal_record(value: JsonValue) -> None:
         raise ValueError("site build completion requires a deadline result")
 
 
-def active_provider_names(control: Mapping[str, Any]) -> tuple[str, ...]:
+def active_provider_names(control: Mapping[str, Any]) -> tuple[CoveredProvider, ...]:
     return tuple(
-        provider["name"]
+        cast(CoveredProvider, provider["name"])
         for provider in control["providers"]
         if provider["retrievalEnabled"]
     )
@@ -236,14 +237,20 @@ def validate_dataset_for_withdrawals(
         )
     withdrawn_names = {withdrawal["provider"] for withdrawal in withdrawals}
     offers = dataset.get("catalogueOffers")
+    quarantined = dataset.get("quarantinedCandidates")
     coverage = dataset.get("coverage")
     providers = coverage.get("providers") if isinstance(coverage, dict) else None
     if (
         not isinstance(offers, list)
+        or not isinstance(quarantined, list)
         or not isinstance(providers, list)
         or any(
             isinstance(offer, dict) and offer.get("provider") in withdrawn_names
             for offer in offers
+        )
+        or any(
+            isinstance(candidate, dict) and candidate.get("provider") in withdrawn_names
+            for candidate in quarantined
         )
         or any(
             isinstance(provider, dict) and provider.get("name") in withdrawn_names

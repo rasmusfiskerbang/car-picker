@@ -11,6 +11,12 @@ from urllib.parse import urljoin, urlparse
 from pydantic import JsonValue
 
 from car_picker.fleasing import StructuralSourceError, TextHttpClient
+from car_picker.provider_contract import (
+    admission_reasons,
+    evidence,
+    source_document,
+    unavailable_fact,
+)
 
 
 PARSER_VERSION = "terminalen-model-price-v1"
@@ -174,8 +180,8 @@ def map_configuration(
     upfront = required_int(row, "upfrontPaymentDkk")
     term = required_int(row, "termMonths")
     aggregate = required_int(row, "aggregatePaymentDkk")
-    card_evidence = {"sourceUrl": api_url, "wording": wording}
-    vehicle_evidence = {"sourceUrl": api_url, "wording": vehicle_wording}
+    card_evidence = evidence(api_url, wording)
+    vehicle_evidence = evidence(api_url, vehicle_wording)
     vat_basis = amount_basis(legal_wording)
     payment_evidence = combined_evidence(api_url, wording, legal_wording)
     mileage = mileage_fact(api_url, legal_wording)
@@ -201,7 +207,7 @@ def map_configuration(
                 "normal_completion_end",
                 1,
                 vat_basis,
-                {"sourceUrl": api_url, "wording": legal_wording},
+                evidence(api_url, legal_wording),
             )
         )
     candidate = {
@@ -215,14 +221,14 @@ def map_configuration(
         ),
         "privateConsumerEligibility": known(
             True,
-            {"sourceUrl": api_url, "wording": private_eligibility_wording},
+            evidence(api_url, private_eligibility_wording),
         ),
         "passengerCarScope": passenger_car_scope,
         "currentAvailability": current_availability,
         "supportedLeasingForm": operational_form_fact(api_url, end_wording),
         "providerFormLabel": known(
             provider_form_wording,
-            {"sourceUrl": api_url, "wording": provider_form_wording},
+            evidence(api_url, provider_form_wording),
         ),
         "advertisedMonthlyPayment": money(monthly, payment_evidence),
         "providerAdvertisedAggregate": {
@@ -249,7 +255,7 @@ def map_configuration(
                 "code": "vat_basis_not_established",
             }
         )
-    candidate["admissionStatus"] = "quarantined" if reasons else "admitted"
+    candidate["admissionOutcome"] = "quarantined" if reasons else "admitted"
     if reasons:
         candidate["quarantineReasons"] = reasons
     return candidate
@@ -285,10 +291,7 @@ def money(value: int, evidence: dict[str, str]) -> dict[str, Any]:
 
 
 def not_stated(source_url: str, wording: str) -> dict[str, Any]:
-    return {
-        "state": "not_stated",
-        "evidence": {"sourceUrl": source_url, "wording": wording},
-    }
+    return unavailable_fact("not_stated", source_url, wording)
 
 
 def private_lease_rows(
@@ -406,7 +409,7 @@ def combined_evidence(
     source_url: str, card_wording: str, legal_wording: str
 ) -> dict[str, str]:
     wording = card_wording if not legal_wording else f"{card_wording}; {legal_wording}"
-    return {"sourceUrl": source_url, "wording": wording}
+    return evidence(source_url, wording)
 
 
 def mileage_fact(source_url: str, legal_wording: str) -> dict[str, Any]:
@@ -417,7 +420,7 @@ def mileage_fact(source_url: str, legal_wording: str) -> dict[str, Any]:
         return not_stated(source_url, legal_wording)
     return known(
         int(match.group(1).replace(".", "")),
-        {"sourceUrl": source_url, "wording": match.group(0)},
+        evidence(source_url, match.group(0)),
     )
 
 
@@ -452,14 +455,14 @@ def availability_fact(source_url: str, payload: Mapping[str, Any]) -> dict[str, 
     if is_current is None:
         return not_stated(source_url, wording)
     if is_current is True:
-        return known(True, {"sourceUrl": source_url, "wording": wording})
+        return known(True, evidence(source_url, wording))
     return unclear(source_url, wording)
 
 
 def unclear(source_url: str, wording: str) -> dict[str, Any]:
     return {
         "state": "unclear",
-        "evidence": {"sourceUrl": source_url, "wording": wording},
+        "evidence": evidence(source_url, wording),
     }
 
 
@@ -474,15 +477,13 @@ def inspection_fee(legal_wording: str) -> int | None:
 
 def normal_end_fact(source_url: str, end_wording: str) -> dict[str, Any]:
     if re.search(r"afleverer du bilen", end_wording, flags=re.IGNORECASE):
-        return known(
-            "return_to_provider", {"sourceUrl": source_url, "wording": end_wording}
-        )
+        return known("return_to_provider", evidence(source_url, end_wording))
     return not_stated(source_url, end_wording)
 
 
 def residual_risk_fact(source_url: str, end_wording: str) -> dict[str, Any]:
     if re.search(r"ikke .*værditab", end_wording, flags=re.IGNORECASE):
-        return known("provider", {"sourceUrl": source_url, "wording": end_wording})
+        return known("provider", evidence(source_url, end_wording))
     return not_stated(source_url, end_wording)
 
 
@@ -490,7 +491,7 @@ def operational_form_fact(source_url: str, end_wording: str) -> dict[str, Any]:
     has_return = normal_end_fact(source_url, end_wording)["state"] == "known"
     has_provider_risk = residual_risk_fact(source_url, end_wording)["state"] == "known"
     if has_return and has_provider_risk:
-        return known("operational", {"sourceUrl": source_url, "wording": end_wording})
+        return known("operational", evidence(source_url, end_wording))
     return not_stated(source_url, end_wording)
 
 
@@ -510,7 +511,7 @@ def service_arrangements_fact(source_url: str, legal_wording: str) -> dict[str, 
                 "scope": match.group(1),
             }
         ],
-        {"sourceUrl": source_url, "wording": match.group(0)},
+        evidence(source_url, match.group(0)),
     )
 
 
@@ -531,33 +532,8 @@ def exclusions_fact(source_url: str, legal_wording: str) -> dict[str, Any]:
             for category, source_term in categories
             if source_term.casefold() in match.group(1).casefold()
         ],
-        {"sourceUrl": source_url, "wording": match.group(0)},
+        evidence(source_url, match.group(0)),
     )
-
-
-def admission_reasons(candidate: Mapping[str, Any]) -> list[dict[str, str]]:
-    required_facts = (
-        "vehicleSpecification",
-        "privateConsumerEligibility",
-        "passengerCarScope",
-        "currentAvailability",
-        "supportedLeasingForm",
-        "advertisedMonthlyPayment",
-        "termMonths",
-    )
-    return [
-        {"fact": name, "state": candidate[name]["state"]}
-        for name in required_facts
-        if candidate[name]["state"] != "known"
-    ]
-
-
-def source_document(url: str, content: str, retrieved_at: str) -> dict[str, str]:
-    return {
-        "sourceUrl": url,
-        "contentSha256": hashlib.sha256(content.encode()).hexdigest(),
-        "retrievedAt": retrieved_at,
-    }
 
 
 def required_string(value: Mapping[str, Any], key: str) -> str:

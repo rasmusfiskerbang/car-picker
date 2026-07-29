@@ -1,19 +1,18 @@
-"""Versioned canonical catalogue model and the temporary legacy JSON boundary."""
+"""Versioned canonical catalogue model."""
 
 from __future__ import annotations
 
-import copy
 from typing import Annotated, Any, Generic, Literal, TypeVar
 
 from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
-    PrivateAttr,
     StringConstraints,
-    ValidationInfo,
     model_validator,
 )
+
+from car_picker.provider_scope import CoveredProvider
 
 
 NonEmptyString = Annotated[str, StringConstraints(min_length=1)]
@@ -23,7 +22,7 @@ OfferIdentity = Annotated[
         min_length=3, pattern=r"^[a-z0-9][a-z0-9_-]*:[^\s:]+(?::[^\s]+)?$"
     ),
 ]
-FactState = Literal["known", "not_stated", "unclear", "conflicting", "not_applicable"]
+UnavailableFactState = Literal["not_stated", "unclear", "conflicting", "not_applicable"]
 
 
 def camel_case(name: str) -> str:
@@ -61,7 +60,7 @@ class KnownMoneyFact(CatalogueModel):
 
 
 class UnavailableFact(CatalogueModel):
-    state: Literal["not_stated", "unclear", "conflicting", "not_applicable"]
+    state: UnavailableFactState
     evidence: Evidence
 
 
@@ -187,7 +186,7 @@ class QuarantineReason(CatalogueModel):
 
 class CatalogueCandidate(CatalogueModel):
     offer_identity: OfferIdentity
-    provider: NonEmptyString
+    provider: CoveredProvider
     provider_source_id: NonEmptyString | None = None
     canonical_offer_url: NonEmptyString | None = None
     source_local_configuration_key: NonEmptyString | None = None
@@ -238,7 +237,7 @@ class CatalogueOffer(CatalogueCandidate):
         return self
 
 
-class QuarantinedOffer(CatalogueCandidate):
+class QuarantinedCandidate(CatalogueCandidate):
     """A retained candidate that was not admitted to the active catalogue."""
 
     admission_outcome: Literal["quarantined"]
@@ -246,7 +245,7 @@ class QuarantinedOffer(CatalogueCandidate):
 
 
 class CoverageProvider(CatalogueModel):
-    name: NonEmptyString
+    name: CoveredProvider
     designated_source: NonEmptyString
     quarantined_candidate_count: int = Field(ge=0)
 
@@ -256,24 +255,20 @@ class Coverage(CatalogueModel):
 
 
 class EndedProviderCoverage(CatalogueModel):
-    name: NonEmptyString
+    name: CoveredProvider
     coverage_ended_at: NonEmptyString
 
 
 class CatalogueDataset(CatalogueModel):
-    _legacy_source: dict[str, Any] | None = PrivateAttr(default=None)
-
     schema_version: Literal["catalogue-dataset/v1"]
     generated_at: NonEmptyString
     coverage: Coverage
     coverage_ended: list[EndedProviderCoverage]
     catalogue_offers: list[CatalogueOffer]
-    quarantined_offers: list[QuarantinedOffer]
+    quarantined_candidates: list[QuarantinedCandidate]
 
     @model_validator(mode="after")
-    def validate_complete_replacement(self, info: ValidationInfo) -> CatalogueDataset:
-        if info.context and info.context.get("allow_incomplete_legacy_dataset"):
-            return self
+    def validate_complete_replacement(self) -> CatalogueDataset:
         provider_rows = self.coverage.providers
         provider_names = [row.name for row in provider_rows]
         if len(provider_names) != len(set(provider_names)):
@@ -286,7 +281,7 @@ class CatalogueDataset(CatalogueModel):
 
         candidates: list[CatalogueCandidate] = [
             *self.catalogue_offers,
-            *self.quarantined_offers,
+            *self.quarantined_candidates,
         ]
         identities = [candidate.offer_identity for candidate in candidates]
         if len(identities) != len(set(identities)):
@@ -299,7 +294,7 @@ class CatalogueDataset(CatalogueModel):
 
         quarantine_counts = {
             provider: sum(
-                offer.provider == provider for offer in self.quarantined_offers
+                offer.provider == provider for offer in self.quarantined_candidates
             )
             for provider in provider_names
         }
@@ -312,115 +307,6 @@ class CatalogueDataset(CatalogueModel):
                 "provider coverage quarantine counts must match retained candidates"
             )
         return self
-
-
-def from_legacy_dataset(
-    value: dict[str, Any],
-    *,
-    require_complete_replacement: bool = True,
-) -> CatalogueDataset:
-    """Parse the current combined-list representation into the canonical model."""
-    legacy = copy.deepcopy(value)
-    candidates = legacy.pop("catalogueOffers", None)
-    if not isinstance(candidates, list):
-        return CatalogueDataset.model_validate(legacy)
-    forbidden_derived_facts = {
-        "upfrontCashRequirement",
-        "nominalBaseOutlay",
-        "nominalMonthlyEquivalent",
-        "operationReadiness",
-    }
-    if any(
-        isinstance(candidate, dict) and forbidden_derived_facts.intersection(candidate)
-        for candidate in candidates
-    ):
-        raise ValueError("canonical offers must not persist derived comparison values")
-    admitted: list[dict[str, Any]] = []
-    quarantined: list[dict[str, Any]] = []
-    for candidate_value in candidates:
-        if not isinstance(candidate_value, dict):
-            admitted.append(candidate_value)
-            continue
-        candidate = dict(candidate_value)
-        normalize_legacy_cash_flow_events(candidate)
-        status = candidate.pop("admissionStatus", None)
-        if status == "admitted":
-            candidate["admissionOutcome"] = "admitted"
-            admitted.append(candidate)
-        elif status == "quarantined":
-            candidate["admissionOutcome"] = "quarantined"
-            if (
-                not require_complete_replacement
-                and "quarantineReasons" not in candidate
-            ):
-                candidate["quarantineReasons"] = [
-                    {"fact": "admissionOutcome", "state": "unclear"}
-                ]
-            quarantined.append(candidate)
-        else:
-            candidate["admissionStatus"] = status
-            admitted.append(candidate)
-    legacy["catalogueOffers"] = admitted
-    legacy["quarantinedOffers"] = quarantined
-    dataset = CatalogueDataset.model_validate(
-        legacy,
-        context={
-            "allow_incomplete_legacy_dataset": not require_complete_replacement,
-        },
-    )
-    dataset._legacy_source = copy.deepcopy(value)
-    return dataset
-
-
-def to_legacy_dataset(dataset: CatalogueDataset) -> dict[str, Any]:
-    """Serialize canonical data in the unchanged shape consumed by existing commands."""
-    if dataset._legacy_source is not None:
-        return copy.deepcopy(dataset._legacy_source)
-    value = dataset.model_dump(mode="json", by_alias=True, exclude_none=True)
-    admitted = value.pop("catalogueOffers")
-    quarantined = value.pop("quarantinedOffers")
-    combined = []
-    for status, offers in (("admitted", admitted), ("quarantined", quarantined)):
-        for offer in offers:
-            offer.pop("admissionOutcome")
-            combined.append({"admissionStatus": status, **offer})
-    value["catalogueOffers"] = combined
-    return value
-
-
-def normalize_legacy_cash_flow_events(candidate: dict[str, Any]) -> None:
-    """Confine the oldest fixture's incomplete event shape to the legacy adapter."""
-    events = candidate.get("baseCashFlowStream")
-    metadata = candidate.get("sourceMetadata")
-    documents = metadata.get("documents") if isinstance(metadata, dict) else None
-    source_url = (
-        documents[0].get("sourceUrl")
-        if isinstance(documents, list) and documents and isinstance(documents[0], dict)
-        else "legacy:unknown"
-    )
-    if not isinstance(events, list):
-        return
-    for event in events:
-        if not isinstance(event, dict):
-            continue
-        if set(event) != {"meaning"}:
-            continue
-        event.setdefault("direction", "payment")
-        event.setdefault("amountDkk", None)
-        event.setdefault("amountBasis", "not_stated")
-        event.setdefault("timing", "recurring")
-        event.setdefault("recurrenceCount", None)
-        event.setdefault("refundability", "not_stated")
-        event.setdefault("includedInBase", True)
-        if event.get("amountDkk") is None or event.get("recurrenceCount") is None:
-            event.setdefault("blockingFacts", ["baseCashFlowStream"])
-        event.setdefault(
-            "evidence",
-            {
-                "sourceUrl": source_url,
-                "wording": event.get("meaning", "Legacy cash-flow event"),
-            },
-        )
 
 
 def catalogue_dataset_json_schema() -> dict[str, Any]:
