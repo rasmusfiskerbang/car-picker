@@ -383,8 +383,8 @@ test("selected offers compare in aligned rows without hiding unavailable values"
 
   await expect(page).toHaveURL(
     `/#/compare/${encodeURIComponent(
-      builtPresentation.offers[0].offerIdentity,
-    )},fleasing%3Abmw-i4`,
+      `${builtPresentation.offers[0].offerIdentity},fleasing:bmw-i4`,
+    )}`,
   );
   const table = page.getByRole("table", { name: "Sammenligning af tilbud" });
   await expect(table.getByRole("row")).toHaveCount(16);

@@ -1,6 +1,15 @@
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
+import {
+  Link,
+  Outlet,
+  RouterProvider,
+  createHashHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+} from "@tanstack/react-router";
 import { createRoot } from "react-dom/client";
-import { useEffect, useState } from "react";
+import { type ReactNode, useState } from "react";
 
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
@@ -202,12 +211,13 @@ function OfferCard({
             />
             Vælg til sammenligning
           </label>
-          <a
+          <Link
             aria-label={`Se detaljer for ${vehicle}`}
-            href={`#/offer/${encodeURIComponent(offer.offerIdentity)}`}
+            params={{ identity: offer.offerIdentity }}
+            to="/offer/$identity"
           >
             Se aftalevilkår og kilder
-          </a>
+          </Link>
         </div>
         <dl className="facts">
           <FactRow
@@ -388,7 +398,7 @@ function OfferDetail({ offer }: { offer: PresentationOffer }) {
   const end = factValue(offer.normalEndMechanism, endMechanism);
   return (
     <main className="page detail-page">
-      <a href="#">Tilbage til kataloget</a>
+      <Link to="/">Tilbage til kataloget</Link>
       <header className="detail-header">
         <p className="eyebrow">
           {offer.provider} · {vehicleName(offer)}
@@ -508,7 +518,7 @@ function comparisonValue(offer: PresentationOffer, key: keyof PresentationOffer)
 function Comparison({ offers }: { offers: PresentationOffer[] }) {
   return (
     <main className="page comparison-page">
-      <a href="#">Tilbage til kataloget</a>
+      <Link to="/">Tilbage til kataloget</Link>
       <h1>Sammenlign tilbud</h1>
       <div className="comparison-scroll" data-testid="comparison-scroll">
         <table aria-label="Sammenligning af tilbud" className="comparison-table">
@@ -604,8 +614,6 @@ function Catalogue({ presentation }: { presentation: CataloguePresentation }) {
     dateStyle: "long",
     timeStyle: "short",
   }).format(new Date(presentation.generatedAt));
-  const comparisonHref = `#/compare/${selected.map(encodeURIComponent).join(",")}`;
-
   return (
     <div className="page">
       <header className="hero"><h1>Bilvalg</h1></header>
@@ -630,7 +638,12 @@ function Catalogue({ presentation }: { presentation: CataloguePresentation }) {
         {selected.length < 2 ? (
           <p>Vælg mindst to tilbud for at sammenligne dem.</p>
         ) : (
-          <a href={comparisonHref}>Sammenlign {selected.length} tilbud</a>
+          <Link
+            params={{ identities: selected.join(",") }}
+            to="/compare/$identities"
+          >
+            Sammenlign {selected.length} tilbud
+          </Link>
         )}
       </aside>
       <section className="offer-list" aria-label="Katalogtilbud">
@@ -660,36 +673,11 @@ function Catalogue({ presentation }: { presentation: CataloguePresentation }) {
   );
 }
 
-function PresentationApplication({
-  presentation,
+function PresentationLoader({
+  children,
 }: {
-  presentation: CataloguePresentation;
+  children: (presentation: CataloguePresentation) => ReactNode;
 }) {
-  const [hash, setHash] = useState(window.location.hash);
-  useEffect(() => {
-    const updateHash = () => setHash(window.location.hash);
-    window.addEventListener("hashchange", updateHash);
-    return () => window.removeEventListener("hashchange", updateHash);
-  }, []);
-  const detailMatch = hash.match(/^#\/offer\/(.+)$/);
-  if (detailMatch) {
-    const identity = decodeURIComponent(detailMatch[1]);
-    const offer = presentation.offers.find((item) => item.offerIdentity === identity);
-    return offer ? <OfferDetail offer={offer} /> : <p className="message">Tilbuddet findes ikke i dette katalog.</p>;
-  }
-  const comparisonMatch = hash.match(/^#\/compare\/(.+)$/);
-  if (comparisonMatch) {
-    const identities = comparisonMatch[1].split(",").map(decodeURIComponent);
-    const offers = identities.flatMap((identity) => {
-      const offer = presentation.offers.find((item) => item.offerIdentity === identity);
-      return offer ? [offer] : [];
-    });
-    return offers.length >= 2 ? <Comparison offers={offers} /> : <p className="message">Vælg mindst to tilbud fra kataloget.</p>;
-  }
-  return <Catalogue presentation={presentation} />;
-}
-
-function Application() {
   const presentation = useQuery({
     queryKey: ["catalogue-presentation"],
     queryFn: loadPresentation,
@@ -698,12 +686,92 @@ function Application() {
   });
   if (presentation.isPending) return <p className="message">Kataloget indlæses…</p>;
   if (presentation.isError) return <section className="message" role="alert"><h1>Kataloget kan ikke vises</h1><p>Katalogdata bestod ikke den nødvendige kontrol.</p></section>;
-  return <PresentationApplication presentation={presentation.data} />;
+  return children(presentation.data);
+}
+
+function CatalogueRoute() {
+  return (
+    <PresentationLoader>
+      {(presentation) => <Catalogue presentation={presentation} />}
+    </PresentationLoader>
+  );
+}
+
+function OfferDetailRoute() {
+  const { identity } = detailRoute.useParams();
+  return (
+    <PresentationLoader>
+      {(presentation) => {
+        const offer = presentation.offers.find(
+          (item) => item.offerIdentity === decodeURIComponent(identity),
+        );
+        return offer ? (
+          <OfferDetail offer={offer} />
+        ) : (
+          <p className="message">Tilbuddet findes ikke i dette katalog.</p>
+        );
+      }}
+    </PresentationLoader>
+  );
+}
+
+function ComparisonRoute() {
+  const { identities } = comparisonRoute.useParams();
+  return (
+    <PresentationLoader>
+      {(presentation) => {
+        const offers = identities.split(",").flatMap((encodedIdentity) => {
+          const identity = decodeURIComponent(encodedIdentity);
+          const offer = presentation.offers.find(
+            (item) => item.offerIdentity === identity,
+          );
+          return offer ? [offer] : [];
+        });
+        return offers.length >= 2 ? (
+          <Comparison offers={offers} />
+        ) : (
+          <p className="message">Vælg mindst to tilbud fra kataloget.</p>
+        );
+      }}
+    </PresentationLoader>
+  );
+}
+
+const rootRoute = createRootRoute({ component: () => <Outlet /> });
+const catalogueRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/",
+  component: CatalogueRoute,
+});
+const detailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/offer/$identity",
+  component: OfferDetailRoute,
+});
+const comparisonRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/compare/$identities",
+  component: ComparisonRoute,
+});
+const routeTree = rootRoute.addChildren([
+  catalogueRoute,
+  detailRoute,
+  comparisonRoute,
+]);
+const router = createRouter({
+  history: createHashHistory(),
+  routeTree,
+});
+
+declare module "@tanstack/react-router" {
+  interface Register {
+    router: typeof router;
+  }
 }
 
 const queryClient = new QueryClient();
 createRoot(document.getElementById("root")!).render(
   <QueryClientProvider client={queryClient}>
-    <Application />
+    <RouterProvider router={router} />
   </QueryClientProvider>,
 );
