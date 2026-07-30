@@ -33,8 +33,12 @@ The evidence-backed description of the car configuration advertised in one leasi
 _Avoid_: Shared vehicle identity, master vehicle, fuzzy vehicle match
 
 **Catalogue candidate**:
-A discovered leasing offer that has not yet satisfied the evidence required for inclusion in the active comparison catalogue.
+A transiently collected leasing offer that has not yet satisfied the evidence required for inclusion in the active comparison catalogue. Catalogue admission consumes it during one catalogue refresh; the full candidate is never retained.
 _Avoid_: Catalogue offer, listing
+
+**Catalogue admission**:
+The evidence-based decision that a catalogue candidate satisfies every required condition for inclusion in the active comparison catalogue. An admitted candidate becomes a catalogue offer without retaining a separate admission record; a candidate that cannot satisfy the conditions remains a quarantined candidate with structured reasons.
+_Avoid_: Admission outcome, publication status, offer completeness
 
 **Catalogue offer**:
 A leasing offer admitted to the active comparison catalogue after first-party evidence establishes an authorized covered provider, private-consumer eligibility, passenger-car scope, current availability, and a classifiable contract form.
@@ -45,44 +49,56 @@ A catalogue offer whose required facts are usable for a particular total, filter
 _Avoid_: Complete offer, universally comparable offer, completeness percentage
 
 **Offer fact state**:
-The evidentiary state of a comparison-relevant fact: `known` when the designated source supports a normalized value, `not_stated` when it omits the fact, `unclear` when its wording cannot support one interpretation, `conflicting` when it contradicts itself, or `not_applicable` when the fact genuinely does not apply. Every state retains its source wording and provenance; absence never implies zero, false, excluded, or not applicable.
+The state of a comparison-relevant fact that catalogue admission does not require to be known: `known`, `not_stated`, `unclear`, `conflicting`, or `not_applicable`. Admission-guaranteed facts are direct catalogue-offer values; absence never implies zero, false, excluded, or not applicable.
 _Avoid_: Nullable field, missing value
 
 **Quarantined candidate**:
-A catalogue candidate retained only in the current catalogue dataset and withheld from the active comparison catalogue because a required admission fact is missing, uncertain, contradictory, or malformed. It carries structured quarantine reasons and supporting evidence so coverage and source quality remain explainable, then disappears when the catalogue dataset is replaced.
+A catalogue candidate withheld from the active comparison catalogue because a required admission fact is missing, uncertain, contradictory, or malformed. Its compact current-dataset record retains only its identity, provider, canonical source, structured quarantine reasons, and supporting evidence, then disappears when the catalogue dataset is replaced.
 _Avoid_: Quarantined offer, bad offer, excluded listing
 
 **Covered provider**:
 A Danish leasing company whose publicly available private-leasing offers are included in the tool's declared source scope.
 _Avoid_: Dealer, the market, all providers
 
-**Provider assessment register**:
-The record of candidate providers evaluated for source access, each marked `eligible`, `blocked`, `ineligible`, or `deferred` with its reason, relevant source URLs, and assessment date. It distinguishes an accessible qualifying source, a qualifying source stopped by an explicit access boundary, first-party evidence disproving current private passenger-car scope, and evidence too weak for a conclusion; none of these statuses implies active catalogue coverage.
-_Avoid_: Coverage register, exclusion list, covered-provider list
+**Provider registry**:
+The single authoritative record of every provider considered for the catalogue. Each provider has one stable identity together with its source-access assessment (`eligible`, `blocked`, `ineligible`, or `deferred`), reason and evidence references; designated offer-source scope; onboarding intent; retrieval state; and any withdrawal state. Assessment status does not imply active catalogue coverage. Supporting source audits provide evidence for the registry but do not define competing provider state.
+_Avoid_: Provider assessment register, provider control, provider access list, exclusion list, covered-provider list
 
 **Catalogue dataset**:
 The complete active representation of catalogue candidates from every covered provider, produced by one successful all-provider refresh. It has one generation timestamp and remains active until another dataset is built and validated as a unit, then atomically replaces and deletes its predecessor. A failure for any provider rejects the replacement and leaves the active dataset unchanged. No historical datasets or cross-refresh offer records are retained.
 _Avoid_: Provider snapshot, incremental update, mixed-age catalogue, revision history, live market
 
-**Coverage register**:
-The record of which covered providers and designated offer-source scopes contribute to the active catalogue dataset, including quarantined-candidate counts and the dataset's single generation timestamp.
-_Avoid_: Market coverage percentage, the whole market
+**Catalogue coverage**:
+The derived record of which covered providers and designated offer-source scopes actually contributed to one active catalogue dataset, including quarantined-candidate counts and the dataset's single generation timestamp. It describes the result of that successful refresh and is not a second source of provider state.
+_Avoid_: Coverage register, provider registry, market coverage percentage, the whole market
 
 **Designated offer source**:
 The bounded first-party source set selected as authoritative for one covered provider's catalogue candidates: one primary structured endpoint or offer-detail surface plus only explicitly enumerated supporting documents, with deterministic rules proving which offer and version each document applies to. Missing values remain unknown rather than being enriched from unlisted, third-party, or ambiguously applicable sources.
 _Avoid_: Opportunistic evidence hierarchy, fallback source, arbitrary related page
 
+**Catalogue refresh**:
+One all-covered-provider attempt to produce and validate a complete replacement catalogue dataset. Its run diagnostics are transient; only a successfully replaced catalogue dataset remains active.
+_Avoid_: Provider refresh, incremental sync, refresh history
+
 **Source evidence**:
-The current-catalogue-dataset record of where an offer fact came from: the first-party source document and the exact source fragment or wording that supports its normalized value or evidentiary state. Several facts may share one source document, and each fact points back to its own supporting evidence. Evidence is discarded when the catalogue dataset is successfully replaced.
-_Avoid_: Unattributed value, copied description, detached excerpt
+The first-party source URL and exact fragment or wording retained with a quarantined candidate to support a failed catalogue-admission reason. It is not retained on catalogue offers and is discarded when the catalogue dataset is successfully replaced.
+_Avoid_: Offer provenance, copied description, detached excerpt
 
 **Private-consumer VAT basis**:
 The VAT treatment of an advertised amount explicitly offered to a private individual. An unqualified private-consumer price is VAT-inclusive; explicit excluding or contradictory VAT wording takes precedence and remains visible.
 _Avoid_: Unknown VAT basis for an unqualified private price, silent gross-up
 
 **Base cash-flow stream**:
-The single time-ordered source of truth for payments and receipts a prospective lessee faces when a leasing offer runs to normal completion. Each amount appears once as an event with its source meaning, direction, amount basis, contract-relative timing or recurrence, and refundability where relevant. It contains unavoidable contractual amounts and the payment and expected return of refundable deposits, but excludes conditional or uncertain amounts; a provider-advertised aggregate total is a separate sourced assertion.
+The single time-ordered source of truth for payments and receipts a prospective lessee faces when a leasing offer runs to normal completion. Each amount appears once as a normalized event with its standardized meaning, direction, DKK amount or offer fact state, contract-relative timing or recurrence, and refundability where relevant. It contains unavoidable contractual amounts and the payment and expected return of refundable deposits, but excludes conditional amounts; a provider-advertised aggregate total is a separate assertion.
 _Avoid_: Total expense, monthly-price field, duplicated payment fields
+
+**Provider-advertised monthly payment**:
+The known amount of the standardized recurring lease-payment event in a catalogue offer's base cash-flow stream. It is never stored separately; contradictory headline and cash-flow amounts block catalogue admission.
+_Avoid_: Separate headline price, nominal monthly equivalent
+
+**Provider-advertised aggregate**:
+A provider-stated total for the normal-completion base cash flows. It remains a separate assertion used only to reconcile the provider's arithmetic with the nominal base outlay derived from the base cash-flow stream.
+_Avoid_: Calculation input, authoritative total, nominal base outlay
 
 **Upfront cash requirement**:
 The sum of mandatory payments due from accepting a leasing agreement through vehicle handover, including refundable deposits and establishment or delivery fees without netting later receipts. It is unavailable when evidence cannot establish whether a mandatory amount falls within that window.
