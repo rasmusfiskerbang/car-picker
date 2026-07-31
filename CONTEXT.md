@@ -45,7 +45,7 @@ A leasing offer admitted to the active comparison catalogue after first-party ev
 _Avoid_: Candidate, all available offers
 
 **Comparison-ready offer**:
-A catalogue offer whose required facts are usable for a particular total, filter, sort, or comparison. Readiness is evaluated separately for each operation together with the facts blocking an unavailable operation; it is not stored as an offer fact and is never an overall completeness score or ranking signal.
+A catalogue offer whose required facts are usable for a particular total, filter, sort, or comparison. Readiness is evaluated and materialized separately for each operation together with the facts blocking an unavailable operation; it is a derived dataset result rather than an offer fact and is never an overall completeness score or ranking signal.
 _Avoid_: Complete offer, universally comparable offer, completeness percentage
 
 **Offer fact state**:
@@ -65,7 +65,7 @@ The single authoritative, wholly publication-safe record of every provider consi
 _Avoid_: Provider assessment register, provider control, provider access list, exclusion list, covered-provider list
 
 **Catalogue dataset**:
-The complete active representation of catalogue candidates from every covered provider, produced by one successful all-provider refresh. It has one generation timestamp and remains active until another dataset is built and validated as a unit, then atomically replaces and deletes its predecessor. A failure for any provider rejects the replacement and leaves the active dataset unchanged. No historical datasets or cross-refresh offer records are retained.
+The complete publication-safe active representation produced by one successful all-provider refresh. It contains one dated copy of the Provider Registry's publication-safe records, Catalogue Coverage, Catalogue Offers with validated materialized comparison results, and compact Quarantined Candidates. It has one generation timestamp and remains active until another dataset is built and validated as a unit, then atomically replaces and deletes its predecessor. A failure for any provider rejects the replacement and leaves the active dataset unchanged. No historical datasets or cross-refresh offer records are retained.
 _Avoid_: Provider snapshot, incremental update, mixed-age catalogue, revision history, live market
 
 **Catalogue coverage**:
@@ -113,7 +113,7 @@ The nominal base outlay spread over the full advertised normal-completion term i
 _Avoid_: Monthly payment, advertised monthly price, average instalment
 
 **Derived comparison value**:
-A reproducible result calculated from the current evidence-backed offer facts, such as nominal base outlay, nominal monthly equivalent, or operation readiness. It is not a provider-stated offer fact and is recalculated as needed rather than becoming part of the leasing offer.
+A reproducible result calculated from the current evidence-backed offer facts, such as nominal base outlay, nominal monthly equivalent, or operation readiness. It is materialized into the current Catalogue Dataset during refresh and validated against its normalized inputs. It is neither a provider-stated offer fact nor an independently editable authority.
 _Avoid_: Provider price, persisted offer fact, authoritative total
 
 **Unexplained aggregate difference**:
