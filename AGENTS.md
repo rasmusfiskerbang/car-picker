@@ -1,5 +1,9 @@
 ## Agent skills
 
+### Coding standards
+
+Before changing or reviewing code, read [`CODING_STANDARDS.MD`](CODING_STANDARDS.MD).
+
 ### Issue tracker
 
 Issues live in GitHub Issues and are managed with `gh`. See `docs/agents/issue-tracker.md`.
