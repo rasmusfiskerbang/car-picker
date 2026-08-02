@@ -64,9 +64,9 @@ There is no separate operation-readiness map that could disagree with a result. 
 - **Python-to-TypeScript bridge — 2 August 2026:** keep Pydantic serialization-mode JSON Schema as the sole contract authority; generate a TypeScript schema constant and static type from it; convert the constant once with Zod 4 `fromJSONSchema()`; and connect the broad runtime `ZodType` to the generated type through one isolated, audited cast. Pin the Zod minor line and guard the bridge with schema-feature, runtime-parity, and TypeScript-negative tests. The supporting comparison is [CatalogueDataset Python-to-TypeScript contract toolchain research](../../research/catalogue-dataset-typescript-contract-toolchain.md).
 - **Quarantine evidence size — 2 August 2026:** each supporting excerpt is an exact public first-party fragment of at most 500 characters. A reason may cite multiple excerpts when distinct fragments are genuinely necessary; full source documents remain transient.
 - **Empty active-provider result — 2 August 2026:** a Provider Adapter may return zero Candidates only after recognizing and exhaustively enumerating a valid empty source. Missing expected structure, failed enumeration, or an ambiguous empty page is a structural failure that rejects the complete refresh. This distinction remains Adapter behavior and adds no Dataset field.
-- **Exposure Scenarios deferred — 2 August 2026:** structured conditional-cost scenarios, calculators, and their presentation are removed from the v1 Catalogue Offer and product. Conditional amounts remain excluded from base comparison values; Exposure Scenarios may return in a later product effort.
+- **No Exposure Scenarios — 2 August 2026:** the v1 Catalogue Offer and product have no structured conditional-cost records, calculators, or presentation. Provider disclosure of an excess-mileage rate, damage charge, early-termination charge, or another conditional amount neither adds a Dataset field nor quarantines an otherwise admissible Offer. Conditional amounts are omitted rather than treated as zero, and comparison values describe only normal-completion base cash flows. Exposure Scenarios may return in a later product effort.
 
-All pressure points raised by this prototype were resolved in live review.
+Live review remains open. The decisions above are accepted individually but do not constitute acceptance of the complete prototype.
 
 ## Deliberately excluded from the prototype
 
@@ -87,5 +87,6 @@ The proposed contract should make each statement obviously true:
 - A materially conflicting provider aggregate suppresses nominal base outlay and monthly equivalent while leaving upfront cash requirement available.
 - A refundable deposit increases upfront cash requirement but nets to zero in nominal base outlay through separate payment and expected-receipt events.
 - A browser can explain every derived amount from the same normalized inputs the backend validated, without a calculation projection.
+- A disclosed excess-mileage rate has no Dataset representation and does not quarantine an otherwise admissible Offer; comparison values remain explicitly limited to normal-completion base cash flows rather than claiming to be total cost.
 - A Quarantined Candidate can explain failed admission without retaining its full parsed commercial model.
 - No handwritten TypeScript Dataset shape can drift from Python, and representative converter differences fail the build-time contract cases.

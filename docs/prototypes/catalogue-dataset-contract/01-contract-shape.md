@@ -215,6 +215,10 @@ An expected return of a refundable deposit is a separate `receipt` event. The or
 
 The event `key` is the stable local reference used by blocking facts. It does not claim identity across Dataset generations.
 
+### Conditional amounts
+
+There is deliberately no Exposure Scenario type. Excess-mileage rates, damage charges, early-termination charges, and other amounts triggered by conditional or uncertain events are not represented in the Dataset and do not enter the Base Cash-flow Stream or materialized comparison results. Their disclosure does not quarantine an otherwise admissible Offer. They are omitted, not assigned a zero value; consequently, the product must describe calculated amounts as normal-completion base values rather than total cost.
+
 ## Materialized comparison results
 
 ```ts
