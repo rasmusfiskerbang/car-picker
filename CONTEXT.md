@@ -28,12 +28,8 @@ _Avoid_: Car, listing, deal
 The stable identity of one atomic leasing offer within a covered provider, composed from the provider's source ID or canonical offer URL plus a source-local configuration key. Prefer a provider-issued configuration ID; otherwise use a deterministic adapter-defined key derived from the explicitly selected source values. Similar cars are not the same offer merely because their vehicle facts match.
 _Avoid_: Vehicle identity, fuzzy match
 
-**Supported vehicle kind**:
-A passenger car powered exclusively by either gasoline or diesel combustion, or exclusively by a battery-electric drivetrain. Hybrid, plug-in hybrid, mild-hybrid, hydrogen, and other drivetrains are outside the catalogue scope.
-_Avoid_: Gas car, hybrid vehicle, all passenger cars
-
 **Vehicle specification**:
-The evidence-backed description embedded in one leasing offer. Its common attributes are make, model, trim, model year, first-registration year, body style, and odometer reading, with each available year retaining its meaning; a combustion specification adds gasoline-or-diesel fuel type and fuel efficiency, while a battery-electric specification adds battery capacity with its gross, usable, or unstated basis, WLTP range, maximum charging power with its AC, DC, or unstated kind, and 10–80% charging time. Equivalent attributes support comparison but do not establish one shared physical vehicle or exact configuration.
+The evidence-backed description of the car configuration advertised in one leasing offer, including normalized attributes used for filtering and comparison. Equivalent make, model, trim, equipment, or other attributes support comparison but do not establish that offers concern one shared physical vehicle or exact configuration.
 _Avoid_: Shared vehicle identity, master vehicle, fuzzy vehicle match
 
 **Catalogue candidate**:
@@ -48,9 +44,9 @@ _Avoid_: Admission outcome, publication status, offer completeness
 A leasing offer admitted to the active comparison catalogue after first-party evidence establishes an authorized covered provider, private-consumer eligibility, passenger-car scope, current availability, and a classifiable contract form.
 _Avoid_: Candidate, all available offers
 
-**Comparison availability**:
-The per-operation state of a derived total, filter, sort, or comparison: `available` with a value, or `unavailable` with explicit reasons. It is a derived dataset result rather than an offer fact and is never an overall Catalogue Offer status, completeness score, or ranking signal.
-_Avoid_: Comparison-ready offer, complete offer, universally comparable offer, completeness percentage
+**Comparison-ready offer**:
+A catalogue offer whose required facts are usable for a particular total, filter, sort, or comparison. Readiness is evaluated and materialized separately for each operation together with the facts blocking an unavailable operation; it is a derived dataset result rather than an offer fact and is never an overall completeness score or ranking signal.
+_Avoid_: Complete offer, universally comparable offer, completeness percentage
 
 **Offer fact state**:
 The state of a comparison-relevant fact that catalogue admission does not require to be known: `known`, `not_stated`, `unclear`, `conflicting`, or `not_applicable`. Admission-guaranteed facts are direct catalogue-offer values; absence never implies zero, false, excluded, or not applicable.
@@ -69,8 +65,12 @@ The single authoritative, wholly publication-safe record of every provider consi
 _Avoid_: Provider assessment register, provider control, provider access list, exclusion list, covered-provider list
 
 **Catalogue dataset**:
-The complete publication-safe active representation produced by one successful all-provider refresh. It contains one dated copy of the Provider Registry's publication-safe records, Catalogue Offers with validated materialized comparison results, and compact Quarantined Candidates. Provider participation and counts are derived from those records; designated source scope remains in Provider Adapter code and source audits rather than a separate coverage record. The dataset has one generation timestamp and remains active until another dataset is built and validated as a unit, then atomically replaces and deletes its predecessor. A failure for any provider rejects the replacement and leaves the active dataset unchanged. No historical datasets or cross-refresh offer records are retained.
+The complete publication-safe active representation produced by one successful all-provider refresh. It contains one dated copy of the Provider Registry's publication-safe records, Catalogue Coverage, Catalogue Offers with validated materialized comparison results, and compact Quarantined Candidates. It has one generation timestamp and remains active until another dataset is built and validated as a unit, then atomically replaces and deletes its predecessor. A failure for any provider rejects the replacement and leaves the active dataset unchanged. No historical datasets or cross-refresh offer records are retained.
 _Avoid_: Provider snapshot, incremental update, mixed-age catalogue, revision history, live market
+
+**Catalogue coverage**:
+The derived record of which covered providers and designated offer-source scopes actually contributed to one active catalogue dataset, including quarantined-candidate counts and the dataset's single generation timestamp. It describes the result of that successful refresh and is not a second source of provider state.
+_Avoid_: Coverage register, provider registry, market coverage percentage, the whole market
 
 **Designated offer source**:
 The bounded first-party source set selected as authoritative for one covered provider's catalogue candidates: one primary structured endpoint or offer-detail surface plus only explicitly enumerated supporting documents, with deterministic rules proving which offer and version each document applies to. Missing values remain unknown rather than being enriched from unlisted, third-party, or ambiguously applicable sources.
@@ -105,7 +105,7 @@ The sum of mandatory payments due from accepting a leasing agreement through veh
 _Avoid_: Cash at signing, first payment, down payment
 
 **Nominal base outlay**:
-The face-value sum of mandatory base payments minus expected mandatory base receipts over normal contract completion, without inflation, discounting, financing cost, or opportunity cost. Conditional amounts and externally priced costs are excluded; a fully refundable deposit therefore nets to zero while still contributing to the upfront cash requirement.
+The face-value sum of mandatory base payments minus expected mandatory base receipts over normal contract completion, without inflation, discounting, financing cost, or opportunity cost. Conditional exposures and externally priced costs are excluded; a fully refundable deposit therefore nets to zero while still contributing to the upfront cash requirement.
 _Avoid_: Total cost, present value, expected cost
 
 **Nominal monthly equivalent**:
@@ -113,16 +113,20 @@ The nominal base outlay spread over the full advertised normal-completion term i
 _Avoid_: Monthly payment, advertised monthly price, average instalment
 
 **Derived comparison value**:
-A reproducible result calculated from the current evidence-backed offer facts, such as nominal base outlay, nominal monthly equivalent, or Comparison Availability. It is materialized into the current Catalogue Dataset during refresh and validated against its normalized inputs. It is neither a provider-stated offer fact nor an independently editable authority.
+A reproducible result calculated from the current evidence-backed offer facts, such as nominal base outlay, nominal monthly equivalent, or operation readiness. It is materialized into the current Catalogue Dataset during refresh and validated against its normalized inputs. It is neither a provider-stated offer fact nor an independently editable authority.
 _Avoid_: Provider price, persisted offer fact, authoritative total
 
 **Unexplained aggregate difference**:
 The signed difference between a provider-advertised aggregate and the nominal base outlay reconstructed from the same offer's documented cash flows when they do not reconcile. Its cause remains unknown; neither amount overwrites the other.
 _Avoid_: Residual value, calculation blocker, corrected provider total
 
+**Exposure scenario**:
+A possible payment or receipt caused by a conditional or uncertain event, represented by its standardized kind, trigger, required inputs, and any sourced formula, rate, cap, or fixed amount. Voluntary end options remain end mechanisms; an unquantified exposure stays visible without an invented cost or probability, and unusual obligations remain representable without being forced into an unrelated kind.
+_Avoid_: Base cost, guaranteed payment, voluntary end option, estimated expected cost
+
 **Service arrangement**:
-The normalized treatment of a standardized service or external-cost category within a leasing offer: `included`, `optional`, `required_external`, or `excluded`, together with its scope and limits. Whether that arrangement is known is expressed separately by the offer fact state; the arrangement is a dated interpretation rather than a retained provider quotation.
-_Avoid_: Service fact state, assumed inclusion, unqualified bundle, provider wording
+The disclosed treatment of a standardized service or external-cost category within a leasing offer: `included`, `optional`, `required_external`, or `excluded`, together with its scope, limits, and provider wording. Whether that arrangement is known is expressed separately by the offer fact state.
+_Avoid_: Service fact state, assumed inclusion, unqualified bundle
 
 **Residual-risk allocation**:
 The agreement's assignment of economic gain or loss when the car's realized end value differs from its stated residual value.
