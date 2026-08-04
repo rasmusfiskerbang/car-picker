@@ -16,7 +16,7 @@ import {
   ShieldQuestion,
   X,
 } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, type UIEvent, useRef, useState } from "react";
 
 import {
   type CatalogueDataset,
@@ -763,7 +763,7 @@ function ComparisonHeader({
   return (
     <TooltipProvider delayDuration={180}>
       <div
-        className="sticky top-0 z-30 grid w-full border-b bg-card shadow-[0_8px_18px_-18px_rgba(0,0,0,0.8)]"
+        className="grid w-full border-b bg-card shadow-[0_8px_18px_-18px_rgba(0,0,0,0.8)]"
         style={{ gridTemplateColumns }}
       >
         <div className="sticky left-0 z-40 grid content-end border-r bg-secondary p-3 text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground sm:p-4">
@@ -869,10 +869,8 @@ function SectionBlock({
 
 function ComparisonViewport({
   children,
-  contained = false,
 }: {
   children: ReactNode;
-  contained?: boolean;
 }) {
   return (
     <div
@@ -881,17 +879,50 @@ function ComparisonViewport({
     >
       <div
         aria-label="Side om side-sammenligning af leasingtilbud"
-        className={cn(
-          contained
-            ? "max-h-[calc(100vh-11rem)] min-h-[28rem] overflow-auto"
-            : "overflow-x-auto",
-        )}
+        className="overflow-x-auto"
         role="region"
         tabIndex={0}
       >
         {children}
       </div>
     </div>
+  );
+}
+
+function PageComparisonViewport({
+  children,
+  header,
+}: {
+  children: ReactNode;
+  header: ReactNode;
+}) {
+  const headerScrollRef = useRef<HTMLDivElement>(null);
+  const syncHeaderScroll = (event: UIEvent<HTMLDivElement>) => {
+    if (headerScrollRef.current === null) return;
+    headerScrollRef.current.scrollLeft = event.currentTarget.scrollLeft;
+  };
+
+  return (
+    <section
+      aria-label="Side om side-sammenligning af leasingtilbud"
+      className="min-w-0 max-w-full rounded-2xl border bg-card shadow-sm"
+    >
+      <div
+        className="sticky top-0 z-30 overflow-hidden rounded-t-2xl bg-card"
+        ref={headerScrollRef}
+      >
+        {header}
+      </div>
+      <div
+        aria-label="Sammenligningsfakta"
+        className="overflow-x-auto rounded-b-2xl"
+        onScroll={syncHeaderScroll}
+        role="region"
+        tabIndex={0}
+      >
+        {children}
+      </div>
+    </section>
   );
 }
 
@@ -946,7 +977,7 @@ function PageFrame({
 }) {
   return (
     <div className="min-h-screen pb-32">
-      <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur">
+      <header className="border-b bg-background">
         <div className="mx-auto grid max-w-[96rem] items-center gap-3 px-3 py-3 sm:grid-cols-[minmax(0,1fr)_minmax(18rem,28rem)] sm:px-6 lg:px-8">
           <div className="flex min-w-0 items-center gap-3">
             <Link
@@ -1024,17 +1055,20 @@ function VariantA({
       offers={offers}
       selected={search.selected}
     >
-      <ComparisonViewport contained>
-        <ComparisonHeader
-          dataset={dataset}
-          offers={offers}
-          removeOffer={removeOffer}
-          selected={search.selected}
-        />
+      <PageComparisonViewport
+        header={
+          <ComparisonHeader
+            dataset={dataset}
+            offers={offers}
+            removeOffer={removeOffer}
+            selected={search.selected}
+          />
+        }
+      >
         {sections.map((section) => (
           <SectionBlock key={section.key} offers={offers} section={section} />
         ))}
-      </ComparisonViewport>
+      </PageComparisonViewport>
     </PageFrame>
   );
 }
