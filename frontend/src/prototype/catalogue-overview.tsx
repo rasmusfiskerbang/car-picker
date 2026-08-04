@@ -672,9 +672,11 @@ function VariantD({
   return (
     <div>
       <PrototypeMasthead generatedAt={dataset.generatedAt} />
-      <main className="mx-auto max-w-[92rem] px-4 pb-36 pt-8 sm:px-6 lg:px-8 lg:pt-12">
-        <div className="flex items-end justify-between gap-6">
-          <OverviewHeading count={offers.length} />
+      <main className="mx-auto max-w-[92rem] px-4 pb-36 pt-8 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between gap-6">
+          <h1 className="font-serif text-3xl tracking-[-0.03em]">
+            Leasingtilbud
+          </h1>
           <MobileFilters
             activeProviders={activeProviders}
             patchSearch={patchSearch}
@@ -682,7 +684,7 @@ function VariantD({
           />
         </div>
 
-        <div className="mt-10 grid items-start gap-8 md:grid-cols-[17rem_minmax(0,1fr)] lg:grid-cols-[19rem_minmax(0,1fr)]">
+        <div className="mt-8 grid items-start gap-8 md:grid-cols-[17rem_minmax(0,1fr)] lg:grid-cols-[19rem_minmax(0,1fr)]">
           <aside className="sticky top-5 hidden rounded-2xl border bg-card p-5 md:block">
             <div className="mb-5 flex items-center gap-2">
               <SlidersHorizontal className="size-4" />
