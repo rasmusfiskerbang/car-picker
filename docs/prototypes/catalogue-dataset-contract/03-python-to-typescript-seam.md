@@ -178,6 +178,7 @@ Validation stays at the seam owning each risk. There is no catch-all validator m
 These describe public behavior and belong at the owner-facing seams, not as a test for every Pydantic class:
 
 - A refresh cannot persist an Offer whose `totalDkk` or `totalDkkPerMonth` disagrees with its Base Cash-flow Stream and term.
+- A refresh cannot persist a Base Cash-flow Stream whose occurrence months decrease, whose event keys repeat, or whose events occur after the Offer term.
 - An explicit receipt reduces `totalDkk`; an unavailable required cash-flow amount makes both calculated totals `null`.
 - A site build packages the active Dataset without projection or field loss.
 - The schema artifact and embedded Zod schema originate from the same Pydantic serialization schema.

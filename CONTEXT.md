@@ -85,11 +85,11 @@ The VAT treatment of an advertised amount explicitly offered to a private indivi
 _Avoid_: Unknown VAT basis for an unqualified private price, silent gross-up
 
 **Base cash-flow stream**:
-The single time-ordered source of truth for payments and receipts a prospective lessee faces when a leasing offer runs to normal completion. Each amount appears once as a normalized event with its standardized meaning, direction, DKK amount or offer fact state, contract-relative timing or recurrence, and refundability where relevant. It contains unavoidable contractual amounts and explicit expected receipts such as refundable-deposit returns, but excludes conditional amounts.
+The single chronological source of truth for payments and receipts a prospective lessee faces when a leasing offer runs to normal completion. Each cash-flow occurrence appears once as a normalized event with its standardized meaning, direction, DKK amount or offer fact state, contract-relative month, and refundability where relevant. It contains unavoidable contractual amounts and explicit expected receipts such as refundable-deposit returns, but excludes conditional amounts.
 _Avoid_: Total expense, monthly-price field, duplicated payment fields
 
 **Provider-advertised monthly payment**:
-The known amount of the standardized recurring lease-payment event in a catalogue offer's base cash-flow stream. It is never stored separately; contradictory headline and cash-flow amounts block catalogue admission.
+The known amount represented by the standardized lease-payment occurrences in a catalogue offer's base cash-flow stream. It is never stored separately; contradictory headline and cash-flow amounts block catalogue admission.
 _Avoid_: Separate headline price
 
 **Advertised total**:

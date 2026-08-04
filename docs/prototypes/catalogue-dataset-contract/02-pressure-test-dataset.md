@@ -76,41 +76,44 @@ This illustrative JSON is intentionally awkward. It is not real provider data an
         ]
       },
       "baseCashFlowStream": [
-        {
-          "key": "initial-payment",
-          "kind": "initial_payment",
-          "direction": "payment",
-          "amount": { "state": "known", "value": 15990 },
-          "schedule": {
-            "kind": "one_off",
-            "timing": "acceptance_to_handover"
-          },
-          "refundability": { "state": "known", "value": "not_refundable" }
-        },
-        {
-          "key": "monthly-lease-payment",
-          "kind": "lease_payment",
-          "direction": "payment",
-          "amount": { "state": "known", "value": 3795 },
-          "schedule": {
-            "kind": "recurring",
-            "everyMonths": 1,
-            "occurrences": 36,
-            "firstPaymentTiming": "after_handover"
-          },
-          "refundability": { "state": "not_applicable" }
-        },
-        {
-          "key": "delivery-fee",
-          "kind": "delivery_fee",
-          "direction": "payment",
-          "amount": { "state": "not_stated" },
-          "schedule": {
-            "kind": "one_off",
-            "timing": "acceptance_to_handover"
-          },
-          "refundability": { "state": "known", "value": "not_refundable" }
-        }
+        { "key": "initial-payment", "occursAtMonth": 0, "kind": "initial_payment", "direction": "payment", "amount": { "state": "known", "value": 15990 }, "refundability": { "state": "known", "value": "not_refundable" } },
+        { "key": "delivery-fee", "occursAtMonth": 0, "kind": "delivery_fee", "direction": "payment", "amount": { "state": "not_stated" }, "refundability": { "state": "known", "value": "not_refundable" } },
+        { "key": "monthly-lease-payment-01", "occursAtMonth": 1, "kind": "lease_payment", "direction": "payment", "amount": { "state": "known", "value": 3795 }, "refundability": { "state": "not_applicable" } },
+        { "key": "monthly-lease-payment-02", "occursAtMonth": 2, "kind": "lease_payment", "direction": "payment", "amount": { "state": "known", "value": 3795 }, "refundability": { "state": "not_applicable" } },
+        { "key": "monthly-lease-payment-03", "occursAtMonth": 3, "kind": "lease_payment", "direction": "payment", "amount": { "state": "known", "value": 3795 }, "refundability": { "state": "not_applicable" } },
+        { "key": "monthly-lease-payment-04", "occursAtMonth": 4, "kind": "lease_payment", "direction": "payment", "amount": { "state": "known", "value": 3795 }, "refundability": { "state": "not_applicable" } },
+        { "key": "monthly-lease-payment-05", "occursAtMonth": 5, "kind": "lease_payment", "direction": "payment", "amount": { "state": "known", "value": 3795 }, "refundability": { "state": "not_applicable" } },
+        { "key": "monthly-lease-payment-06", "occursAtMonth": 6, "kind": "lease_payment", "direction": "payment", "amount": { "state": "known", "value": 3795 }, "refundability": { "state": "not_applicable" } },
+        { "key": "monthly-lease-payment-07", "occursAtMonth": 7, "kind": "lease_payment", "direction": "payment", "amount": { "state": "known", "value": 3795 }, "refundability": { "state": "not_applicable" } },
+        { "key": "monthly-lease-payment-08", "occursAtMonth": 8, "kind": "lease_payment", "direction": "payment", "amount": { "state": "known", "value": 3795 }, "refundability": { "state": "not_applicable" } },
+        { "key": "monthly-lease-payment-09", "occursAtMonth": 9, "kind": "lease_payment", "direction": "payment", "amount": { "state": "known", "value": 3795 }, "refundability": { "state": "not_applicable" } },
+        { "key": "monthly-lease-payment-10", "occursAtMonth": 10, "kind": "lease_payment", "direction": "payment", "amount": { "state": "known", "value": 3795 }, "refundability": { "state": "not_applicable" } },
+        { "key": "monthly-lease-payment-11", "occursAtMonth": 11, "kind": "lease_payment", "direction": "payment", "amount": { "state": "known", "value": 3795 }, "refundability": { "state": "not_applicable" } },
+        { "key": "monthly-lease-payment-12", "occursAtMonth": 12, "kind": "lease_payment", "direction": "payment", "amount": { "state": "known", "value": 3795 }, "refundability": { "state": "not_applicable" } },
+        { "key": "monthly-lease-payment-13", "occursAtMonth": 13, "kind": "lease_payment", "direction": "payment", "amount": { "state": "known", "value": 3795 }, "refundability": { "state": "not_applicable" } },
+        { "key": "monthly-lease-payment-14", "occursAtMonth": 14, "kind": "lease_payment", "direction": "payment", "amount": { "state": "known", "value": 3795 }, "refundability": { "state": "not_applicable" } },
+        { "key": "monthly-lease-payment-15", "occursAtMonth": 15, "kind": "lease_payment", "direction": "payment", "amount": { "state": "known", "value": 3795 }, "refundability": { "state": "not_applicable" } },
+        { "key": "monthly-lease-payment-16", "occursAtMonth": 16, "kind": "lease_payment", "direction": "payment", "amount": { "state": "known", "value": 3795 }, "refundability": { "state": "not_applicable" } },
+        { "key": "monthly-lease-payment-17", "occursAtMonth": 17, "kind": "lease_payment", "direction": "payment", "amount": { "state": "known", "value": 3795 }, "refundability": { "state": "not_applicable" } },
+        { "key": "monthly-lease-payment-18", "occursAtMonth": 18, "kind": "lease_payment", "direction": "payment", "amount": { "state": "known", "value": 3795 }, "refundability": { "state": "not_applicable" } },
+        { "key": "monthly-lease-payment-19", "occursAtMonth": 19, "kind": "lease_payment", "direction": "payment", "amount": { "state": "known", "value": 3795 }, "refundability": { "state": "not_applicable" } },
+        { "key": "monthly-lease-payment-20", "occursAtMonth": 20, "kind": "lease_payment", "direction": "payment", "amount": { "state": "known", "value": 3795 }, "refundability": { "state": "not_applicable" } },
+        { "key": "monthly-lease-payment-21", "occursAtMonth": 21, "kind": "lease_payment", "direction": "payment", "amount": { "state": "known", "value": 3795 }, "refundability": { "state": "not_applicable" } },
+        { "key": "monthly-lease-payment-22", "occursAtMonth": 22, "kind": "lease_payment", "direction": "payment", "amount": { "state": "known", "value": 3795 }, "refundability": { "state": "not_applicable" } },
+        { "key": "monthly-lease-payment-23", "occursAtMonth": 23, "kind": "lease_payment", "direction": "payment", "amount": { "state": "known", "value": 3795 }, "refundability": { "state": "not_applicable" } },
+        { "key": "monthly-lease-payment-24", "occursAtMonth": 24, "kind": "lease_payment", "direction": "payment", "amount": { "state": "known", "value": 3795 }, "refundability": { "state": "not_applicable" } },
+        { "key": "monthly-lease-payment-25", "occursAtMonth": 25, "kind": "lease_payment", "direction": "payment", "amount": { "state": "known", "value": 3795 }, "refundability": { "state": "not_applicable" } },
+        { "key": "monthly-lease-payment-26", "occursAtMonth": 26, "kind": "lease_payment", "direction": "payment", "amount": { "state": "known", "value": 3795 }, "refundability": { "state": "not_applicable" } },
+        { "key": "monthly-lease-payment-27", "occursAtMonth": 27, "kind": "lease_payment", "direction": "payment", "amount": { "state": "known", "value": 3795 }, "refundability": { "state": "not_applicable" } },
+        { "key": "monthly-lease-payment-28", "occursAtMonth": 28, "kind": "lease_payment", "direction": "payment", "amount": { "state": "known", "value": 3795 }, "refundability": { "state": "not_applicable" } },
+        { "key": "monthly-lease-payment-29", "occursAtMonth": 29, "kind": "lease_payment", "direction": "payment", "amount": { "state": "known", "value": 3795 }, "refundability": { "state": "not_applicable" } },
+        { "key": "monthly-lease-payment-30", "occursAtMonth": 30, "kind": "lease_payment", "direction": "payment", "amount": { "state": "known", "value": 3795 }, "refundability": { "state": "not_applicable" } },
+        { "key": "monthly-lease-payment-31", "occursAtMonth": 31, "kind": "lease_payment", "direction": "payment", "amount": { "state": "known", "value": 3795 }, "refundability": { "state": "not_applicable" } },
+        { "key": "monthly-lease-payment-32", "occursAtMonth": 32, "kind": "lease_payment", "direction": "payment", "amount": { "state": "known", "value": 3795 }, "refundability": { "state": "not_applicable" } },
+        { "key": "monthly-lease-payment-33", "occursAtMonth": 33, "kind": "lease_payment", "direction": "payment", "amount": { "state": "known", "value": 3795 }, "refundability": { "state": "not_applicable" } },
+        { "key": "monthly-lease-payment-34", "occursAtMonth": 34, "kind": "lease_payment", "direction": "payment", "amount": { "state": "known", "value": 3795 }, "refundability": { "state": "not_applicable" } },
+        { "key": "monthly-lease-payment-35", "occursAtMonth": 35, "kind": "lease_payment", "direction": "payment", "amount": { "state": "known", "value": 3795 }, "refundability": { "state": "not_applicable" } },
+        { "key": "monthly-lease-payment-36", "occursAtMonth": 36, "kind": "lease_payment", "direction": "payment", "amount": { "state": "known", "value": 3795 }, "refundability": { "state": "not_applicable" } }
       ],
       "advertisedTotalDkk": { "state": "not_stated" },
       "totalDkk": null,
@@ -142,52 +145,21 @@ This illustrative JSON is intentionally awkward. It is not real provider data an
       "residualRiskAllocation": { "state": "known", "value": "lessee" },
       "serviceArrangements": { "state": "not_stated" },
       "baseCashFlowStream": [
-        {
-          "key": "initial-payment",
-          "kind": "initial_payment",
-          "direction": "payment",
-          "amount": { "state": "known", "value": 25000 },
-          "schedule": {
-            "kind": "one_off",
-            "timing": "acceptance_to_handover"
-          },
-          "refundability": { "state": "known", "value": "not_refundable" }
-        },
-        {
-          "key": "refundable-deposit-payment",
-          "kind": "deposit",
-          "direction": "payment",
-          "amount": { "state": "known", "value": 50000 },
-          "schedule": {
-            "kind": "one_off",
-            "timing": "acceptance_to_handover"
-          },
-          "refundability": { "state": "known", "value": "refundable" }
-        },
-        {
-          "key": "monthly-lease-payment",
-          "kind": "lease_payment",
-          "direction": "payment",
-          "amount": { "state": "known", "value": 2995 },
-          "schedule": {
-            "kind": "recurring",
-            "everyMonths": 1,
-            "occurrences": 12,
-            "firstPaymentTiming": "after_handover"
-          },
-          "refundability": { "state": "not_applicable" }
-        },
-        {
-          "key": "refundable-deposit-return",
-          "kind": "deposit_refund",
-          "direction": "receipt",
-          "amount": { "state": "known", "value": 50000 },
-          "schedule": {
-            "kind": "one_off",
-            "timing": "normal_completion_end"
-          },
-          "refundability": { "state": "not_applicable" }
-        }
+        { "key": "initial-payment", "occursAtMonth": 0, "kind": "initial_payment", "direction": "payment", "amount": { "state": "known", "value": 25000 }, "refundability": { "state": "known", "value": "not_refundable" } },
+        { "key": "refundable-deposit-payment", "occursAtMonth": 0, "kind": "deposit", "direction": "payment", "amount": { "state": "known", "value": 50000 }, "refundability": { "state": "known", "value": "refundable" } },
+        { "key": "monthly-lease-payment-01", "occursAtMonth": 1, "kind": "lease_payment", "direction": "payment", "amount": { "state": "known", "value": 2995 }, "refundability": { "state": "not_applicable" } },
+        { "key": "monthly-lease-payment-02", "occursAtMonth": 2, "kind": "lease_payment", "direction": "payment", "amount": { "state": "known", "value": 2995 }, "refundability": { "state": "not_applicable" } },
+        { "key": "monthly-lease-payment-03", "occursAtMonth": 3, "kind": "lease_payment", "direction": "payment", "amount": { "state": "known", "value": 2995 }, "refundability": { "state": "not_applicable" } },
+        { "key": "monthly-lease-payment-04", "occursAtMonth": 4, "kind": "lease_payment", "direction": "payment", "amount": { "state": "known", "value": 2995 }, "refundability": { "state": "not_applicable" } },
+        { "key": "monthly-lease-payment-05", "occursAtMonth": 5, "kind": "lease_payment", "direction": "payment", "amount": { "state": "known", "value": 2995 }, "refundability": { "state": "not_applicable" } },
+        { "key": "monthly-lease-payment-06", "occursAtMonth": 6, "kind": "lease_payment", "direction": "payment", "amount": { "state": "known", "value": 2995 }, "refundability": { "state": "not_applicable" } },
+        { "key": "monthly-lease-payment-07", "occursAtMonth": 7, "kind": "lease_payment", "direction": "payment", "amount": { "state": "known", "value": 2995 }, "refundability": { "state": "not_applicable" } },
+        { "key": "monthly-lease-payment-08", "occursAtMonth": 8, "kind": "lease_payment", "direction": "payment", "amount": { "state": "known", "value": 2995 }, "refundability": { "state": "not_applicable" } },
+        { "key": "monthly-lease-payment-09", "occursAtMonth": 9, "kind": "lease_payment", "direction": "payment", "amount": { "state": "known", "value": 2995 }, "refundability": { "state": "not_applicable" } },
+        { "key": "monthly-lease-payment-10", "occursAtMonth": 10, "kind": "lease_payment", "direction": "payment", "amount": { "state": "known", "value": 2995 }, "refundability": { "state": "not_applicable" } },
+        { "key": "monthly-lease-payment-11", "occursAtMonth": 11, "kind": "lease_payment", "direction": "payment", "amount": { "state": "known", "value": 2995 }, "refundability": { "state": "not_applicable" } },
+        { "key": "monthly-lease-payment-12", "occursAtMonth": 12, "kind": "lease_payment", "direction": "payment", "amount": { "state": "known", "value": 2995 }, "refundability": { "state": "not_applicable" } },
+        { "key": "refundable-deposit-return", "occursAtMonth": 12, "kind": "deposit_refund", "direction": "receipt", "amount": { "state": "known", "value": 50000 }, "refundability": { "state": "not_applicable" } }
       ],
       "advertisedTotalDkk": { "state": "known", "value": 61500 },
       "totalDkk": 60940,
@@ -222,6 +194,7 @@ This illustrative JSON is intentionally awkward. It is not real provider data an
 - `future-provider` proves the Provider Registry copy is broader than the providers represented by Offers and Quarantined Candidates.
 - The Terminalen offer remains admitted with an unavailable delivery-fee amount, while both calculated totals are explicitly `null` rather than partial or zero.
 - The Fleasing offer keeps refundable-deposit payment and receipt events separate. Its 50,000 DKK deposit payment and 50,000 DKK refund net to zero, producing `totalDkk` of `60940` rather than `110940`.
+- Both Offers expose one chronologically ordered event per cash-flow occurrence. The frontend can plot the streams directly without expanding a recurrence rule; same-month event order is preserved at months `0` and `12`.
 - The provider's advertised Fleasing total of `61500` remains visible beside the independently calculated `60940`; neither overwrites the other and no reconciliation state is added.
 - Missing annual mileage does not prevent admission or block the Fleasing totals. The frontend can still show that Offer beside another while rendering the mileage fact as unavailable.
 - Comparison selection and presentation are absent from the Dataset; the frontend selects these Offer records by identity and renders their facts and flat totals side by side.

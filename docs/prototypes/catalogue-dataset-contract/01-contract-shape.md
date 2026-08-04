@@ -83,7 +83,7 @@ There is no nested `providerRegistry` object: `ProviderRegistry` names a behavio
 - `generatedAt` is the only Dataset timestamp. Nested provider, offer, and quarantine records have no collection or update timestamps.
 - Provider IDs are unique. Offer identities are unique across both `offers` and `quarantinedCandidates`.
 - Every Offer and Quarantined Candidate refers to an active Provider Registry record. Inactive providers own neither.
-- Arrays use Provider Registry order, then Provider Adapter source order. Frontend comparison selection does not change Dataset ordering.
+- `providers` uses Provider Registry order; `offers` and `quarantinedCandidates` use Provider Registry order, then Provider Adapter source order. Base Cash-flow Streams use chronological occurrence order, and other tuple fields preserve normalized source order. Frontend comparison selection does not change Dataset ordering.
 - Every URL is absolute HTTPS. An exception for an explicitly approved non-HTTPS public source would require a later schema version, not a relaxed generic URL type.
 
 ## Provider Registry copy
@@ -148,7 +148,7 @@ class CatalogueOffer(CatalogueModel):
 
 `leasingForm` is the normalized classification established during admission. The provider's source label is transient classification input and is not retained as per-fact wording. Private-consumer eligibility, passenger-car scope, current availability, and admission outcome are also absent: admission already guarantees them, so repeating them as always-true fields would be shallow data.
 
-The provider-advertised monthly payment is not a field. It is the known amount of the single recurring `lease_payment` Base Cash-flow Event. Dataset validation rejects zero or multiple candidate events and any contradiction with the admitted source facts.
+The provider-advertised monthly payment is not a field. It is represented by the known amount on the applicable `lease_payment` occurrences in the Base Cash-flow Stream. Dataset validation rejects a missing sequence and any contradiction with the admitted source facts.
 
 ### Vehicle Specification
 
@@ -238,26 +238,9 @@ The strings are normalized offer facts, not retained verbatim evidence. A known 
 ## Base Cash-flow Stream
 
 ```py
-class OneOffSchedule(CatalogueModel):
-    kind: Literal["one_off"]
-    timing: Literal["acceptance_to_handover", "normal_completion_end"]
-
-
-class RecurringSchedule(CatalogueModel):
-    kind: Literal["recurring"]
-    every_months: PositiveInt
-    occurrences: PositiveInt
-    first_payment_timing: Literal["acceptance_to_handover", "after_handover"]
-
-
-CashFlowSchedule = Annotated[
-    OneOffSchedule | RecurringSchedule,
-    Field(discriminator="kind"),
-]
-
-
 class BaseCashFlowEvent(CatalogueModel):
     key: NonEmptyString
+    occurs_at_month: NonNegativeInt
     kind: Literal[
         "initial_payment",
         "lease_payment",
@@ -270,13 +253,14 @@ class BaseCashFlowEvent(CatalogueModel):
     ]
     direction: Literal["payment", "receipt"]
     amount: Fact[Dkk]
-    schedule: CashFlowSchedule
     refundability: Fact[Literal["refundable", "not_refundable"]]
 ```
 
-An expected return of a refundable deposit is a separate `receipt` event so the offer preserves both directions and their timing. `refundability` describes the payment's terms; it is `not_applicable` on receipts and ordinary non-deposit cash flows only when the concept genuinely does not apply.
+Each event represents one cash-flow occurrence, not a recurrence rule. `occursAtMonth` is contract-relative: `0` is the upfront bucket at or before handover, `1` is the first month after handover, and `termMonths` is normal contract completion. The stream is ordered by non-decreasing `occursAtMonth`; array order is the stable tie-breaker for occurrences in the same month. Dataset validation rejects an occurrence after `termMonths`.
 
-The event `key` is the stable local reference used by blocking facts. It does not claim identity across Dataset generations.
+An expected return of a refundable deposit is a separate `receipt` occurrence so the offer preserves both directions and their timing. `refundability` describes the payment's terms; it is `not_applicable` on receipts and ordinary non-deposit cash flows only when the concept genuinely does not apply.
+
+Event keys are unique within one Offer. The `key` is a stable local reference and does not claim identity across Dataset generations.
 
 ### Conditional amounts
 
@@ -287,14 +271,13 @@ There is deliberately no Exposure Scenario type. Excess-mileage rates, damage ch
 `advertisedTotalDkk` is a provider-stated Fact and is not used as a calculation input. `totalDkk` and `totalDkkPerMonth` are flat backend-calculated fields on the Offer, not a nested Comparison model:
 
 ```text
-event total = known amount × (1 for one-off, occurrences for recurring)
-totalDkk = sum(payment event totals) − sum(receipt event totals)
+totalDkk = sum(payment occurrence amounts) − sum(receipt occurrence amounts)
 totalDkkPerMonth = totalDkk ÷ termMonths
 ```
 
 An explicit refund therefore reduces `totalDkk`. For example, a 50,000 DKK deposit payment and an explicit 50,000 DKK deposit-refund receipt net to zero. The backend never invents a refund: when a required cash-flow amount is unavailable, both calculated fields are `null`. They are always present, `0` remains a genuine calculated value, and `totalDkkPerMonth` is `null` exactly when `totalDkk` is `null`. Ordinary floating-point errors are accepted; display precision belongs to the frontend.
 
-Dataset validation recomputes both calculated fields from the Base Cash-flow Stream and term. It rejects a non-null disagreement, a number where the inputs are unavailable, or a `null` where the inputs are sufficient. `advertisedTotalDkk` remains independent even when it disagrees with `totalDkk`; there is no reconciliation state.
+Dataset validation recomputes both calculated fields from the Base Cash-flow Stream and term. Each occurrence contributes exactly once; there is no recurrence multiplier. Validation rejects a non-null disagreement, a number where the inputs are unavailable, or a `null` where the inputs are sufficient. `advertisedTotalDkk` remains independent even when it disagrees with `totalDkk`; there is no reconciliation state.
 
 ## Frontend comparison
 
@@ -343,7 +326,7 @@ An adapter that cannot establish any deterministic Offer Identity has a structur
 Pydantic field validation is not sufficient. `CatalogueDataset` performs one after-validation pass that:
 
 1. checks all cross-record identities, active-provider references, and ordering;
-2. checks Offer invariants, including the single recurring lease-payment event;
+2. checks Offer invariants, including unique event keys, chronological occurrence order, occurrence months within the term, and the lease-payment sequence;
 3. recomputes `totalDkk` and `totalDkkPerMonth`, including signed receipts, and compares them to the materialized fields;
 4. rejects forbidden evidence and operational metadata anywhere outside Quarantined Candidate reasons;
 5. rejects the complete Dataset on any disagreement.
