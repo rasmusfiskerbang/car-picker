@@ -36,9 +36,8 @@ NonEmptyString = Annotated[str, Field(min_length=1)]
 ProviderId = Annotated[str, Field(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")]
 OfferIdentity = NonEmptyString
 
-# Finite JSON numbers representing DKK. Non-negative unless explicitly signed.
+# Non-negative finite JSON number representing DKK.
 Dkk = Annotated[FiniteFloat, Field(ge=0)]
-SignedDkk = FiniteFloat
 
 UnavailableState = Literal[
     "not_stated",
@@ -64,7 +63,7 @@ type Fact[T] = Annotated[
 
 `Fact[T]` is used only where a Catalogue Offer is allowed to survive admission without a known value. Admission-guaranteed facts are direct values. `null`, omitted properties, empty strings, and sentinel numbers never stand for unavailable facts.
 
-`Dkk` is a Pydantic `float` serialized as a JSON number. NaN and infinity are rejected. Small binary floating-point errors are accepted; materialized monetary results are rounded to two decimal places before serialization and validation compares those rounded values.
+`Dkk` is a Pydantic `float` serialized as a JSON number. NaN and infinity are rejected; small binary floating-point errors are accepted.
 
 ## Dataset
 
@@ -84,7 +83,7 @@ There is no nested `providerRegistry` object: `ProviderRegistry` names a behavio
 - `generatedAt` is the only Dataset timestamp. Nested provider, offer, and quarantine records have no collection or update timestamps.
 - Provider IDs are unique. Offer identities are unique across both `offers` and `quarantinedCandidates`.
 - Every Offer and Quarantined Candidate refers to an active Provider Registry record. Inactive providers own neither.
-- Arrays use Provider Registry order, then Provider Adapter source order. No score or derived value changes ordering.
+- Arrays use Provider Registry order, then Provider Adapter source order. Frontend comparison selection does not change Dataset ordering.
 - Every URL is absolute HTTPS. An exception for an explicitly approved non-HTTPS public source would require a later schema version, not a relaxed generic URL type.
 
 ## Provider Registry copy
@@ -142,9 +141,6 @@ class CatalogueOffer(CatalogueModel):
         tuple[BaseCashFlowEvent, ...],
         Field(min_length=1),
     ]
-    provider_advertised_aggregate: Fact[ProviderAdvertisedAggregate]
-
-    comparison: ComparisonResults
 ```
 
 `leasingForm` is the normalized classification established during admission. The provider's source label is transient classification input and is not retained as per-fact wording. Private-consumer eligibility, passenger-car scope, current availability, and admission outcome are also absent: admission already guarantees them, so repeating them as always-true fields would be shallow data.
@@ -275,106 +271,17 @@ class BaseCashFlowEvent(CatalogueModel):
     refundability: Fact[Literal["refundable", "not_refundable"]]
 ```
 
-An expected return of a refundable deposit is a separate `receipt` event. The original payment therefore contributes to upfront cash requirement, while payment and receipt net in nominal base outlay. `refundability` describes the payment's terms; it is `not_applicable` on receipts and ordinary non-deposit cash flows only when the concept genuinely does not apply.
+An expected return of a refundable deposit is a separate `receipt` event so the offer preserves both directions and their timing. `refundability` describes the payment's terms; it is `not_applicable` on receipts and ordinary non-deposit cash flows only when the concept genuinely does not apply.
 
 The event `key` is the stable local reference used by blocking facts. It does not claim identity across Dataset generations.
 
 ### Conditional amounts
 
-There is deliberately no Exposure Scenario type. Excess-mileage rates, damage charges, early-termination charges, and other amounts triggered by conditional or uncertain events are not represented in the Dataset and do not enter the Base Cash-flow Stream or materialized comparison results. Their disclosure does not quarantine an otherwise admissible Offer. They are omitted, not assigned a zero value; consequently, the product must describe calculated amounts as normal-completion base values rather than total cost.
+There is deliberately no Exposure Scenario type. Excess-mileage rates, damage charges, early-termination charges, and other amounts triggered by conditional or uncertain events are not represented in the Dataset and do not enter the Base Cash-flow Stream. Their disclosure does not quarantine an otherwise admissible Offer. They are omitted, not assigned a zero value.
 
-## Materialized comparison results
+## Frontend comparison
 
-```py
-class FactUnavailableReason(CatalogueModel):
-    code: Literal["fact_unavailable"]
-    field: Literal[
-        "annualMileageKm",
-        "normalEndMechanism",
-        "residualRiskAllocation",
-        "providerAdvertisedAggregate",
-        "baseCashFlowStream.amount",
-        "baseCashFlowStream.refundability",
-    ]
-    fact_state: UnavailableState
-    event_key: NonEmptyString | None = None
-
-
-class AggregateMismatchReason(CatalogueModel):
-    code: Literal["aggregate_mismatch"]
-
-
-UnavailabilityReason = Annotated[
-    FactUnavailableReason | AggregateMismatchReason,
-    Field(discriminator="code"),
-]
-
-
-class AvailableResult[T](CatalogueModel):
-    state: Literal["available"]
-    value: T
-
-
-class UnavailableResult(CatalogueModel):
-    state: Literal["unavailable"]
-    reasons: Annotated[tuple[UnavailabilityReason, ...], Field(min_length=1)]
-
-
-type MaterializedResult[T] = Annotated[
-    AvailableResult[T] | UnavailableResult,
-    Field(discriminator="state"),
-]
-
-
-class DkkAmount(CatalogueModel):
-    amount_dkk: Dkk
-
-
-class ComparisonResults(CatalogueModel):
-    upfront_cash_requirement: MaterializedResult[DkkAmount]
-    nominal_base_outlay: MaterializedResult[DkkAmount]
-    nominal_monthly_equivalent: MaterializedResult[DkkAmount]
-    aggregate_reconciliation: AggregateReconciliation
-```
-
-Availability lives inside each result. This prevents illegal combinations such as a value beside a separate record saying the operation is blocked. Filtering on an ordinary Fact uses that Fact's own evidentiary state; it does not require a parallel operation index.
-
-`event_key` is deliberately optional in the type declaration. Model validation requires it exactly when `field` identifies a Base Cash-flow Event and forbids it for Offer-level fields. This small loss of static expressivity keeps the public reason model simple without weakening runtime validation.
-
-The frontend may format and explain these values, but it does not recalculate the authoritative result. It renders arithmetic from the Base Cash-flow Stream and term already present in the same Offer.
-
-### Aggregate reconciliation
-
-```py
-class ProviderAdvertisedAggregate(CatalogueModel):
-    scope: Literal["normal_completion_base_cash_flows"]
-    amount_dkk: Dkk
-
-
-class AggregateNotStated(CatalogueModel):
-    status: Literal["not_stated"]
-
-
-class AggregateNotReconstructable(CatalogueModel):
-    status: Literal["not_reconstructable"]
-    reasons: Annotated[tuple[UnavailabilityReason, ...], Field(min_length=1)]
-
-
-class ReconciledAggregate(CatalogueModel):
-    status: Literal["matching", "within_rounding_tolerance", "mismatch"]
-    provider_amount_dkk: Dkk
-    reconstructed_amount_dkk: Dkk
-    signed_difference_dkk: SignedDkk
-    tolerance_dkk: Dkk
-
-
-AggregateReconciliation = Annotated[
-    AggregateNotStated | AggregateNotReconstructable | ReconciledAggregate,
-    Field(discriminator="status"),
-]
-```
-
-A `mismatch` makes `nominalBaseOutlay` and `nominalMonthlyEquivalent` unavailable with reason `aggregate_mismatch`; it does not affect `upfrontCashRequirement`. Validation recomputes the reconstruction and every difference.
+There is no backend Comparison model, materialized comparison result, aggregate reconciliation, readiness structure, or comparison-specific availability state. The frontend selects Catalogue Offers by identity from the parsed Dataset and renders their normalized facts side by side. That selection and presentation state are not added to the Dataset and do not create a second durable model.
 
 ## Quarantined Candidate
 
@@ -420,11 +327,9 @@ Pydantic field validation is not sufficient. `CatalogueDataset` performs one aft
 
 1. checks all cross-record identities, active-provider references, and ordering;
 2. checks Offer invariants, including the single recurring lease-payment event;
-3. recalculates every comparison result and reconciliation with the same float arithmetic and two-decimal materialization rule;
-4. compares the recalculated structures to the materialized structures exactly;
-5. rejects forbidden evidence and operational metadata anywhere outside Quarantined Candidate reasons;
-6. rejects the complete Dataset on any disagreement.
+3. rejects forbidden evidence and operational metadata anywhere outside Quarantined Candidate reasons;
+4. rejects the complete Dataset on any disagreement.
 
-The materialized values are therefore cache-like output inside one validated generation, never a second authority.
+The Dataset therefore remains a normalized offer artifact rather than a backend comparison artifact.
 
 Because this Markdown presents models in domain-reading order rather than Python dependency order, the eventual module resolves its forward references after all declarations with `CatalogueDataset.model_rebuild()`.

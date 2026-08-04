@@ -48,10 +48,6 @@ _Avoid_: Admission outcome, publication status, offer completeness
 A leasing offer admitted to the active comparison catalogue after first-party evidence establishes an authorized covered provider, private-consumer eligibility, passenger-car scope, current availability, and a classifiable contract form.
 _Avoid_: Candidate, all available offers
 
-**Comparison availability**:
-The per-operation state of a derived total, filter, sort, or comparison: `available` with a value, or `unavailable` with explicit reasons. It is a derived dataset result rather than an offer fact and is never an overall Catalogue Offer status, completeness score, or ranking signal.
-_Avoid_: Comparison-ready offer, complete offer, universally comparable offer, completeness percentage
-
 **Offer fact state**:
 The state of a comparison-relevant fact that catalogue admission does not require to be known: `known`, `not_stated`, `unclear`, `conflicting`, or `not_applicable`. Admission-guaranteed facts are direct catalogue-offer values; absence never implies zero, false, excluded, or not applicable.
 _Avoid_: Nullable field, missing value
@@ -69,7 +65,7 @@ The single authoritative, wholly publication-safe record of every provider consi
 _Avoid_: Provider assessment register, provider control, provider access list, exclusion list, covered-provider list
 
 **Catalogue dataset**:
-The complete publication-safe active representation produced by one successful all-provider refresh. It contains one dated copy of the Provider Registry's publication-safe records, Catalogue Offers with validated materialized comparison results, and compact Quarantined Candidates. Provider participation and counts are derived from those records; designated source scope remains in Provider Adapter code and source audits rather than a separate coverage record. The dataset has one generation timestamp and remains active until another dataset is built and validated as a unit, then atomically replaces and deletes its predecessor. A failure for any provider rejects the replacement and leaves the active dataset unchanged. No historical datasets or cross-refresh offer records are retained.
+The complete publication-safe active representation produced by one successful all-provider refresh. It contains one dated copy of the Provider Registry's publication-safe records, normalized Catalogue Offers, and compact Quarantined Candidates. Provider participation and counts are derived from those records; designated source scope remains in Provider Adapter code and source audits rather than a separate coverage record. The dataset has one generation timestamp and remains active until another dataset is built and validated as a unit, then atomically replaces and deletes its predecessor. A failure for any provider rejects the replacement and leaves the active dataset unchanged. No historical datasets or cross-refresh offer records are retained.
 _Avoid_: Provider snapshot, incremental update, mixed-age catalogue, revision history, live market
 
 **Designated offer source**:
@@ -89,36 +85,12 @@ The VAT treatment of an advertised amount explicitly offered to a private indivi
 _Avoid_: Unknown VAT basis for an unqualified private price, silent gross-up
 
 **Base cash-flow stream**:
-The single time-ordered source of truth for payments and receipts a prospective lessee faces when a leasing offer runs to normal completion. Each amount appears once as a normalized event with its standardized meaning, direction, DKK amount or offer fact state, contract-relative timing or recurrence, and refundability where relevant. It contains unavoidable contractual amounts and the payment and expected return of refundable deposits, but excludes conditional amounts; a provider-advertised aggregate total is a separate assertion.
+The single time-ordered source of truth for payments and receipts a prospective lessee faces when a leasing offer runs to normal completion. Each amount appears once as a normalized event with its standardized meaning, direction, DKK amount or offer fact state, contract-relative timing or recurrence, and refundability where relevant. It contains unavoidable contractual amounts and the payment and expected return of refundable deposits, but excludes conditional amounts.
 _Avoid_: Total expense, monthly-price field, duplicated payment fields
 
 **Provider-advertised monthly payment**:
 The known amount of the standardized recurring lease-payment event in a catalogue offer's base cash-flow stream. It is never stored separately; contradictory headline and cash-flow amounts block catalogue admission.
-_Avoid_: Separate headline price, nominal monthly equivalent
-
-**Provider-advertised aggregate**:
-A provider-stated total for the normal-completion base cash flows. It remains a separate assertion used only to reconcile the provider's arithmetic with the nominal base outlay derived from the base cash-flow stream.
-_Avoid_: Calculation input, authoritative total, nominal base outlay
-
-**Upfront cash requirement**:
-The sum of mandatory payments due from accepting a leasing agreement through vehicle handover, including refundable deposits and establishment or delivery fees without netting later receipts. It is unavailable when evidence cannot establish whether a mandatory amount falls within that window.
-_Avoid_: Cash at signing, first payment, down payment
-
-**Nominal base outlay**:
-The face-value sum of mandatory base payments minus expected mandatory base receipts over normal contract completion, without inflation, discounting, financing cost, or opportunity cost. Conditional amounts and externally priced costs are excluded; a fully refundable deposit therefore nets to zero while still contributing to the upfront cash requirement.
-_Avoid_: Total cost, present value, expected cost
-
-**Nominal monthly equivalent**:
-The nominal base outlay spread over the full advertised normal-completion term in months. It is distinct from a provider-advertised monthly payment and does not use the minimum binding period, notice period, or number of recurring instalments as its denominator.
-_Avoid_: Monthly payment, advertised monthly price, average instalment
-
-**Derived comparison value**:
-A reproducible result calculated from the current evidence-backed offer facts, such as nominal base outlay, nominal monthly equivalent, or Comparison Availability. It is materialized into the current Catalogue Dataset during refresh and validated against its normalized inputs. It is neither a provider-stated offer fact nor an independently editable authority.
-_Avoid_: Provider price, persisted offer fact, authoritative total
-
-**Unexplained aggregate difference**:
-The signed difference between a provider-advertised aggregate and the nominal base outlay reconstructed from the same offer's documented cash flows when they do not reconcile. Its cause remains unknown; neither amount overwrites the other.
-_Avoid_: Residual value, calculation blocker, corrected provider total
+_Avoid_: Separate headline price
 
 **Service arrangement**:
 The normalized treatment of a standardized service or external-cost category within a leasing offer: `included`, `optional`, `required_external`, or `excluded`, together with its scope and limits. Whether that arrangement is known is expressed separately by the offer fact state; the arrangement is a dated interpretation rather than a retained provider quotation.

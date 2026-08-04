@@ -100,23 +100,7 @@ This illustrative JSON is intentionally awkward. It is not real provider data an
           },
           "refundability": { "state": "not_applicable" }
         }
-      ],
-      "providerAdvertisedAggregate": { "state": "not_stated" },
-      "comparison": {
-        "upfrontCashRequirement": {
-          "state": "available",
-          "value": { "amountDkk": 15990 }
-        },
-        "nominalBaseOutlay": {
-          "state": "available",
-          "value": { "amountDkk": 152610 }
-        },
-        "nominalMonthlyEquivalent": {
-          "state": "available",
-          "value": { "amountDkk": 4239.17 }
-        },
-        "aggregateReconciliation": { "status": "not_stated" }
-      }
+      ]
     },
     {
       "offerIdentity": "fleasing:example-flex:configuration-a",
@@ -190,39 +174,7 @@ This illustrative JSON is intentionally awkward. It is not real provider data an
           },
           "refundability": { "state": "not_applicable" }
         }
-      ],
-      "providerAdvertisedAggregate": {
-        "state": "known",
-        "value": {
-          "scope": "normal_completion_base_cash_flows",
-          "amountDkk": 61500
-        }
-      },
-      "comparison": {
-        "upfrontCashRequirement": {
-          "state": "available",
-          "value": { "amountDkk": 75000 }
-        },
-        "nominalBaseOutlay": {
-          "state": "unavailable",
-          "reasons": [
-            { "code": "aggregate_mismatch" }
-          ]
-        },
-        "nominalMonthlyEquivalent": {
-          "state": "unavailable",
-          "reasons": [
-            { "code": "aggregate_mismatch" }
-          ]
-        },
-        "aggregateReconciliation": {
-          "status": "mismatch",
-          "providerAmountDkk": 61500,
-          "reconstructedAmountDkk": 60940,
-          "signedDifferenceDkk": 560,
-          "toleranceDkk": 1
-        }
-      }
+      ]
     }
   ],
   "quarantinedCandidates": [
@@ -251,10 +203,9 @@ This illustrative JSON is intentionally awkward. It is not real provider data an
 ## What this example demonstrates
 
 - `future-provider` proves the Provider Registry copy is broader than the providers represented by Offers and Quarantined Candidates.
-- The Terminalen offer's missing aggregate does not block reconstructed values; there is simply nothing to reconcile.
-- The Fleasing offer's refundable deposit contributes `50000` DKK to upfront cash requirement and nets to zero in reconstructed nominal base outlay.
-- The Fleasing arithmetic is `25000 + (2995 × 12) + 50000 - 50000 = 60940`. The provider assertion differs by `560`, beyond the `1` DKK tolerance, so only the dependent derived values are unavailable.
-- Missing annual mileage does not prevent admission and does not make the whole Offer incomplete. It makes mileage filtering unavailable for that Offer.
+- The Fleasing offer keeps refundable-deposit payment and receipt events separate, preserving their direction and timing without a backend-derived total.
+- Missing annual mileage does not prevent admission. The frontend can still show that Offer beside another while rendering the mileage fact as unavailable.
+- Comparison selection and presentation are absent from the Dataset; the frontend selects these Offer records by identity and renders their facts side by side.
 - The Quarantined Candidate retains the exact public contradiction that explains failed admission, but none of its parsed vehicle, contract, or cash-flow data.
 
 ## Resolved pressure point outside the JSON shape
