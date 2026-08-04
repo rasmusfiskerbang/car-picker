@@ -11,17 +11,13 @@ import {
   ChevronRight,
   CircleHelp,
   ExternalLink,
-  Fuel,
-  Gauge,
   ImageOff,
   Info,
-  ListChecks,
   ReceiptText,
   Route as RouteIcon,
   ShieldCheck,
   WalletCards,
   X,
-  Zap,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -66,6 +62,11 @@ const integer = new Intl.NumberFormat("da-DK");
 const date = new Intl.DateTimeFormat("da-DK", {
   day: "numeric",
   month: "long",
+  year: "numeric",
+});
+const chartDate = new Intl.DateTimeFormat("da-DK", {
+  day: "numeric",
+  month: "short",
   year: "numeric",
 });
 
@@ -591,6 +592,8 @@ type CashFlowChartPoint = Record<string, unknown> & {
 function cashFlowChartData(offer: CatalogueOffer): CashFlowChartPoint[] {
   let cumulative = 0;
   let cumulativeAvailable = true;
+  const startDate = new Date();
+  startDate.setHours(12, 0, 0, 0);
 
   return Array.from({ length: offer.termMonths + 1 }, (_, month) => {
     const events = offer.baseCashFlowStream.filter(
@@ -611,17 +614,25 @@ function cashFlowChartData(offer: CatalogueOffer): CashFlowChartPoint[] {
     }
 
     if (cumulativeAvailable) cumulative += payments - receipts;
+    const pointDate = new Date(
+      startDate.getFullYear(),
+      startDate.getMonth() + month + 1,
+      0,
+      12,
+    );
+    pointDate.setDate(Math.min(startDate.getDate(), pointDate.getDate()));
+    const formattedDate = chartDate.format(pointDate);
 
     return {
       cumulative: cumulativeAvailable ? cumulative : undefined,
-      date: new Date(Date.UTC(2026, month, 1)),
+      date: pointDate,
       eventCount: events.length,
       label:
         month === 0
-          ? "Ved start"
+          ? `Ved start · ${formattedDate}`
           : month === offer.termMonths
-            ? `Måned ${month} · udløb`
-            : `Måned ${month}`,
+            ? `Ved udløb · ${formattedDate}`
+            : `${formattedDate} · måned ${month}`,
       month,
       payments,
       receipts,
@@ -685,23 +696,40 @@ function dkkAxis(value: number) {
   return integer.format(value);
 }
 
-function ContractMonthAxis({ termMonths }: { termMonths: number }) {
-  const months = [
+function ContractDateAxis({
+  data,
+  leftMargin,
+  rightMargin,
+  termMonths,
+}: {
+  data: CashFlowChartPoint[];
+  leftMargin: number;
+  rightMargin: number;
+  termMonths: number;
+}) {
+  const points = [
     0,
     Math.round(termMonths / 3),
     Math.round((termMonths * 2) / 3),
     termMonths,
-  ];
+  ].map((month) => data[month]);
 
   return (
-    <div className="mt-1 flex justify-between px-2 text-[0.65rem] font-bold uppercase tracking-[0.08em] text-muted-foreground sm:px-14">
-      {[...new Set(months)].map((month) => (
-        <span key={month}>
-          {month === 0
-            ? "Start"
-            : month === termMonths
-              ? `Udløb · ${month}`
-              : `Md. ${month}`}
+    <div
+      className="mt-2 grid grid-cols-2 gap-2 text-[0.68rem] font-semibold text-muted-foreground sm:grid-cols-4"
+      style={{ paddingLeft: leftMargin, paddingRight: rightMargin }}
+    >
+      {points.map((point, index) => (
+        <span
+          className={cn(
+            index > 0 &&
+              index < points.length - 1 &&
+              "hidden text-center sm:block",
+            index === points.length - 1 && "text-right",
+          )}
+          key={point.month}
+        >
+          {chartDate.format(point.date)}
         </span>
       ))}
     </div>
@@ -761,6 +789,15 @@ function CashFlowSection({
     0,
   );
   const compact = mode === "compact";
+  const chartDescription = compact
+    ? "Søjlerne viser betalinger og modtagelser på deres faktiske datoer."
+    : "Søjler viser månedens strøm. Kurven viser det akkumulerede nettoudlæg, hvor alle nødvendige beløb er tilgængelige.";
+  const chartMargin = {
+    bottom: 12,
+    left: compact ? 66 : 64,
+    right: mode === "composed" ? 66 : 24,
+    top: 20,
+  };
 
   return (
     <section aria-labelledby="cash-flow-heading">
@@ -777,8 +814,7 @@ function CashFlowSection({
                 : "Betalingsforløbet"}
           </h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-            Søjler viser månedens strøm. Kurven viser det akkumulerede
-            nettoudlæg, hvor alle nødvendige beløb er tilgængelige.
+            {chartDescription}
           </p>
         </div>
         <Badge className="hidden shrink-0 sm:inline-flex" variant="outline">
@@ -798,7 +834,7 @@ function CashFlowSection({
             <AreaChart
               aspectRatio={compact ? "3 / 2" : "2 / 1"}
               data={data}
-              margin={{ bottom: 12, left: 56, right: 20, top: 20 }}
+              margin={chartMargin}
               xDataKey="date"
             >
               <Grid horizontal numTicksRows={4} />
@@ -809,7 +845,7 @@ function CashFlowSection({
                 stroke="var(--chart-1)"
                 strokeWidth={3}
               />
-              <YAxis formatValue={dkkAxis} numTicks={4} />
+              <YAxis formatValue={dkkAxis} numTicks={compact ? 3 : 4} />
               <ChartTooltip
                 content={({ point }) => <CashFlowTooltip point={point} />}
                 showDatePill={false}
@@ -820,18 +856,13 @@ function CashFlowSection({
               aspectRatio={compact ? "3 / 2" : "2 / 1"}
               barGap={2}
               data={data}
-              margin={{
-                bottom: 12,
-                left: 54,
-                right: compact ? 18 : 66,
-                top: 20,
-              }}
+              margin={chartMargin}
               maxBarSize={compact ? 12 : 20}
               xDataKey="date"
             >
               <Grid horizontal numTicksRows={4} />
-              <SeriesBar dataKey="payments" fill="var(--chart-2)" radius={3} />
               <SeriesBar dataKey="receipts" fill="var(--chart-3)" radius={3} />
+              <SeriesBar dataKey="payments" fill="var(--chart-2)" radius={3} />
               {mode === "composed" && (
                 <Line
                   dataKey="cumulative"
@@ -841,7 +872,7 @@ function CashFlowSection({
                   yAxisId="cumulative"
                 />
               )}
-              <YAxis formatValue={dkkAxis} numTicks={4} />
+              <YAxis formatValue={dkkAxis} numTicks={compact ? 3 : 4} />
               {mode === "composed" && (
                 <YAxis
                   formatValue={dkkAxis}
@@ -857,7 +888,12 @@ function CashFlowSection({
               />
             </ComposedChart>
           )}
-          <ContractMonthAxis termMonths={offer.termMonths} />
+          <ContractDateAxis
+            data={data}
+            leftMargin={chartMargin.left}
+            rightMargin={chartMargin.right}
+            termMonths={offer.termMonths}
+          />
         </div>
       </Card>
 
@@ -948,16 +984,21 @@ function SectionHeading({
   id,
   title,
 }: {
-  eyebrow: string;
+  eyebrow?: string;
   id?: string;
   title: string;
 }) {
   return (
     <div>
-      <p className="text-xs font-bold uppercase tracking-[0.14em] text-primary">
-        {eyebrow}
-      </p>
-      <h2 className="mt-1 font-serif text-3xl" id={id}>
+      {eyebrow !== undefined && (
+        <p className="text-xs font-bold uppercase tracking-[0.14em] text-primary">
+          {eyebrow}
+        </p>
+      )}
+      <h2
+        className={cn(eyebrow !== undefined && "mt-1", "font-serif text-3xl")}
+        id={id}
+      >
         {title}
       </h2>
     </div>
@@ -1140,32 +1181,7 @@ function VariantB({ dataset, offer, search, toggleSelected }: VariantProps) {
   );
 }
 
-function FactChip({
-  icon,
-  label,
-  value,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="flex items-center gap-3 rounded-xl border bg-background p-3">
-      <span className="grid size-9 shrink-0 place-content-center rounded-full bg-secondary text-primary">
-        {icon}
-      </span>
-      <div className="min-w-0">
-        <p className="text-[0.65rem] font-bold uppercase tracking-[0.1em] text-muted-foreground">
-          {label}
-        </p>
-        <p className="mt-0.5 truncate text-sm font-bold">{value}</p>
-      </div>
-    </div>
-  );
-}
-
 function VariantC({ dataset, offer, search, toggleSelected }: VariantProps) {
-  const spec = offer.vehicleSpecification;
   return (
     <div>
       <Masthead generatedAt={dataset.generatedAt} selected={search.selected} />
@@ -1202,42 +1218,7 @@ function VariantC({ dataset, offer, search, toggleSelected }: VariantProps) {
           </div>
         </Card>
 
-        <section className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-label="Aftalen på ét blik">
-          <FactChip
-            icon={<CalendarDays aria-hidden="true" className="size-4" />}
-            label="Periode"
-            value={`${offer.termMonths} måneder`}
-          />
-          <FactChip
-            icon={<Gauge aria-hidden="true" className="size-4" />}
-            label="Kilometer"
-            value={factText<number>(offer.annualMileageKm, (value) => `${integer.format(value)} km/år`)}
-          />
-          <FactChip
-            icon={
-              spec.kind === "battery_electric" ? (
-                <Zap aria-hidden="true" className="size-4" />
-              ) : (
-                <Fuel aria-hidden="true" className="size-4" />
-              )
-            }
-            label="Drivlinje"
-            value={
-              spec.kind === "battery_electric"
-                ? "Elbil"
-                : spec.fuelType === "diesel"
-                  ? "Diesel"
-                  : "Benzin"
-            }
-          />
-          <FactChip
-            icon={<ListChecks aria-hidden="true" className="size-4" />}
-            label="Afslutning"
-            value={endMechanism(offer)}
-          />
-        </section>
-
-        <div className="mt-10 grid items-start gap-10 lg:grid-cols-[13rem_minmax(0,1fr)]">
+        <div className="mt-8 grid grid-cols-[minmax(0,1fr)] items-start gap-10 lg:grid-cols-[13rem_minmax(0,1fr)]">
           <nav className="hidden rounded-2xl border bg-card p-4 lg:sticky lg:top-6 lg:block" aria-label="Indhold">
             <p className="text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">Indhold</p>
             <div className="mt-3 grid text-sm font-bold">
@@ -1248,13 +1229,13 @@ function VariantC({ dataset, offer, search, toggleSelected }: VariantProps) {
             </div>
           </nav>
 
-          <div className="grid gap-8">
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-8">
             <section className="rounded-2xl border bg-card p-5 sm:p-7" id="vehicle">
-              <SectionHeading eyebrow="01" title="Bilen" />
+              <SectionHeading title="Bilen" />
               <div className="mt-5"><VehicleFacts offer={offer} /></div>
             </section>
             <section className="rounded-2xl border bg-card p-5 sm:p-7" id="contract">
-              <SectionHeading eyebrow="02" title="Aftalen" />
+              <SectionHeading title="Aftalen" />
               <div className="mt-5"><ContractFacts offer={offer} /></div>
               <Separator className="my-6" />
               <h3 className="mb-3 font-serif text-xl">Service og ordninger</h3>
