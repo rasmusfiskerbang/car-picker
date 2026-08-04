@@ -58,7 +58,6 @@ This illustrative JSON is intentionally awkward. It is not real provider data an
       "annualMileageKm": { "state": "known", "value": 10000 },
       "normalEndMechanism": { "state": "known", "value": "return_to_provider" },
       "residualRiskAllocation": { "state": "known", "value": "provider" },
-      "registrationTaxTreatment": { "state": "known", "value": "full" },
       "serviceArrangements": {
         "state": "known",
         "value": [
@@ -143,7 +142,6 @@ This illustrative JSON is intentionally awkward. It is not real provider data an
         "value": "designate_third_party_buyer"
       },
       "residualRiskAllocation": { "state": "known", "value": "lessee" },
-      "registrationTaxTreatment": { "state": "known", "value": "proportional" },
       "serviceArrangements": { "state": "not_stated" },
       "baseCashFlowStream": [
         {

@@ -17,7 +17,7 @@ A provider label commonly associated with returning the car at the end of the te
 _Avoid_: Leasing, guaranteed return arrangement
 
 **Leasing form**:
-The normalized classification of a passenger-car leasing product explicitly offered to private individuals: financial, flex, operational, or hybrid. Its residual-risk allocation, registration-tax treatment, or end mechanism may still be unclear.
+The normalized classification of a passenger-car leasing product explicitly offered to private individuals: financial, flex, operational, or hybrid. Its residual-risk allocation or end mechanism may still be unclear.
 _Avoid_: Supported leasing form, provider form label, business leasing, split leasing, car subscription, rental, purchase
 
 **Leasing offer**:
@@ -126,10 +126,6 @@ _Avoid_: Service fact state, assumed inclusion, unqualified bundle, provider wor
 
 **Residual-risk allocation**:
 The agreement's assignment of economic gain or loss when the car's realized end value differs from its stated residual value.
-_Avoid_: Leasing type
-
-**Registration-tax treatment**:
-Whether Danish registration tax is paid in full or proportionally over the leasing period. A flexleasing label describes this dimension rather than fully determining the agreement's risk or end mechanism.
 _Avoid_: Leasing type
 
 **End mechanism**:

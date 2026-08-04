@@ -136,7 +136,6 @@ class CatalogueOffer(CatalogueModel):
         ]
     ]
     residual_risk_allocation: Fact[Literal["provider", "lessee", "shared"]]
-    registration_tax_treatment: Fact[Literal["full", "proportional"]]
 
     service_arrangements: Fact[tuple[ServiceArrangement, ...]]
     base_cash_flow_stream: Annotated[
@@ -293,7 +292,6 @@ class FactUnavailableReason(CatalogueModel):
         "annualMileageKm",
         "normalEndMechanism",
         "residualRiskAllocation",
-        "registrationTaxTreatment",
         "providerAdvertisedAggregate",
         "baseCashFlowStream.amount",
         "baseCashFlowStream.refundability",
