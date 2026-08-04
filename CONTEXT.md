@@ -16,9 +16,9 @@ _Avoid_: Leasing, guaranteed residual-risk classification
 A provider label commonly associated with returning the car at the end of the term while the provider bears its residual-value exposure. The agreement's actual terms take precedence over the label.
 _Avoid_: Leasing, guaranteed return arrangement
 
-**Supported leasing form**:
-A passenger-car leasing product explicitly offered to private individuals, including financial, flex, operational, and hybrid forms. Its residual-risk allocation, registration-tax treatment, or end mechanism may still be unclear.
-_Avoid_: Business leasing, split leasing, car subscription, rental, purchase
+**Leasing form**:
+The normalized classification of a passenger-car leasing product explicitly offered to private individuals: financial, flex, operational, or hybrid. Its residual-risk allocation, registration-tax treatment, or end mechanism may still be unclear.
+_Avoid_: Supported leasing form, provider form label, business leasing, split leasing, car subscription, rental, purchase
 
 **Leasing offer**:
 A single advertised private-leasing configuration: one specific car configuration, contract term, mileage allowance, base cash-flow stream, conditions, fees, and set of obligations. Multiple configurations advertised through the same provider page or source record are distinct leasing offers when any of those commercial or contractual terms differ.

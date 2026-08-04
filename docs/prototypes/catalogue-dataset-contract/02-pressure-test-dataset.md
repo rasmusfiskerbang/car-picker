@@ -53,8 +53,7 @@ This illustrative JSON is intentionally awkward. It is not real provider data an
         },
         "chargingTime10To80Minutes": { "state": "known", "value": 18 }
       },
-      "supportedLeasingForm": "operational",
-      "providerFormLabel": "Privatleasing",
+      "leasingForm": "operational",
       "termMonths": 36,
       "annualMileageKm": { "state": "known", "value": 10000 },
       "normalEndMechanism": { "state": "known", "value": "return_to_provider" },
@@ -136,8 +135,7 @@ This illustrative JSON is intentionally awkward. It is not real provider data an
         "fuelType": "diesel",
         "fuelEfficiencyKmPerLiter": { "state": "known", "value": 18.5 }
       },
-      "supportedLeasingForm": "flex",
-      "providerFormLabel": "Flexleasing",
+      "leasingForm": "flex",
       "termMonths": 12,
       "annualMileageKm": { "state": "not_stated" },
       "normalEndMechanism": {

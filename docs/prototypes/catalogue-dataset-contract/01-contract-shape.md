@@ -123,8 +123,7 @@ class CatalogueOffer(CatalogueModel):
     canonical_offer_url: HttpsUrl
 
     vehicle_specification: VehicleSpecification
-    supported_leasing_form: Literal["financial", "flex", "operational", "hybrid"]
-    provider_form_label: NonEmptyString
+    leasing_form: Literal["financial", "flex", "operational", "hybrid"]
     term_months: PositiveInt
     annual_mileage_km: Fact[PositiveInt]
 
@@ -149,7 +148,7 @@ class CatalogueOffer(CatalogueModel):
     comparison: ComparisonResults
 ```
 
-`providerFormLabel` is direct because classifying a Supported Leasing Form requires an actual provider-described form. Private-consumer eligibility, passenger-car scope, current availability, and admission outcome are absent: admission already guarantees them, so repeating them as always-true fields would be shallow data.
+`leasingForm` is the normalized classification established during admission. The provider's source label is transient classification input and is not retained as per-fact wording. Private-consumer eligibility, passenger-car scope, current availability, and admission outcome are also absent: admission already guarantees them, so repeating them as always-true fields would be shallow data.
 
 The provider-advertised monthly payment is not a field. It is the known amount of the single recurring `lease_payment` Base Cash-flow Event. Dataset validation rejects zero or multiple candidate events and any contradiction with the admitted source facts.
 
@@ -217,7 +216,7 @@ This is a shared schema, not a shared entity: every Offer embeds one complete Ve
 
 A known battery capacity or maximum charging power remains usable when its basis or charging kind was not disclosed: the nested qualifier is `not_stated`. The outer Fact is unavailable only when the numeric value itself is unavailable. This distinguishes “150 kW, kind not stated” from “charging power not stated.”
 
-`odometerKm` is the advertised distance already driven, deliberately distinct from the leasing Offer's `annualMileageKm` allowance. “Gas” is not used in the contract because the supported kind includes both gasoline and diesel. Hybrid, plug-in hybrid, mild-hybrid, hydrogen, and other vehicle kinds are rejected before Catalogue Admission. The `hybrid` Supported Leasing Form remains a contract classification, not a vehicle drivetrain.
+`odometerKm` is the advertised distance already driven, deliberately distinct from the leasing Offer's `annualMileageKm` allowance. “Gas” is not used in the contract because the supported kind includes both gasoline and diesel. Hybrid, plug-in hybrid, mild-hybrid, hydrogen, and other vehicle kinds are rejected before Catalogue Admission. The `hybrid` Leasing Form remains a contract classification, not a vehicle drivetrain.
 
 ### Service arrangements
 
@@ -396,7 +395,7 @@ class QuarantineReason(CatalogueModel):
         "private_consumer_eligibility",
         "passenger_car_scope",
         "current_availability",
-        "supported_leasing_form",
+        "leasing_form",
         "advertised_monthly_payment",
         "term_months",
         "candidate_shape",
