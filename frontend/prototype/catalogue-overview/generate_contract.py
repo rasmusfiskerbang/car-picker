@@ -353,6 +353,7 @@ def vehicle_specification(index: int) -> dict[str, object]:
 
 
 def cash_flows(index: int, term: int, monthly: float) -> tuple[list[dict[str, object]], float | None]:
+    has_refundable_deposit = index % 4 == 0 or index == 5
     events: list[dict[str, object]] = [
         {
             "key": "initial-payment",
@@ -372,7 +373,7 @@ def cash_flows(index: int, term: int, monthly: float) -> tuple[list[dict[str, ob
         },
     ]
 
-    if index % 4 == 0:
+    if has_refundable_deposit:
         events.append(
             {
                 "key": "deposit",
@@ -396,7 +397,7 @@ def cash_flows(index: int, term: int, monthly: float) -> tuple[list[dict[str, ob
             }
         )
 
-    if index % 4 == 0:
+    if has_refundable_deposit:
         events.append(
             {
                 "key": "deposit-refund",

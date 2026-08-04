@@ -35,6 +35,18 @@ import {
   upfrontPayment,
   vehicleName,
 } from "@/catalogue-data";
+import { Area } from "@/components/charts/area";
+import { AreaChart } from "@/components/charts/area-chart";
+import { ComposedChart } from "@/components/charts/composed-chart";
+import { Grid } from "@/components/charts/grid";
+import { Line } from "@/components/charts/line";
+import { SeriesBar } from "@/components/charts/series-bar";
+import { ChartTooltip } from "@/components/charts/tooltip/chart-tooltip";
+import {
+  TooltipContent,
+  type TooltipRow,
+} from "@/components/charts/tooltip/tooltip-content";
+import { YAxis } from "@/components/charts/y-axis";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -565,59 +577,191 @@ function ServiceFacts({ offer }: { offer: CatalogueOffer }) {
   );
 }
 
-function CashFlowRows({ offer }: { offer: CatalogueOffer }) {
+type CashFlowChartPoint = Record<string, unknown> & {
+  cumulative?: number;
+  date: Date;
+  eventCount: number;
+  label: string;
+  month: number;
+  payments: number;
+  receipts: number;
+  unavailableCount: number;
+};
+
+function cashFlowChartData(offer: CatalogueOffer): CashFlowChartPoint[] {
+  let cumulative = 0;
+  let cumulativeAvailable = true;
+
+  return Array.from({ length: offer.termMonths + 1 }, (_, month) => {
+    const events = offer.baseCashFlowStream.filter(
+      (event) => event.occursAtMonth === month,
+    );
+    let payments = 0;
+    let receipts = 0;
+    let unavailableCount = 0;
+
+    for (const event of events) {
+      if (event.amount.state !== "known") {
+        unavailableCount += 1;
+        cumulativeAvailable = false;
+        continue;
+      }
+      if (event.direction === "payment") payments += event.amount.value;
+      if (event.direction === "receipt") receipts += event.amount.value;
+    }
+
+    if (cumulativeAvailable) cumulative += payments - receipts;
+
+    return {
+      cumulative: cumulativeAvailable ? cumulative : undefined,
+      date: new Date(Date.UTC(2026, month, 1)),
+      eventCount: events.length,
+      label:
+        month === 0
+          ? "Ved start"
+          : month === offer.termMonths
+            ? `Måned ${month} · udløb`
+            : `Måned ${month}`,
+      month,
+      payments,
+      receipts,
+      unavailableCount,
+    };
+  });
+}
+
+function cashFlowTooltipRows(point: Record<string, unknown>): TooltipRow[] {
+  const rows: TooltipRow[] = [];
+  const payments = point.payments;
+  const receipts = point.receipts;
+  const cumulative = point.cumulative;
+  const unavailableCount = point.unavailableCount;
+
+  if (typeof payments === "number" && payments > 0) {
+    rows.push({
+      color: "var(--chart-2)",
+      label: "Betalinger",
+      value: money(payments),
+    });
+  }
+  if (typeof receipts === "number" && receipts > 0) {
+    rows.push({
+      color: "var(--chart-3)",
+      label: "Modtagelser",
+      value: money(receipts),
+    });
+  }
+  if (typeof cumulative === "number") {
+    rows.push({
+      color: "var(--chart-1)",
+      label: "Akkumuleret netto",
+      value: money(cumulative),
+    });
+  }
+  if (typeof unavailableCount === "number" && unavailableCount > 0) {
+    rows.push({
+      color: "var(--muted-foreground)",
+      label: "Beløb ikke tilgængeligt",
+      value: `${unavailableCount} ${unavailableCount === 1 ? "post" : "poster"}`,
+    });
+  }
+  return rows;
+}
+
+function CashFlowTooltip({ point }: { point: Record<string, unknown> }) {
   return (
-    <div className="divide-y rounded-xl border bg-background">
-      {offer.baseCashFlowStream.map((event) => {
-        const amount = factText<number>(event.amount, money);
-        return (
-          <div
-            className="grid grid-cols-[4.7rem_minmax(0,1fr)] gap-x-3 gap-y-1 px-3 py-3 sm:grid-cols-[7rem_minmax(0,1fr)_7rem_8rem] sm:items-center sm:px-4"
-            key={event.key}
-          >
-            <p className="text-xs font-bold uppercase tracking-[0.08em] text-muted-foreground">
-              {event.occursAtMonth === 0
-                ? "Ved start"
-                : `Måned ${event.occursAtMonth}`}
-            </p>
-            <div className="min-w-0">
-              <p className="text-sm font-semibold">{cashFlowLabels[event.kind]}</p>
-              {event.refundability.state === "known" && (
-                <p className="text-xs text-muted-foreground">
-                  {event.refundability.value === "refundable"
-                    ? "Kan tilbagebetales ifølge aftalen"
-                    : "Tilbagebetales ikke"}
-                </p>
-              )}
-            </div>
-            <p className="col-start-2 text-xs text-muted-foreground sm:col-start-auto">
-              {event.direction === "payment" ? "Betaling" : "Modtagelse"}
-            </p>
-            <p
-              className={cn(
-                "col-start-2 text-sm font-bold tabular-nums sm:col-start-auto sm:text-right",
-                event.direction === "receipt" && "text-primary",
-                event.amount.state !== "known" && "text-muted-foreground",
-              )}
-            >
-              {event.direction === "receipt" && event.amount.state === "known"
-                ? `− ${amount}`
-                : amount}
-            </p>
-          </div>
-        );
-      })}
+    <TooltipContent
+      rows={cashFlowTooltipRows(point)}
+      title={String(point.label)}
+    />
+  );
+}
+
+function dkkAxis(value: number) {
+  if (value === 0) return "0";
+  if (Math.abs(value) >= 1_000) {
+    return `${decimal.format(value / 1_000)} t.`;
+  }
+  return integer.format(value);
+}
+
+function ContractMonthAxis({ termMonths }: { termMonths: number }) {
+  const months = [
+    0,
+    Math.round(termMonths / 3),
+    Math.round((termMonths * 2) / 3),
+    termMonths,
+  ];
+
+  return (
+    <div className="mt-1 flex justify-between px-2 text-[0.65rem] font-bold uppercase tracking-[0.08em] text-muted-foreground sm:px-14">
+      {[...new Set(months)].map((month) => (
+        <span key={month}>
+          {month === 0
+            ? "Start"
+            : month === termMonths
+              ? `Udløb · ${month}`
+              : `Md. ${month}`}
+        </span>
+      ))}
     </div>
   );
 }
 
+function CashFlowLegend({ showCumulative = true }: { showCumulative?: boolean }) {
+  return (
+    <div className="flex flex-wrap gap-x-5 gap-y-2 text-xs font-semibold text-muted-foreground">
+      <span className="inline-flex items-center gap-2">
+        <span className="size-2.5 rounded-sm bg-[var(--chart-2)]" /> Betalinger
+      </span>
+      <span className="inline-flex items-center gap-2">
+        <span className="size-2.5 rounded-sm bg-[var(--chart-3)]" /> Modtagelser
+      </span>
+      {showCumulative && (
+        <span className="inline-flex items-center gap-2">
+          <span className="h-0.5 w-4 bg-[var(--chart-1)]" /> Akkumuleret netto
+        </span>
+      )}
+    </div>
+  );
+}
+
+function AccessibleCashFlow({ offer }: { offer: CatalogueOffer }) {
+  return (
+    <ol className="sr-only">
+      {offer.baseCashFlowStream.map((event) => {
+        const amount = factText<number>(event.amount, money);
+        return (
+          <li key={event.key}>
+            {event.occursAtMonth === 0
+              ? "Ved start"
+              : `Måned ${event.occursAtMonth}`}
+            : {cashFlowLabels[event.kind]}; {event.direction === "payment" ? "betaling" : "modtagelse"}; {amount}.
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
 function CashFlowSection({
-  compact = false,
+  mode,
   offer,
 }: {
-  compact?: boolean;
+  mode: "cumulative" | "composed" | "compact";
   offer: CatalogueOffer;
 }) {
+  const data = cashFlowChartData(offer);
+  const unavailableCount = data.reduce(
+    (total, point) => total + point.unavailableCount,
+    0,
+  );
+  const totalReceipts = data.reduce(
+    (total, point) => total + point.receipts,
+    0,
+  );
+  const compact = mode === "compact";
+
   return (
     <section aria-labelledby="cash-flow-heading">
       <div className="flex items-start justify-between gap-5">
@@ -626,31 +770,128 @@ function CashFlowSection({
             Normal gennemførelse
           </p>
           <h2 id="cash-flow-heading" className="mt-1 font-serif text-3xl">
-            Betalinger i kronologisk rækkefølge
+            {mode === "cumulative"
+              ? "Sådan vokser nettoudlægget"
+              : mode === "composed"
+                ? "Aftalens betalingsforløb"
+                : "Betalingsforløbet"}
           </h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-            Hver forekomst vises én gang. Betalinger lægges til den beregnede
-            total; udtrykkelige tilbagebetalinger trækkes fra.
+            Søjler viser månedens strøm. Kurven viser det akkumulerede
+            nettoudlæg, hvor alle nødvendige beløb er tilgængelige.
           </p>
         </div>
         <Badge className="hidden shrink-0 sm:inline-flex" variant="outline">
           {offer.baseCashFlowStream.length} poster
         </Badge>
       </div>
-      {compact ? (
-        <details className="mt-5 rounded-xl border bg-card" open>
-          <summary className="cursor-pointer px-4 py-3 text-sm font-bold">
-            Vis betalingsstrømmen ({offer.baseCashFlowStream.length} poster)
-          </summary>
-          <div className="border-t p-3">
-            <CashFlowRows offer={offer} />
-          </div>
-        </details>
-      ) : (
-        <div className="mt-5">
-          <CashFlowRows offer={offer} />
+
+      <Card className="mt-5 overflow-hidden p-4 sm:p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <CashFlowLegend showCumulative={mode !== "compact"} />
+          <p className="text-xs text-muted-foreground">
+            Hold eller tryk på grafen for månedens beløb
+          </p>
         </div>
+        <div className="mt-3" data-testid={`bklit-cash-flow-${mode}`}>
+          {mode === "cumulative" ? (
+            <AreaChart
+              aspectRatio={compact ? "3 / 2" : "2 / 1"}
+              data={data}
+              margin={{ bottom: 12, left: 56, right: 20, top: 20 }}
+              xDataKey="date"
+            >
+              <Grid horizontal numTicksRows={4} />
+              <Area
+                dataKey="cumulative"
+                fill="var(--chart-1)"
+                fillOpacity={0.24}
+                stroke="var(--chart-1)"
+                strokeWidth={3}
+              />
+              <YAxis formatValue={dkkAxis} numTicks={4} />
+              <ChartTooltip
+                content={({ point }) => <CashFlowTooltip point={point} />}
+                showDatePill={false}
+              />
+            </AreaChart>
+          ) : (
+            <ComposedChart
+              aspectRatio={compact ? "3 / 2" : "2 / 1"}
+              barGap={2}
+              data={data}
+              margin={{
+                bottom: 12,
+                left: 54,
+                right: compact ? 18 : 66,
+                top: 20,
+              }}
+              maxBarSize={compact ? 12 : 20}
+              xDataKey="date"
+            >
+              <Grid horizontal numTicksRows={4} />
+              <SeriesBar dataKey="payments" fill="var(--chart-2)" radius={3} />
+              <SeriesBar dataKey="receipts" fill="var(--chart-3)" radius={3} />
+              {mode === "composed" && (
+                <Line
+                  dataKey="cumulative"
+                  fadeEdges={false}
+                  stroke="var(--chart-1)"
+                  strokeWidth={3}
+                  yAxisId="cumulative"
+                />
+              )}
+              <YAxis formatValue={dkkAxis} numTicks={4} />
+              {mode === "composed" && (
+                <YAxis
+                  formatValue={dkkAxis}
+                  numTicks={4}
+                  orientation="right"
+                  yAxisId="cumulative"
+                />
+              )}
+              <ChartTooltip
+                content={({ point }) => <CashFlowTooltip point={point} />}
+                showCrosshair={false}
+                showDatePill={false}
+              />
+            </ComposedChart>
+          )}
+          <ContractMonthAxis termMonths={offer.termMonths} />
+        </div>
+      </Card>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <div className="rounded-xl border bg-card p-4">
+          <p className="text-xs font-bold uppercase tracking-[0.1em] text-muted-foreground">
+            Ved start
+          </p>
+          <p className="mt-1 font-serif text-xl">{money(upfrontPayment(offer))}</p>
+        </div>
+        <div className="rounded-xl border bg-card p-4">
+          <p className="text-xs font-bold uppercase tracking-[0.1em] text-muted-foreground">
+            Modtagelser i strømmen
+          </p>
+          <p className="mt-1 font-serif text-xl">{money(totalReceipts)}</p>
+        </div>
+        <div className="rounded-xl border bg-card p-4">
+          <p className="text-xs font-bold uppercase tracking-[0.1em] text-muted-foreground">
+            Beregnet ved udløb
+          </p>
+          <p className="mt-1 font-serif text-xl">{money(offer.totalDkk)}</p>
+        </div>
+      </div>
+
+      {unavailableCount > 0 && (
+        <p className="mt-4 flex gap-2 rounded-xl bg-secondary/60 p-4 text-sm text-muted-foreground">
+          <CircleHelp aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+          {unavailableCount === 1
+            ? "Ét beløb er ikke tilgængeligt."
+            : `${unavailableCount} beløb er ikke tilgængelige.`}{" "}
+          Den akkumulerede kurve stopper før det første ukendte beløb.
+        </p>
       )}
+      <AccessibleCashFlow offer={offer} />
     </section>
   );
 }
@@ -784,7 +1025,7 @@ function VariantA({ dataset, offer, search, toggleSelected }: VariantProps) {
             </section>
             <ProviderCard dataset={dataset} offer={offer} />
           </div>
-          <CashFlowSection offer={offer} />
+          <CashFlowSection mode="cumulative" offer={offer} />
         </div>
       </main>
     </div>
@@ -873,7 +1114,7 @@ function VariantB({ dataset, offer, search, toggleSelected }: VariantProps) {
           </aside>
 
           <div className="grid gap-12">
-            <CashFlowSection offer={offer} />
+            <CashFlowSection mode="composed" offer={offer} />
             <section>
               <SectionHeading eyebrow="Bilen bag aftalen" title="Køretøjsspecifikation" />
               <div className="mt-5 rounded-2xl border bg-card px-5">
@@ -1020,7 +1261,7 @@ function VariantC({ dataset, offer, search, toggleSelected }: VariantProps) {
               <ServiceFacts offer={offer} />
             </section>
             <section className="rounded-2xl border bg-card p-5 sm:p-7" id="payments">
-              <CashFlowSection compact offer={offer} />
+              <CashFlowSection mode="compact" offer={offer} />
             </section>
             <div id="source"><ProviderCard dataset={dataset} offer={offer} /></div>
           </div>
