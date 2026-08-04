@@ -109,9 +109,9 @@ function FilterFields({
           />
           <Input
             className="h-11 bg-card pl-9"
-          onChange={(event) =>
-            patchSearch({ q: event.target.value }, { replace: true })
-          }
+            onChange={(event) =>
+              patchSearch({ q: event.target.value }, { replace: true })
+            }
             placeholder="Fx Volvo, elbil eller Fleasing"
             type="search"
             value={search.q}
@@ -560,69 +560,162 @@ function VariantB({
           className="mt-6 grid gap-5 sm:grid-cols-2 xl:grid-cols-3"
         >
           {offers.map((offer, index) => {
-            const selected = search.selected.includes(offer.offerIdentity);
             return (
-              <Card
-                className={cn(
-                  "relative overflow-hidden",
-                  index === 0 && "sm:col-span-2 xl:col-span-2",
-                )}
+              <VisualOfferCard
+                dataset={dataset}
+                featured={index === 0}
                 key={offer.offerIdentity}
-              >
-                <OfferImage
-                  className={cn(
-                    "aspect-[4/3] w-full",
-                    index === 0 && "sm:aspect-[2/1]",
-                  )}
-                  offer={offer}
-                />
-                <div className="absolute left-4 top-4 flex gap-2">
-                  <Badge className="bg-card/90 text-card-foreground backdrop-blur" variant="secondary">
-                    {providerName(dataset, offer.providerId)}
-                  </Badge>
-                  <Badge className="bg-card/90 backdrop-blur" variant="outline">
-                    {leasingLabels[offer.leasingForm]}
-                  </Badge>
-                </div>
-                <div className="grid gap-5 p-5">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <h2 className="font-serif text-2xl leading-tight">
-                        {vehicleName(offer)}
-                      </h2>
-                      <p className="mt-2 text-sm text-muted-foreground">
-                        {endMechanism(offer)}
-                      </p>
-                    </div>
-                    <SelectionControl
-                      compact
-                      offer={offer}
-                      selected={selected}
-                      toggle={() => toggleSelected(offer.offerIdentity)}
-                    />
-                  </div>
-                  <div className="rounded-xl bg-secondary/55 p-4">
-                    <p className="text-[0.68rem] font-bold uppercase tracking-[0.12em] text-muted-foreground">
-                      Oplyst månedsydelse
-                    </p>
-                    <p className="mt-1 font-serif text-3xl">{monthly(offer)}</p>
-                    <Separator className="my-3" />
-                    <dl className="grid grid-cols-2 gap-3">
-                      <Metric label="Ved start" quiet value={money(upfrontPayment(offer))} />
-                      <Metric label="Beregnet total" quiet value={money(offer.totalDkk)} />
-                    </dl>
-                  </div>
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-xs text-muted-foreground">
-                      {offer.termMonths} mdr. · {mileage(offer)}
-                    </span>
-                    <OfferLink label="Åbn tilbud" offer={offer} />
-                  </div>
-                </div>
-              </Card>
+                offer={offer}
+                selected={search.selected.includes(offer.offerIdentity)}
+                toggleSelected={toggleSelected}
+              />
             );
           })}
         </section>
+      </main>
+    </div>
+  );
+}
+
+function VisualOfferCard({
+  dataset,
+  featured = false,
+  offer,
+  selected,
+  toggleSelected,
+}: {
+  dataset: CatalogueDataset;
+  featured?: boolean;
+  offer: CatalogueOffer;
+  selected: boolean;
+  toggleSelected: (offerIdentity: string) => void;
+}) {
+  return (
+    <Card
+      className={cn(
+        "relative overflow-hidden",
+        featured && "sm:col-span-2 xl:col-span-2",
+      )}
+    >
+      <OfferImage
+        className={cn("aspect-[4/3] w-full", featured && "sm:aspect-[2/1]")}
+        offer={offer}
+      />
+      <div className="absolute left-4 top-4 flex gap-2">
+        <Badge
+          className="bg-card/90 text-card-foreground backdrop-blur"
+          variant="secondary"
+        >
+          {providerName(dataset, offer.providerId)}
+        </Badge>
+        <Badge className="bg-card/90 backdrop-blur" variant="outline">
+          {leasingLabels[offer.leasingForm]}
+        </Badge>
+      </div>
+      <div className="grid gap-5 p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="font-serif text-2xl leading-tight">
+              {vehicleName(offer)}
+            </h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {endMechanism(offer)}
+            </p>
+          </div>
+          <SelectionControl
+            compact
+            offer={offer}
+            selected={selected}
+            toggle={() => toggleSelected(offer.offerIdentity)}
+          />
+        </div>
+        <div className="rounded-xl bg-secondary/55 p-4">
+          <p className="text-[0.68rem] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+            Oplyst månedsydelse
+          </p>
+          <p className="mt-1 font-serif text-3xl">{monthly(offer)}</p>
+          <Separator className="my-3" />
+          <dl className="grid grid-cols-2 gap-3">
+            <Metric
+              label="Ved start"
+              quiet
+              value={money(upfrontPayment(offer))}
+            />
+            <Metric
+              label="Beregnet total"
+              quiet
+              value={money(offer.totalDkk)}
+            />
+          </dl>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-xs text-muted-foreground">
+            {offer.termMonths} mdr. · {mileage(offer)}
+          </span>
+          <OfferLink label="Åbn tilbud" offer={offer} />
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function VariantD({
+  dataset,
+  offers,
+  search,
+  patchSearch,
+  toggleSelected,
+}: VariantProps) {
+  const activeProviders = dataset.providers.filter(
+    (provider) => provider.status === "active",
+  );
+  return (
+    <div>
+      <PrototypeMasthead generatedAt={dataset.generatedAt} />
+      <main className="mx-auto max-w-[92rem] px-4 pb-36 pt-8 sm:px-6 lg:px-8 lg:pt-12">
+        <div className="flex items-end justify-between gap-6">
+          <OverviewHeading count={offers.length} />
+          <MobileFilters
+            activeProviders={activeProviders}
+            patchSearch={patchSearch}
+            search={search}
+          />
+        </div>
+
+        <div className="mt-10 grid items-start gap-8 md:grid-cols-[17rem_minmax(0,1fr)] lg:grid-cols-[19rem_minmax(0,1fr)]">
+          <aside className="sticky top-5 hidden rounded-2xl border bg-card p-5 md:block">
+            <div className="mb-5 flex items-center gap-2">
+              <SlidersHorizontal className="size-4" />
+              <h2 className="font-serif text-xl">Afgræns kataloget</h2>
+            </div>
+            <FilterFields
+              activeProviders={activeProviders}
+              patchSearch={patchSearch}
+              search={search}
+            />
+          </aside>
+
+          <section
+            aria-label="Katalogtilbud"
+            className="grid gap-5 xl:grid-cols-2"
+          >
+            <div className="flex items-center justify-between text-sm text-muted-foreground xl:col-span-2">
+              <span>{offers.length} tilbud</span>
+              <span className="hidden sm:inline">
+                Variant D · Filtreret kortkatalog
+              </span>
+            </div>
+            {offers.map((offer) => (
+              <VisualOfferCard
+                dataset={dataset}
+                key={offer.offerIdentity}
+                offer={offer}
+                selected={search.selected.includes(offer.offerIdentity)}
+                toggleSelected={toggleSelected}
+              />
+            ))}
+          </section>
+        </div>
       </main>
     </div>
   );
@@ -907,6 +1000,7 @@ const variants = [
   { key: "a", name: "Rolige rækker" },
   { key: "b", name: "Visuelt katalog" },
   { key: "c", name: "Analytisk register" },
+  { key: "d", name: "Filtreret kortkatalog" },
 ] as const;
 
 function PrototypeSwitcher({ search, patchSearch }: { search: CatalogueSearch; patchSearch: PatchSearch }) {
@@ -1025,6 +1119,7 @@ export function CatalogueOverviewPrototype({
       {search.variant === "a" && <VariantA {...props} />}
       {search.variant === "b" && <VariantB {...props} />}
       {search.variant === "c" && <VariantC {...props} />}
+      {search.variant === "d" && <VariantD {...props} />}
       <SelectionTray patchSearch={patchSearch} search={search} />
       <PrototypeSwitcher patchSearch={patchSearch} search={search} />
     </>

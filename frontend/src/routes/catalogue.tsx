@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { CatalogueOverviewPrototype } from "@/prototype/catalogue-overview";
 
 const catalogueSearchSchema = z.object({
-  variant: z.enum(["a", "b", "c"]).catch("a"),
+  variant: z.enum(["a", "b", "c", "d"]).catch("a"),
   q: z.string().catch(""),
   provider: z.string().catch("all"),
   form: z
