@@ -28,10 +28,24 @@ import {
   upfrontPayment,
   vehicleName,
 } from "@/catalogue-data";
+import { ComposedChart } from "@/components/charts/composed-chart";
+import { Grid } from "@/components/charts/grid";
+import { SeriesBar } from "@/components/charts/series-bar";
+import { ChartTooltip } from "@/components/charts/tooltip/chart-tooltip";
+import {
+  TooltipContent as ChartTooltipContent,
+  type TooltipRow,
+} from "@/components/charts/tooltip/tooltip-content";
+import { YAxis } from "@/components/charts/y-axis";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { CompactCashFlowChart } from "@/prototype/catalogue-offer-detail";
 import { PrototypeSwitcher } from "@/prototype/prototype-switcher";
 import type { ComparisonSearch } from "@/routes/prototype.compare";
 
@@ -47,6 +61,16 @@ const date = new Intl.DateTimeFormat("da-DK", {
   month: "long",
   year: "numeric",
 });
+const chartDate = new Intl.DateTimeFormat("da-DK", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+});
+
+const offerColors = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)"];
+const receiptColors = offerColors.map(
+  (color) => `color-mix(in oklch, ${color} 38%, var(--card))`,
+);
 
 const leasingLabels = {
   financial: "Finansiel leasing",
@@ -102,6 +126,7 @@ type ComparisonValue = {
 
 type ComparisonRow = {
   label: string;
+  sharedDetail?: ReactNode;
   values: ComparisonValue[];
 };
 
@@ -233,11 +258,221 @@ function cashFlowValue(offer: CatalogueOffer): ComparisonValue {
     (event) => event.amount.state !== "known",
   );
   return {
-    detail: <CompactCashFlowChart offer={offer} />,
     key,
     text: `${offer.baseCashFlowStream.length} kronologiske posteringer`,
     unavailable,
   };
+}
+
+type SharedCashFlowPoint = Record<string, unknown> & {
+  date: Date;
+  label: string;
+  month: number;
+};
+
+function sharedCashFlowData(offers: CatalogueOffer[]): SharedCashFlowPoint[] {
+  const lastMonth = Math.max(...offers.map((offer) => offer.termMonths));
+  const startDate = new Date();
+  startDate.setHours(12, 0, 0, 0);
+
+  return Array.from({ length: lastMonth + 1 }, (_, month) => {
+    const pointDate = new Date(
+      startDate.getFullYear(),
+      startDate.getMonth() + month + 1,
+      0,
+      12,
+    );
+    pointDate.setDate(Math.min(startDate.getDate(), pointDate.getDate()));
+    const point: SharedCashFlowPoint = {
+      date: pointDate,
+      label:
+        month === 0
+          ? `Ved start · ${chartDate.format(pointDate)}`
+          : `${chartDate.format(pointDate)} · måned ${month}`,
+      month,
+    };
+
+    offers.forEach((offer, offerIndex) => {
+      if (month > offer.termMonths) return;
+      const events = offer.baseCashFlowStream.filter(
+        (event) => event.occursAtMonth === month,
+      );
+      let payments = 0;
+      let receipts = 0;
+      let unavailable = 0;
+      for (const event of events) {
+        if (event.amount.state !== "known") {
+          unavailable += 1;
+        } else if (event.direction === "payment") {
+          payments += event.amount.value;
+        } else {
+          receipts += event.amount.value;
+        }
+      }
+      point[`offer-${offerIndex}-payments`] = payments;
+      point[`offer-${offerIndex}-receipts`] = receipts;
+      point[`offer-${offerIndex}-unavailable`] = unavailable;
+    });
+
+    return point;
+  });
+}
+
+function dkkAxis(value: number) {
+  if (value === 0) return "0";
+  if (Math.abs(value) >= 1_000) return `${decimal.format(value / 1_000)} t.`;
+  return integer.format(value);
+}
+
+function sharedCashFlowTooltipRows(
+  point: Record<string, unknown>,
+  offers: CatalogueOffer[],
+): TooltipRow[] {
+  return offers.flatMap((offer, offerIndex) => {
+    const rows: TooltipRow[] = [];
+    const payments = point[`offer-${offerIndex}-payments`];
+    const receipts = point[`offer-${offerIndex}-receipts`];
+    const unavailable = point[`offer-${offerIndex}-unavailable`];
+    const label = vehicleName(offer);
+    if (typeof payments === "number" && payments > 0) {
+      rows.push({
+        color: offerColors[offerIndex] ?? "var(--chart-1)",
+        label: `${label} · betaling`,
+        value: money(payments),
+      });
+    }
+    if (typeof receipts === "number" && receipts > 0) {
+      rows.push({
+        color: receiptColors[offerIndex] ?? "var(--chart-4)",
+        label: `${label} · modtagelse`,
+        value: money(receipts),
+      });
+    }
+    if (typeof unavailable === "number" && unavailable > 0) {
+      rows.push({
+        color: "var(--muted-foreground)",
+        label: `${label} · beløb mangler`,
+        value: unavailable,
+      });
+    }
+    return rows;
+  });
+}
+
+function SharedCashFlowChart({ offers }: { offers: CatalogueOffer[] }) {
+  const data = sharedCashFlowData(offers);
+  const chartMargin = { bottom: 12, left: 62, right: 14, top: 16 };
+  const unavailable = offers.flatMap((offer) =>
+    offer.baseCashFlowStream.filter((event) => event.amount.state !== "known"),
+  );
+
+  return (
+    <div className="p-3 sm:p-4" data-testid="bklit-shared-cash-flow">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs font-semibold text-muted-foreground">
+          {offers.map((offer, index) => (
+            <span
+              className="inline-flex items-center gap-2"
+              key={offer.offerIdentity}
+            >
+              <span
+                className="size-2.5 rounded-sm"
+                style={{
+                  backgroundColor: offerColors[index] ?? "var(--chart-1)",
+                }}
+              />
+              {vehicleName(offer)}
+            </span>
+          ))}
+        </div>
+        <span className="text-xs text-muted-foreground">
+          Mørk = betaling · lys = modtagelse
+        </span>
+      </div>
+
+      <div className="mt-3">
+        <ComposedChart
+          aspectRatio="3 / 1"
+          barGap={1}
+          data={data}
+          margin={chartMargin}
+          maxBarSize={9}
+          xDataKey="date"
+        >
+          <Grid horizontal numTicksRows={3} />
+          {offers.flatMap((offer, index) => [
+            <SeriesBar
+              dataKey={`offer-${index}-payments`}
+              fill={offerColors[index] ?? "var(--chart-1)"}
+              key={`${offer.offerIdentity}-payments`}
+              radius={2}
+            />,
+            <SeriesBar
+              dataKey={`offer-${index}-receipts`}
+              fill={receiptColors[index] ?? "var(--chart-4)"}
+              key={`${offer.offerIdentity}-receipts`}
+              radius={2}
+            />,
+          ])}
+          <YAxis formatValue={dkkAxis} numTicks={3} />
+          <ChartTooltip
+            content={({ point }) => (
+              <ChartTooltipContent
+                rows={sharedCashFlowTooltipRows(point, offers)}
+                title={String(point.label)}
+              />
+            )}
+            showCrosshair={false}
+            showDatePill={false}
+          />
+        </ComposedChart>
+        <div
+          className="mt-2 grid grid-cols-2 text-[0.68rem] font-semibold text-muted-foreground"
+          style={{
+            paddingLeft: chartMargin.left,
+            paddingRight: chartMargin.right,
+          }}
+        >
+          <span>{chartDate.format(data[0].date)}</span>
+          <span className="text-right">
+            {chartDate.format(data[data.length - 1].date)}
+          </span>
+        </div>
+      </div>
+
+      {unavailable.length > 0 && (
+        <p className="mt-3 flex gap-2 rounded-lg bg-secondary/65 p-3 text-xs leading-5 text-muted-foreground">
+          <CircleAlert aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
+          {unavailable.length === 1
+            ? "Ét beløb er ikke tilgængeligt og vises ikke som nul."
+            : `${unavailable.length} beløb er ikke tilgængelige og vises ikke som nul.`}
+        </p>
+      )}
+
+      <div className="sr-only">
+        {offers.map((offer) => (
+          <section key={offer.offerIdentity}>
+            <h3>{vehicleName(offer)}</h3>
+            <ol>
+              {offer.baseCashFlowStream.map((event) => (
+                <li key={event.key}>
+                  {event.occursAtMonth === 0
+                    ? "Ved start"
+                    : `Måned ${event.occursAtMonth}`}
+                  : {cashFlowLabels[event.kind]};{" "}
+                  {event.direction === "payment" ? "betaling" : "modtagelse"};{" "}
+                  {event.amount.state === "known"
+                    ? money(event.amount.value)
+                    : unavailableText(event.amount.state)}
+                  .
+                </li>
+              ))}
+            </ol>
+          </section>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function comparisonSections(
@@ -318,10 +553,16 @@ function comparisonSections(
       ],
     },
     {
-      description: "Den fulde normale betalingsstrøm står kronologisk for hvert tilbud.",
+      description: "Tilbuddenes normale betalingsstrømme vises kronologisk på samme akser.",
       key: "cashflow",
       title: "Betalingsstrøm",
-      rows: [row("Alle posteringer", cashFlowValue)],
+      rows: [
+        {
+          label: "Alle posteringer",
+          sharedDetail: <SharedCashFlowChart offers={offers} />,
+          values: offers.map(cashFlowValue),
+        },
+      ],
     },
     {
       description: "Sammenlignelige køretøjsfakta uden at antage fælles bilidentitet.",
@@ -422,25 +663,72 @@ function OfferImage({ offer }: { offer: CatalogueOffer }) {
 }
 
 function OfferHeader({
+  dataset,
   offer,
   onRemove,
   selected,
 }: {
+  dataset: CatalogueDataset;
   offer: CatalogueOffer;
   onRemove: () => void;
   selected: string[];
 }) {
+  const monthly = monthlyPayment(offer);
   return (
-    <article className="grid h-full content-start gap-3 bg-card p-3 sm:p-4">
-      <OfferImage offer={offer} />
-      <div>
-        <p className="text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">
-          {leasingLabels[offer.leasingForm]}
-        </p>
-        <h2 className="mt-1 font-serif text-xl leading-tight">
-          {vehicleName(offer)}
-        </h2>
-      </div>
+    <article className="grid h-full content-start gap-2 bg-card p-3 sm:p-4">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            className="min-w-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            type="button"
+          >
+            <p className="truncate text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">
+              {providerName(dataset, offer)} · {leasingLabels[offer.leasingForm]}
+            </p>
+            <h2 className="mt-1 line-clamp-2 font-serif text-lg leading-tight underline decoration-border underline-offset-4">
+              {vehicleName(offer)}
+            </h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {monthly === null
+                ? "Månedsydelse ikke oplyst"
+                : `${currency.format(monthly)}/md.`} · {offer.termMonths} mdr.
+            </p>
+          </button>
+        </TooltipTrigger>
+        <TooltipContent
+          className="w-72 border bg-card p-3 text-card-foreground shadow-xl"
+          side="bottom"
+          sideOffset={8}
+        >
+          <OfferImage offer={offer} />
+          <div className="mt-3">
+            <p className="text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">
+              {providerName(dataset, offer)}
+            </p>
+            <p className="mt-1 font-serif text-lg leading-tight">
+              {vehicleName(offer)}
+            </p>
+            <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 border-t pt-3 text-xs">
+              <div>
+                <dt className="text-muted-foreground">Ved start</dt>
+                <dd className="font-bold">{money(upfrontPayment(offer))}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Beregnet total</dt>
+                <dd className="font-bold">{money(offer.totalDkk)}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Kilometer</dt>
+                <dd className="font-bold">{mileage(offer).text}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Ved udløb</dt>
+                <dd className="font-bold">{endMechanism(offer)}</dd>
+              </div>
+            </dl>
+          </div>
+        </TooltipContent>
+      </Tooltip>
       <div className="flex flex-wrap gap-2">
         <Link
           className={buttonVariants({ size: "sm", variant: "outline" })}
@@ -461,33 +749,38 @@ function OfferHeader({
 }
 
 function ComparisonHeader({
+  dataset,
   offers,
   removeOffer,
   selected,
 }: {
+  dataset: CatalogueDataset;
   offers: CatalogueOffer[];
   removeOffer: (offerIdentity: string) => void;
   selected: string[];
 }) {
   const gridTemplateColumns = `clamp(8.5rem, 14vw, 12rem) repeat(${offers.length}, minmax(15rem, 1fr))`;
   return (
-    <div
-      className="sticky top-0 z-30 grid w-full border-b bg-card shadow-[0_8px_18px_-18px_rgba(0,0,0,0.8)]"
-      style={{ gridTemplateColumns }}
-    >
-      <div className="sticky left-0 z-40 grid content-end border-r bg-secondary p-3 text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground sm:p-4">
-        Tilbud
-      </div>
-      {offers.map((offer) => (
-        <div className="border-r last:border-r-0" key={offer.offerIdentity}>
-          <OfferHeader
-            offer={offer}
-            onRemove={() => removeOffer(offer.offerIdentity)}
-            selected={selected}
-          />
+    <TooltipProvider delayDuration={180}>
+      <div
+        className="sticky top-0 z-30 grid w-full border-b bg-card shadow-[0_8px_18px_-18px_rgba(0,0,0,0.8)]"
+        style={{ gridTemplateColumns }}
+      >
+        <div className="sticky left-0 z-40 grid content-end border-r bg-secondary p-3 text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground sm:p-4">
+          Tilbud
         </div>
-      ))}
-    </div>
+        {offers.map((offer) => (
+          <div className="border-r last:border-r-0" key={offer.offerIdentity}>
+            <OfferHeader
+              dataset={dataset}
+              offer={offer}
+              onRemove={() => removeOffer(offer.offerIdentity)}
+              selected={selected}
+            />
+          </div>
+        ))}
+      </div>
+    </TooltipProvider>
   );
 }
 
@@ -515,18 +808,30 @@ function ComparisonRowView({
           </span>
         )}
       </div>
-      {row.values.map((value, index) => (
+      {row.sharedDetail !== undefined ? (
         <div
           className={cn(
-            "min-w-0 border-r p-3 text-sm leading-6 last:border-r-0 sm:p-4",
+            "min-w-0",
             differs && !quiet && "bg-secondary/35",
-            value.muted && "text-muted-foreground",
           )}
-          key={offers[index].offerIdentity}
+          style={{ gridColumn: `2 / span ${offers.length}` }}
         >
-          {value.detail ?? value.text}
+          {row.sharedDetail}
         </div>
-      ))}
+      ) : (
+        row.values.map((value, index) => (
+          <div
+            className={cn(
+              "min-w-0 border-r p-3 text-sm leading-6 last:border-r-0 sm:p-4",
+              differs && !quiet && "bg-secondary/35",
+              value.muted && "text-muted-foreground",
+            )}
+            key={offers[index].offerIdentity}
+          >
+            {value.detail ?? value.text}
+          </div>
+        ))
+      )}
     </div>
   );
 }
@@ -721,6 +1026,7 @@ function VariantA({
     >
       <ComparisonViewport contained>
         <ComparisonHeader
+          dataset={dataset}
           offers={offers}
           removeOffer={removeOffer}
           selected={search.selected}
@@ -753,6 +1059,7 @@ function VariantB({
       <div className="grid gap-6">
         <ComparisonViewport>
           <ComparisonHeader
+            dataset={dataset}
             offers={offers}
             removeOffer={removeOffer}
             selected={search.selected}
@@ -843,6 +1150,7 @@ function VariantC({
         <div className="grid gap-6">
           <ComparisonViewport>
             <ComparisonHeader
+              dataset={dataset}
               offers={offers}
               removeOffer={removeOffer}
               selected={search.selected}
