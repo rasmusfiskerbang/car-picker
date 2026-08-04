@@ -75,7 +75,7 @@ The shared Pydantic base model:
 - emits closed discriminated unions;
 - canonicalizes UTC timestamps before serialization.
 
-Whole-Dataset invariants remain Pydantic behavior. JSON Schema guards the JSON shape in the browser; it is not expected to reimplement cross-record rules.
+Whole-Dataset invariants and validation of the flat calculated Offer totals remain Pydantic behavior. JSON Schema guards the JSON shape in the browser; it is not expected to reimplement cross-record rules or arithmetic.
 
 ## Generated schema constant
 
@@ -122,11 +122,11 @@ Callers import `CatalogueDataset` and `parseCatalogueDataset` from this module, 
 
 The cast is a real compromise, not decorative boilerplate. Its safety comes from keeping both generators on the same input, constraining the Pydantic schema to the JSON Schema features both tools support, and exercising representative union branches through both Python and Zod during the site build. If the owner rejects any cast at this seam, the alternative is to replace `z.fromJSONSchema()` with a build-time JSON-Schema-to-Zod-source generator and infer directly from the generated Zod code. That removes the bridge but changes the already chosen toolchain and adds another converter to evaluate.
 
-Frontend helpers may select Offers by identity, format DKK, map enums and fact states to Danish labels, derive search text, and render selected Offers side by side. They do not define a second Dataset type or transform comparison selection into a durable presentation model.
+Frontend helpers may select Offers by identity, format DKK, map enums and fact states to Danish labels, derive search text, and render selected Offers and their flat totals side by side. They do not recalculate authoritative totals, define a second Dataset type, or transform comparison selection into a durable presentation model.
 
 ## `CatalogueSite.build()` flow
 
-1. Open the active Dataset through `Catalogue.current()` and validate it with the authoritative Pydantic model.
+1. Open the active Dataset through `Catalogue.current()` and validate it with the authoritative Pydantic model, including recomputation of every Offer's `totalDkk` and `totalDkkPerMonth`.
 2. Generate the serialization-mode JSON Schema from that same model.
 3. Stage the static site.
 4. Copy the validated Dataset bytes unchanged to `catalogue-dataset.json` in staging.
@@ -146,7 +146,7 @@ Frontend helpers may select Offers by identity, format DKK, map enums and fact s
 - Any field addition, removal, rename, type change, enum change, altered optionality, or changed semantic invariant creates `catalogue-dataset/v2`.
 - Formatting changes that leave the parsed value and schema unchanged do not create a version.
 - The clean-room application supports only its current version. It has no historical migration chain because no historical Dataset is retained.
-- A version change is implemented atomically: Pydantic model, schema constant, browser code, fixed fixture, and completed-site checks move together.
+- A version change is implemented atomically: Pydantic model, total validators, schema constant, browser code, fixed fixture, and completed-site checks move together.
 - The version literal is the first error reported when a browser or owner command opens an incompatible artifact.
 
 This intentionally treats additive JSON changes as breaking. Strictness prevents an older browser from silently ignoring a new fact that might change comparison meaning.
@@ -158,6 +158,7 @@ This intentionally treats additive JSON changes as breaking. Strictness prevents
 | JSON field shape and discriminators | Pydantic model / generated JSON Schema | Refresh, site build, browser startup |
 | Static TypeScript shape | Generated from the Pydantic JSON Schema | Frontend build |
 | Cross-record identities and active-provider references | `CatalogueDataset` whole-model validator | Refresh and site build |
+| `totalDkk` and `totalDkkPerMonth` arithmetic, including signed receipts | `CatalogueDataset` whole-model validator | Refresh and site build |
 | Static artifact completeness | `CatalogueSite` | Build and open |
 | Comparison selection, side-by-side presentation, Danish labels, and formatting | Frontend feature modules | Browser rendering |
 | Provider retrieval and evidence extraction | Provider Adapters | Catalogue Refresh |
@@ -168,6 +169,7 @@ Validation stays at the seam owning each risk. There is no catch-all validator m
 
 - A Provider Adapter structural failure prevents Dataset construction and leaves the active Dataset untouched.
 - A candidate-local admission failure becomes a Quarantined Candidate when it has stable identity and supporting evidence.
+- A materialized Offer-total mismatch rejects the replacement Dataset rather than trusting either stored or recalculated output.
 - A site-build schema-generation or frontend-build failure leaves the previous completed site untouched.
 - Browser parse failure shows no catalogue data. It does not fall back to unchecked JSON or attempt an in-browser migration.
 
@@ -175,6 +177,8 @@ Validation stays at the seam owning each risk. There is no catch-all validator m
 
 These describe public behavior and belong at the owner-facing seams, not as a test for every Pydantic class:
 
+- A refresh cannot persist an Offer whose `totalDkk` or `totalDkkPerMonth` disagrees with its Base Cash-flow Stream and term.
+- An explicit receipt reduces `totalDkk`; an unavailable required cash-flow amount makes both calculated totals `null`.
 - A site build packages the active Dataset without projection or field loss.
 - The schema artifact and embedded Zod schema originate from the same Pydantic serialization schema.
 - Representative known-fact, unavailable-fact, Provider Registry, Offer, and quarantine branches parse in both Pydantic and Zod during the build.

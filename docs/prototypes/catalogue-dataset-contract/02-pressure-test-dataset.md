@@ -99,8 +99,22 @@ This illustrative JSON is intentionally awkward. It is not real provider data an
             "firstPaymentTiming": "after_handover"
           },
           "refundability": { "state": "not_applicable" }
+        },
+        {
+          "key": "delivery-fee",
+          "kind": "delivery_fee",
+          "direction": "payment",
+          "amount": { "state": "not_stated" },
+          "schedule": {
+            "kind": "one_off",
+            "timing": "acceptance_to_handover"
+          },
+          "refundability": { "state": "known", "value": "not_refundable" }
         }
-      ]
+      ],
+      "advertisedTotalDkk": { "state": "not_stated" },
+      "totalDkk": null,
+      "totalDkkPerMonth": null
     },
     {
       "offerIdentity": "fleasing:example-flex:configuration-a",
@@ -174,7 +188,10 @@ This illustrative JSON is intentionally awkward. It is not real provider data an
           },
           "refundability": { "state": "not_applicable" }
         }
-      ]
+      ],
+      "advertisedTotalDkk": { "state": "known", "value": 61500 },
+      "totalDkk": 60940,
+      "totalDkkPerMonth": 5078.333333333333
     }
   ],
   "quarantinedCandidates": [
@@ -203,9 +220,11 @@ This illustrative JSON is intentionally awkward. It is not real provider data an
 ## What this example demonstrates
 
 - `future-provider` proves the Provider Registry copy is broader than the providers represented by Offers and Quarantined Candidates.
-- The Fleasing offer keeps refundable-deposit payment and receipt events separate, preserving their direction and timing without a backend-derived total.
-- Missing annual mileage does not prevent admission. The frontend can still show that Offer beside another while rendering the mileage fact as unavailable.
-- Comparison selection and presentation are absent from the Dataset; the frontend selects these Offer records by identity and renders their facts side by side.
+- The Terminalen offer remains admitted with an unavailable delivery-fee amount, while both calculated totals are explicitly `null` rather than partial or zero.
+- The Fleasing offer keeps refundable-deposit payment and receipt events separate. Its 50,000 DKK deposit payment and 50,000 DKK refund net to zero, producing `totalDkk` of `60940` rather than `110940`.
+- The provider's advertised Fleasing total of `61500` remains visible beside the independently calculated `60940`; neither overwrites the other and no reconciliation state is added.
+- Missing annual mileage does not prevent admission or block the Fleasing totals. The frontend can still show that Offer beside another while rendering the mileage fact as unavailable.
+- Comparison selection and presentation are absent from the Dataset; the frontend selects these Offer records by identity and renders their facts and flat totals side by side.
 - The Quarantined Candidate retains the exact public contradiction that explains failed admission, but none of its parsed vehicle, contract, or cash-flow data.
 
 ## Resolved pressure point outside the JSON shape

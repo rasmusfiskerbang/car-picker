@@ -42,9 +42,9 @@ CatalogueDataset
 └── quarantinedCandidates
 ```
 
-`providers` is the dated copy of Provider Registry records. `offers` contains normalized source facts only. `quarantinedCandidates` contains identity, provider, canonical source, admission reasons, and the evidence for those reasons. Provider participation and counts are derived from these arrays; designated source scope remains in Provider Adapter code and source audits.
+`providers` is the dated copy of Provider Registry records. `offers` contains normalized source facts plus two validated flat totals calculated from each Base Cash-flow Stream. `quarantinedCandidates` contains identity, provider, canonical source, admission reasons, and the evidence for those reasons. Provider participation and counts are derived from these arrays; designated source scope remains in Provider Adapter code and source audits.
 
-There is no backend Comparison model or materialized comparison result. The frontend selects Offers by identity from the parsed Dataset and renders their facts side by side; selection and presentation state do not enter the Dataset.
+There is no backend Comparison model. The frontend selects Offers by identity from the parsed Dataset and renders their facts, `totalDkk`, and `totalDkkPerMonth` side by side; selection and presentation state do not enter the Dataset.
 
 ## Accepted in live review
 
@@ -60,7 +60,8 @@ There is no backend Comparison model or materialized comparison result. The fron
 - **Pydantic contract notation — 4 August 2026:** express the prototype's authoritative contract shape as illustrative Pydantic v2 models rather than handwritten TypeScript-like types. Prefer readable models over maximal type expressivity; relationships that would make the declarations disproportionately complex may use a broader field shape and remain strict through Pydantic validation. JSON remains the wire example, and TypeScript appears only on the generated browser-consumer side of the seam.
 - **Leasing Form normalization — 4 August 2026:** an admitted Offer retains only the normalized `leasingForm` classification. The provider's source label is transient admission input, not a Provider Registry value or retained per-fact wording. The shorter name is sufficient because admission guarantees that every Catalogue Offer has a supported form.
 - **No Registration-tax Treatment — 4 August 2026:** remove registration-tax treatment from v1. The product neither calculates nor filters by this contract detail, and advertised payments already enter the Base Cash-flow Stream; retaining it would add an unused Offer fact.
-- **No backend Comparison — 4 August 2026:** remove materialized comparison results, availability reasons, provider-aggregate reconciliation, and the nested `comparison` record from Catalogue Offers. The backend publishes normalized Offers; the frontend selects them by identity and owns side-by-side presentation without persisting comparison state or creating a second Dataset model. This revises the materialized-results portion of the earlier backend-interface decision while retaining the Dataset as the unchanged browser contract.
+- **No backend Comparison — 4 August 2026:** remove the nested `comparison` record, comparison-specific availability reasons, and provider-total reconciliation. The backend publishes normalized Offers with flat calculated totals; the frontend selects them by identity and owns side-by-side presentation without persisting comparison state or creating a second Dataset model. This revises the earlier backend-interface decision while retaining the Dataset as the unchanged browser contract.
+- **Flat Offer totals — 4 August 2026:** every Catalogue Offer retains `advertisedTotalDkk` as a provider-stated Fact and materializes backend-calculated `totalDkk` and `totalDkkPerMonth` directly on the Offer. Payments add and explicit receipts—including refunds—subtract; recurring events use their declared occurrences. Both calculated fields are required but `null` when any required cash-flow amount is unavailable. The advertised and calculated totals are independent and are not reconciled.
 
 Live review remains open. The decisions above are accepted individually but do not constitute acceptance of the complete prototype.
 
@@ -72,7 +73,7 @@ Live review remains open. The decisions above are accepted individually but do n
 - Migration machinery for historical datasets. The system retains only one current Dataset and can rebuild it.
 - Exact filter composition and responsive presentation, which belong to the four-page application prototype.
 - Structured Exposure Scenarios and conditional-cost calculators, which belong to a later product effort.
-- Backend comparison models, derived comparison values, and aggregate reconciliation; frontend selection and side-by-side presentation consume normalized Offers directly.
+- Backend Comparison models, comparison-specific readiness, and aggregate reconciliation; frontend selection and side-by-side presentation consume normalized Offers and their flat totals directly.
 
 ## Review scenarios
 
@@ -81,8 +82,9 @@ The proposed contract should make each statement obviously true:
 - An active provider remains visible even when it contributes zero admitted Offers.
 - An inactive provider remains visible in the Provider Registry copy but cannot own an Offer or Quarantined Candidate.
 - A missing mileage allowance remains an explicit unavailable Offer fact and does not prevent the frontend from displaying that Offer beside another.
-- A refundable deposit payment and expected receipt remain separate normalized events without producing a backend-derived total.
+- An unavailable required cash-flow amount makes both flat calculated totals `null` rather than producing a partial total.
+- A refundable deposit payment and explicit refund remain separate normalized events and offset each other in the backend-calculated `totalDkk`.
 - A disclosed excess-mileage rate has no Dataset representation and does not quarantine an otherwise admissible Offer.
-- The frontend can select Offers by identity and render their normalized facts side by side without a comparison record or projection in the Dataset.
+- The frontend can select Offers by identity and render their normalized facts and flat totals side by side without a comparison record or projection in the Dataset.
 - A Quarantined Candidate can explain failed admission without retaining its full parsed commercial model.
 - No handwritten TypeScript Dataset shape can drift from Python, and representative converter differences fail the build-time contract cases.

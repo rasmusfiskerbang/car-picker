@@ -141,6 +141,9 @@ class CatalogueOffer(CatalogueModel):
         tuple[BaseCashFlowEvent, ...],
         Field(min_length=1),
     ]
+    advertised_total_dkk: Fact[Dkk]
+    total_dkk: Dkk | None
+    total_dkk_per_month: Dkk | None
 ```
 
 `leasingForm` is the normalized classification established during admission. The provider's source label is transient classification input and is not retained as per-fact wording. Private-consumer eligibility, passenger-car scope, current availability, and admission outcome are also absent: admission already guarantees them, so repeating them as always-true fields would be shallow data.
@@ -279,9 +282,23 @@ The event `key` is the stable local reference used by blocking facts. It does no
 
 There is deliberately no Exposure Scenario type. Excess-mileage rates, damage charges, early-termination charges, and other amounts triggered by conditional or uncertain events are not represented in the Dataset and do not enter the Base Cash-flow Stream. Their disclosure does not quarantine an otherwise admissible Offer. They are omitted, not assigned a zero value.
 
+### Offer totals
+
+`advertisedTotalDkk` is a provider-stated Fact and is not used as a calculation input. `totalDkk` and `totalDkkPerMonth` are flat backend-calculated fields on the Offer, not a nested Comparison model:
+
+```text
+event total = known amount × (1 for one-off, occurrences for recurring)
+totalDkk = sum(payment event totals) − sum(receipt event totals)
+totalDkkPerMonth = totalDkk ÷ termMonths
+```
+
+An explicit refund therefore reduces `totalDkk`. For example, a 50,000 DKK deposit payment and an explicit 50,000 DKK deposit-refund receipt net to zero. The backend never invents a refund: when a required cash-flow amount is unavailable, both calculated fields are `null`. They are always present, `0` remains a genuine calculated value, and `totalDkkPerMonth` is `null` exactly when `totalDkk` is `null`. Ordinary floating-point errors are accepted; display precision belongs to the frontend.
+
+Dataset validation recomputes both calculated fields from the Base Cash-flow Stream and term. It rejects a non-null disagreement, a number where the inputs are unavailable, or a `null` where the inputs are sufficient. `advertisedTotalDkk` remains independent even when it disagrees with `totalDkk`; there is no reconciliation state.
+
 ## Frontend comparison
 
-There is no backend Comparison model, materialized comparison result, aggregate reconciliation, readiness structure, or comparison-specific availability state. The frontend selects Catalogue Offers by identity from the parsed Dataset and renders their normalized facts side by side. That selection and presentation state are not added to the Dataset and do not create a second durable model.
+There is no backend Comparison model, aggregate reconciliation, readiness structure, or comparison-specific availability state. The frontend selects Catalogue Offers by identity from the parsed Dataset and renders their normalized facts and flat calculated totals side by side. That selection and presentation state are not added to the Dataset and do not create a second durable model.
 
 ## Quarantined Candidate
 
@@ -327,8 +344,9 @@ Pydantic field validation is not sufficient. `CatalogueDataset` performs one aft
 
 1. checks all cross-record identities, active-provider references, and ordering;
 2. checks Offer invariants, including the single recurring lease-payment event;
-3. rejects forbidden evidence and operational metadata anywhere outside Quarantined Candidate reasons;
-4. rejects the complete Dataset on any disagreement.
+3. recomputes `totalDkk` and `totalDkkPerMonth`, including signed receipts, and compares them to the materialized fields;
+4. rejects forbidden evidence and operational metadata anywhere outside Quarantined Candidate reasons;
+5. rejects the complete Dataset on any disagreement.
 
 The Dataset therefore remains a normalized offer artifact rather than a backend comparison artifact.
 

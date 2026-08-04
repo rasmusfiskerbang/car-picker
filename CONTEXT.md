@@ -85,12 +85,24 @@ The VAT treatment of an advertised amount explicitly offered to a private indivi
 _Avoid_: Unknown VAT basis for an unqualified private price, silent gross-up
 
 **Base cash-flow stream**:
-The single time-ordered source of truth for payments and receipts a prospective lessee faces when a leasing offer runs to normal completion. Each amount appears once as a normalized event with its standardized meaning, direction, DKK amount or offer fact state, contract-relative timing or recurrence, and refundability where relevant. It contains unavoidable contractual amounts and the payment and expected return of refundable deposits, but excludes conditional amounts.
+The single time-ordered source of truth for payments and receipts a prospective lessee faces when a leasing offer runs to normal completion. Each amount appears once as a normalized event with its standardized meaning, direction, DKK amount or offer fact state, contract-relative timing or recurrence, and refundability where relevant. It contains unavoidable contractual amounts and explicit expected receipts such as refundable-deposit returns, but excludes conditional amounts.
 _Avoid_: Total expense, monthly-price field, duplicated payment fields
 
 **Provider-advertised monthly payment**:
 The known amount of the standardized recurring lease-payment event in a catalogue offer's base cash-flow stream. It is never stored separately; contradictory headline and cash-flow amounts block catalogue admission.
 _Avoid_: Separate headline price
+
+**Advertised total**:
+The provider-stated DKK total for a leasing offer. It remains a normalized source fact and does not override or need to agree with the calculated total.
+_Avoid_: Authoritative total, calculated total, provider-advertised aggregate
+
+**Calculated total**:
+The signed sum of a leasing offer's normal-completion base cash-flow events: payments add to the total and explicit receipts reduce it. It excludes conditional amounts and is unavailable when any required cash-flow amount is unavailable.
+_Avoid_: Advertised total, total cost, expected cost
+
+**Calculated monthly total**:
+The calculated total divided by the full advertised term in months.
+_Avoid_: Provider-advertised monthly payment, monthly instalment
 
 **Service arrangement**:
 The normalized treatment of a standardized service or external-cost category within a leasing offer: `included`, `optional`, `required_external`, or `excluded`, together with its scope and limits. Whether that arrangement is known is expressed separately by the offer fact state; the arrangement is a dated interpretation rather than a retained provider quotation.
