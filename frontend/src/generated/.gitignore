@@ -1,2 +1,5 @@
 presentation-schema.json
 presentation.ts
+catalogue-dataset.schema.json
+catalogue-dataset.schema.generated.ts
+catalogue-dataset.generated.ts
