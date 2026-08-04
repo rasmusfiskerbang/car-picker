@@ -434,10 +434,9 @@ def catalogue_offer(index: int) -> dict[str, object]:
     term = (12, 24, 36)[index % 3]
     monthly = float(3_295 + (index % 8) * 675)
     events, total = cash_flows(index, term, monthly)
-    image = IMAGE_URLS[index % len(IMAGE_URLS)]
     image_urls = [] if index % 9 == 0 else [
-        f"{image}?auto=format&fit=crop&w=1400&q=82",
-        f"{image}?auto=format&fit=crop&w=1000&q=78&sat=-12",
+        f"{IMAGE_URLS[(index + offset) % len(IMAGE_URLS)]}?auto=format&fit=crop&w=1400&q={82 - offset}"
+        for offset in range(4)
     ]
     return {
         "offerIdentity": f"{provider_id}:prototype-{index:02d}:config-{index % 3}",
