@@ -56,17 +56,9 @@ There is one generated TypeScript type beside the generated schema constant. Bot
 
 ## Python source of truth
 
-Illustrative shape, not implementation code:
+The complete illustrative model is in [Contract shape](./01-contract-shape.md). Its authoritative root emits the serialization contract directly:
 
 ```py
-class CatalogueDataset(CatalogueModel):
-    schema_version: Literal["catalogue-dataset/v1"]
-    generated_at: AwareDatetime
-    providers: tuple[ProviderRecord, ...]
-    offers: tuple[CatalogueOffer, ...]
-    quarantined_candidates: tuple[QuarantinedCandidate, ...]
-
-
 def catalogue_dataset_json_schema() -> dict[str, JsonValue]:
     return CatalogueDataset.model_json_schema(
         mode="serialization",

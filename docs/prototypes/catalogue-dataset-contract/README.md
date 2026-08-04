@@ -8,7 +8,7 @@ Can one strict, publication-safe `CatalogueDataset` shape serve all three roles 
 
 The prototype makes the proposed answer concrete enough to attack with real cases. It is split across:
 
-- [Contract shape](./01-contract-shape.md) — the proposed types, nesting, and cross-record invariants.
+- [Contract shape](./01-contract-shape.md) — the proposed Pydantic v2 models, nesting, and cross-record invariants.
 - [Pressure-test dataset](./02-pressure-test-dataset.md) — one illustrative generation containing a fully available offer, a reconciliation-limited offer, an inactive provider, and a Quarantined Candidate.
 - [Python-to-TypeScript seam](./03-python-to-typescript-seam.md) — schema generation, packaging, runtime validation, inferred types, and versioning.
 
@@ -65,6 +65,7 @@ There is no separate operation-readiness map that could disagree with a result. 
 - **Quarantine evidence size — 2 August 2026:** each supporting excerpt is an exact public first-party fragment of at most 500 characters. A reason may cite multiple excerpts when distinct fragments are genuinely necessary; full source documents remain transient.
 - **Empty active-provider result — 2 August 2026:** a Provider Adapter may return zero Candidates only after recognizing and exhaustively enumerating a valid empty source. Missing expected structure, failed enumeration, or an ambiguous empty page is a structural failure that rejects the complete refresh. This distinction remains Adapter behavior and adds no Dataset field.
 - **No Exposure Scenarios — 2 August 2026:** the v1 Catalogue Offer and product have no structured conditional-cost records, calculators, or presentation. Provider disclosure of an excess-mileage rate, damage charge, early-termination charge, or another conditional amount neither adds a Dataset field nor quarantines an otherwise admissible Offer. Conditional amounts are omitted rather than treated as zero, and comparison values describe only normal-completion base cash flows. Exposure Scenarios may return in a later product effort.
+- **Pydantic contract notation — 4 August 2026:** express the prototype's authoritative contract shape as illustrative Pydantic v2 models rather than handwritten TypeScript-like types. Prefer readable models over maximal type expressivity; relationships that would make the declarations disproportionately complex may use a broader field shape and remain strict through Pydantic validation. JSON remains the wire example, and TypeScript appears only on the generated browser-consumer side of the seam.
 
 Live review remains open. The decisions above are accepted individually but do not constitute acceptance of the complete prototype.
 

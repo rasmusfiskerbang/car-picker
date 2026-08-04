@@ -1,47 +1,80 @@
 # PROTOTYPE — Contract shape
 
-This file uses TypeScript-like notation because it makes JSON unions compact. Pydantic remains authoritative. Every object forbids unknown fields, every array has stable source order unless stated otherwise, and every field shown is required.
+This file uses illustrative Pydantic v2 models because Pydantic is the authoritative contract. The models expose the important constraints and discriminated unions that the serialization-mode JSON Schema must carry across the browser boundary, but prefer readable models over maximal type expressivity. Relationships that become noisy in the type declaration may be enforced by Pydantic validation instead. Every model forbids unknown fields, every tuple has stable source order unless stated otherwise, and fields are required unless explicitly optional.
 
 ## Shared primitives
 
-```ts
-type SchemaVersion = "catalogue-dataset/v1";
-type Instant = string; // RFC 3339 UTC, canonical `YYYY-MM-DDTHH:mm:ssZ`
-type HttpsUrl = string;
-type NonEmptyString = string;
-type NonEmptyArray<T> = [T, ...T[]];
-type ProviderId = string; // stable kebab-case registry identity
-type OfferIdentity = string; // provider ID + source identity + configuration key
+```py
+from __future__ import annotations
 
-// Finite JSON number representing DKK. Non-negative unless explicitly signed.
-type Dkk = number;
-type SignedDkk = number;
+from typing import Annotated, Literal
 
-type UnavailableState =
-  | "not_stated"
-  | "unclear"
-  | "conflicting"
-  | "not_applicable";
+from pydantic import (
+    AnyUrl,
+    AwareDatetime,
+    BaseModel,
+    ConfigDict,
+    Field,
+    FiniteFloat,
+    PositiveFloat,
+    PositiveInt,
+    UrlConstraints,
+)
+from pydantic.alias_generators import to_camel
 
-type Fact<T> =
-  | { state: "known"; value: T }
-  | { state: UnavailableState };
+
+class CatalogueModel(BaseModel):
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        extra="forbid",
+        strict=True,
+    )
+
+
+HttpsUrl = Annotated[AnyUrl, UrlConstraints(allowed_schemes=["https"])]
+NonEmptyString = Annotated[str, Field(min_length=1)]
+ProviderId = Annotated[str, Field(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")]
+OfferIdentity = NonEmptyString
+
+# Finite JSON numbers representing DKK. Non-negative unless explicitly signed.
+Dkk = Annotated[FiniteFloat, Field(ge=0)]
+SignedDkk = FiniteFloat
+
+UnavailableState = Literal[
+    "not_stated",
+    "unclear",
+    "conflicting",
+    "not_applicable",
+]
+
+class KnownFact[T](CatalogueModel):
+    state: Literal["known"]
+    value: T
+
+
+class UnavailableFact(CatalogueModel):
+    state: UnavailableState
+
+
+type Fact[T] = Annotated[
+    KnownFact[T] | UnavailableFact,
+    Field(discriminator="state"),
+]
 ```
 
-`Fact<T>` is used only where a Catalogue Offer is allowed to survive admission without a known value. Admission-guaranteed facts are direct values. `null`, omitted properties, empty strings, and sentinel numbers never stand for unavailable facts.
+`Fact[T]` is used only where a Catalogue Offer is allowed to survive admission without a known value. Admission-guaranteed facts are direct values. `null`, omitted properties, empty strings, and sentinel numbers never stand for unavailable facts.
 
 `Dkk` is a Pydantic `float` serialized as a JSON number. NaN and infinity are rejected. Small binary floating-point errors are accepted; materialized monetary results are rounded to two decimal places before serialization and validation compares those rounded values.
 
 ## Dataset
 
-```ts
-type CatalogueDataset = {
-  schemaVersion: SchemaVersion;
-  generatedAt: Instant;
-  providers: ProviderRecord[];
-  offers: CatalogueOffer[];
-  quarantinedCandidates: QuarantinedCandidate[];
-};
+```py
+class CatalogueDataset(CatalogueModel):
+    schema_version: Literal["catalogue-dataset/v1"]
+    generated_at: AwareDatetime
+    providers: tuple[ProviderRecord, ...]
+    offers: tuple[CatalogueOffer, ...]
+    quarantined_candidates: tuple[QuarantinedCandidate, ...]
 ```
 
 There is no nested `providerRegistry` object: `ProviderRegistry` names a behavioral module, while `providers` is its immutable record snapshot. There is no `catalogue` wrapper around offers and no `publication` wrapper around the Dataset.
@@ -56,57 +89,64 @@ There is no nested `providerRegistry` object: `ProviderRegistry` names a behavio
 
 ## Provider Registry copy
 
-```ts
-type ActiveProvider = {
-  id: ProviderId;
-  name: NonEmptyString;
-  url: HttpsUrl;
-  status: "active";
-};
+```py
+class ActiveProvider(CatalogueModel):
+    id: ProviderId
+    name: NonEmptyString
+    url: HttpsUrl
+    status: Literal["active"]
 
-type InactiveProvider = {
-  id: ProviderId;
-  name: NonEmptyString;
-  url: HttpsUrl;
-  status: "inactive";
-  reason: "deferred" | "ineligible" | "blocked";
-  explanation: NonEmptyString;
-};
 
-type ProviderRecord = ActiveProvider | InactiveProvider;
+class InactiveProvider(CatalogueModel):
+    id: ProviderId
+    name: NonEmptyString
+    url: HttpsUrl
+    status: Literal["inactive"]
+    reason: Literal["deferred", "ineligible", "blocked"]
+    explanation: NonEmptyString
+
+
+ProviderRecord = Annotated[
+    ActiveProvider | InactiveProvider,
+    Field(discriminator="status"),
+]
 ```
 
 These are the exact Provider Registry records already decided by the map. No source configuration, evidence, contact data, credentials, operational notes, or transition history is added during Dataset serialization.
 
 ## Catalogue Offer
 
-```ts
-type CatalogueOffer = {
-  offerIdentity: OfferIdentity;
-  providerId: ProviderId;
-  canonicalOfferUrl: HttpsUrl;
+```py
+class CatalogueOffer(CatalogueModel):
+    offer_identity: OfferIdentity
+    provider_id: ProviderId
+    canonical_offer_url: HttpsUrl
 
-  vehicleSpecification: VehicleSpecification;
-  supportedLeasingForm: "financial" | "flex" | "operational" | "hybrid";
-  providerFormLabel: NonEmptyString;
-  termMonths: number; // positive integer
-  annualMileageKm: Fact<number>; // positive integer when known
+    vehicle_specification: VehicleSpecification
+    supported_leasing_form: Literal["financial", "flex", "operational", "hybrid"]
+    provider_form_label: NonEmptyString
+    term_months: PositiveInt
+    annual_mileage_km: Fact[PositiveInt]
 
-  normalEndMechanism: Fact<
-    | "return_to_provider"
-    | "designate_third_party_buyer"
-    | "mandatory_purchase_or_payoff"
-    | "other"
-  >;
-  residualRiskAllocation: Fact<"provider" | "lessee" | "shared">;
-  registrationTaxTreatment: Fact<"full" | "proportional">;
+    normal_end_mechanism: Fact[
+        Literal[
+            "return_to_provider",
+            "designate_third_party_buyer",
+            "mandatory_purchase_or_payoff",
+            "other",
+        ]
+    ]
+    residual_risk_allocation: Fact[Literal["provider", "lessee", "shared"]]
+    registration_tax_treatment: Fact[Literal["full", "proportional"]]
 
-  serviceArrangements: Fact<ServiceArrangement[]>;
-  baseCashFlowStream: NonEmptyArray<BaseCashFlowEvent>;
-  providerAdvertisedAggregate: Fact<ProviderAdvertisedAggregate>;
+    service_arrangements: Fact[tuple[ServiceArrangement, ...]]
+    base_cash_flow_stream: Annotated[
+        tuple[BaseCashFlowEvent, ...],
+        Field(min_length=1),
+    ]
+    provider_advertised_aggregate: Fact[ProviderAdvertisedAggregate]
 
-  comparison: ComparisonResults;
-};
+    comparison: ComparisonResults
 ```
 
 `providerFormLabel` is direct because classifying a Supported Leasing Form requires an actual provider-described form. Private-consumer eligibility, passenger-car scope, current availability, and admission outcome are absent: admission already guarantees them, so repeating them as always-true fields would be shallow data.
@@ -115,42 +155,60 @@ The provider-advertised monthly payment is not a field. It is the known amount o
 
 ### Vehicle Specification
 
-```ts
-type SharedVehicleSpecification = {
-  make: NonEmptyString;
-  model: NonEmptyString;
-  trim: Fact<NonEmptyString>;
-  modelYear: Fact<number>; // positive four-digit integer
-  firstRegistrationYear: Fact<number>; // positive four-digit integer
-  bodyStyle: Fact<
-    "hatchback" | "saloon" | "estate" | "suv" | "coupe" | "convertible" | "mpv" | "other"
-  >;
-  odometerKm: Fact<number>; // non-negative integer
-};
+```py
+FourDigitYear = Annotated[int, Field(ge=1000, le=9999)]
+NonNegativeInt = Annotated[int, Field(ge=0)]
 
-type CombustionVehicleSpecification = SharedVehicleSpecification & {
-  kind: "combustion";
-  fuelType: "gasoline" | "diesel";
-  fuelEfficiencyKmPerLiter: Fact<number>; // positive finite number
-};
 
-type BatteryElectricVehicleSpecification = SharedVehicleSpecification & {
-  kind: "battery_electric";
-  batteryCapacity: Fact<{
-    valueKwh: number; // positive finite number
-    basis: "gross" | "usable" | "not_stated";
-  }>;
-  wltpRangeKm: Fact<number>; // positive integer
-  maxChargingPower: Fact<{
-    valueKw: number; // positive finite number
-    kind: "ac" | "dc" | "not_stated";
-  }>;
-  chargingTime10To80Minutes: Fact<number>; // positive finite number
-};
+class SharedVehicleSpecification(CatalogueModel):
+    make: NonEmptyString
+    model: NonEmptyString
+    trim: Fact[NonEmptyString]
+    model_year: Fact[FourDigitYear]
+    first_registration_year: Fact[FourDigitYear]
+    body_style: Fact[
+        Literal[
+            "hatchback",
+            "saloon",
+            "estate",
+            "suv",
+            "coupe",
+            "convertible",
+            "mpv",
+            "other",
+        ]
+    ]
+    odometer_km: Fact[NonNegativeInt]
 
-type VehicleSpecification =
-  | CombustionVehicleSpecification
-  | BatteryElectricVehicleSpecification;
+
+class CombustionVehicleSpecification(SharedVehicleSpecification):
+    kind: Literal["combustion"]
+    fuel_type: Literal["gasoline", "diesel"]
+    fuel_efficiency_km_per_liter: Fact[PositiveFloat]
+
+
+class BatteryCapacity(CatalogueModel):
+    value_kwh: PositiveFloat
+    basis: Literal["gross", "usable", "not_stated"]
+
+
+class MaximumChargingPower(CatalogueModel):
+    value_kw: PositiveFloat
+    kind: Literal["ac", "dc", "not_stated"]
+
+
+class BatteryElectricVehicleSpecification(SharedVehicleSpecification):
+    kind: Literal["battery_electric"]
+    battery_capacity: Fact[BatteryCapacity]
+    wltp_range_km: Fact[PositiveInt]
+    max_charging_power: Fact[MaximumChargingPower]
+    charging_time_10_to_80_minutes: Fact[PositiveFloat]
+
+
+VehicleSpecification = Annotated[
+    CombustionVehicleSpecification | BatteryElectricVehicleSpecification,
+    Field(discriminator="kind"),
+]
 ```
 
 This is a shared schema, not a shared entity: every Offer embeds one complete Vehicle Specification. The discriminating `kind` makes impossible combinations unrepresentable—an electric specification cannot carry fuel efficiency and a combustion specification cannot carry battery fields. Make, model, vehicle kind, and combustion fuel type are direct because catalogue scope and admission guarantee them; the other v1 attributes are explicit about availability.
@@ -163,52 +221,60 @@ A known battery capacity or maximum charging power remains usable when its basis
 
 ### Service arrangements
 
-```ts
-type ServiceArrangement = {
-  category:
-    | "service"
-    | "maintenance"
-    | "insurance"
-    | "roadside_assistance"
-    | "tyres"
-    | "other";
-  treatment: "included" | "optional" | "required_external" | "excluded";
-  summary: NonEmptyString;
-  limits: Fact<NonEmptyString>;
-};
+```py
+class ServiceArrangement(CatalogueModel):
+    category: Literal[
+        "service",
+        "maintenance",
+        "insurance",
+        "roadside_assistance",
+        "tyres",
+        "other",
+    ]
+    treatment: Literal["included", "optional", "required_external", "excluded"]
+    summary: NonEmptyString
+    limits: Fact[NonEmptyString]
 ```
 
 The strings are normalized offer facts, not retained verbatim evidence. A known empty `serviceArrangements.value` means the designated source explicitly establishes that there are no disclosed arrangements; `not_stated` means it did not establish that.
 
 ## Base Cash-flow Stream
 
-```ts
-type BaseCashFlowEvent = {
-  key: NonEmptyString; // unique, stable within one Offer
-  kind:
-    | "initial_payment"
-    | "lease_payment"
-    | "establishment_fee"
-    | "delivery_fee"
-    | "deposit"
-    | "deposit_refund"
-    | "mandatory_purchase_or_payoff"
-    | "other";
-  direction: "payment" | "receipt";
-  amount: Fact<Dkk>;
-  schedule:
-    | {
-        kind: "one_off";
-        timing: "acceptance_to_handover" | "normal_completion_end";
-      }
-    | {
-        kind: "recurring";
-        everyMonths: number; // positive integer
-        occurrences: number; // positive integer
-        firstPaymentTiming: "acceptance_to_handover" | "after_handover";
-      };
-  refundability: Fact<"refundable" | "not_refundable">;
-};
+```py
+class OneOffSchedule(CatalogueModel):
+    kind: Literal["one_off"]
+    timing: Literal["acceptance_to_handover", "normal_completion_end"]
+
+
+class RecurringSchedule(CatalogueModel):
+    kind: Literal["recurring"]
+    every_months: PositiveInt
+    occurrences: PositiveInt
+    first_payment_timing: Literal["acceptance_to_handover", "after_handover"]
+
+
+CashFlowSchedule = Annotated[
+    OneOffSchedule | RecurringSchedule,
+    Field(discriminator="kind"),
+]
+
+
+class BaseCashFlowEvent(CatalogueModel):
+    key: NonEmptyString
+    kind: Literal[
+        "initial_payment",
+        "lease_payment",
+        "establishment_fee",
+        "delivery_fee",
+        "deposit",
+        "deposit_refund",
+        "mandatory_purchase_or_payoff",
+        "other",
+    ]
+    direction: Literal["payment", "receipt"]
+    amount: Fact[Dkk]
+    schedule: CashFlowSchedule
+    refundability: Fact[Literal["refundable", "not_refundable"]]
 ```
 
 An expected return of a refundable deposit is a separate `receipt` event. The original payment therefore contributes to upfront cash requirement, while payment and receipt net in nominal base outlay. `refundability` describes the payment's terms; it is `not_applicable` on receipts and ordinary non-deposit cash flows only when the concept genuinely does not apply.
@@ -221,118 +287,130 @@ There is deliberately no Exposure Scenario type. Excess-mileage rates, damage ch
 
 ## Materialized comparison results
 
-```ts
-type UnavailabilityReason =
-  | {
-      code: "fact_unavailable";
-      field: "annualMileageKm";
-      factState: UnavailableState;
-    }
-  | {
-      code: "fact_unavailable";
-      field: "normalEndMechanism";
-      factState: UnavailableState;
-    }
-  | {
-      code: "fact_unavailable";
-      field: "residualRiskAllocation";
-      factState: UnavailableState;
-    }
-  | {
-      code: "fact_unavailable";
-      field: "registrationTaxTreatment";
-      factState: UnavailableState;
-    }
-  | {
-      code: "fact_unavailable";
-      field: "baseCashFlowStream.amount" | "baseCashFlowStream.refundability";
-      eventKey: NonEmptyString;
-      factState: UnavailableState;
-    }
-  | {
-      code: "fact_unavailable";
-      field: "providerAdvertisedAggregate";
-      factState: UnavailableState;
-    }
-  | { code: "aggregate_mismatch" };
+```py
+class FactUnavailableReason(CatalogueModel):
+    code: Literal["fact_unavailable"]
+    field: Literal[
+        "annualMileageKm",
+        "normalEndMechanism",
+        "residualRiskAllocation",
+        "registrationTaxTreatment",
+        "providerAdvertisedAggregate",
+        "baseCashFlowStream.amount",
+        "baseCashFlowStream.refundability",
+    ]
+    fact_state: UnavailableState
+    event_key: NonEmptyString | None = None
 
-type MaterializedResult<T> =
-  | { state: "available"; value: T }
-  | { state: "unavailable"; reasons: NonEmptyArray<UnavailabilityReason> };
 
-type ComparisonResults = {
-  upfrontCashRequirement: MaterializedResult<{ amountDkk: Dkk }>;
-  nominalBaseOutlay: MaterializedResult<{ amountDkk: Dkk }>;
-  nominalMonthlyEquivalent: MaterializedResult<{ amountDkk: Dkk }>;
-  aggregateReconciliation: AggregateReconciliation;
-};
+class AggregateMismatchReason(CatalogueModel):
+    code: Literal["aggregate_mismatch"]
+
+
+UnavailabilityReason = Annotated[
+    FactUnavailableReason | AggregateMismatchReason,
+    Field(discriminator="code"),
+]
+
+
+class AvailableResult[T](CatalogueModel):
+    state: Literal["available"]
+    value: T
+
+
+class UnavailableResult(CatalogueModel):
+    state: Literal["unavailable"]
+    reasons: Annotated[tuple[UnavailabilityReason, ...], Field(min_length=1)]
+
+
+type MaterializedResult[T] = Annotated[
+    AvailableResult[T] | UnavailableResult,
+    Field(discriminator="state"),
+]
+
+
+class DkkAmount(CatalogueModel):
+    amount_dkk: Dkk
+
+
+class ComparisonResults(CatalogueModel):
+    upfront_cash_requirement: MaterializedResult[DkkAmount]
+    nominal_base_outlay: MaterializedResult[DkkAmount]
+    nominal_monthly_equivalent: MaterializedResult[DkkAmount]
+    aggregate_reconciliation: AggregateReconciliation
 ```
 
 Availability lives inside each result. This prevents illegal combinations such as a value beside a separate record saying the operation is blocked. Filtering on an ordinary Fact uses that Fact's own evidentiary state; it does not require a parallel operation index.
+
+`event_key` is deliberately optional in the type declaration. Model validation requires it exactly when `field` identifies a Base Cash-flow Event and forbids it for Offer-level fields. This small loss of static expressivity keeps the public reason model simple without weakening runtime validation.
 
 The frontend may format and explain these values, but it does not recalculate the authoritative result. It renders arithmetic from the Base Cash-flow Stream and term already present in the same Offer.
 
 ### Aggregate reconciliation
 
-```ts
-type ProviderAdvertisedAggregate = {
-  scope: "normal_completion_base_cash_flows";
-  amountDkk: Dkk;
-};
+```py
+class ProviderAdvertisedAggregate(CatalogueModel):
+    scope: Literal["normal_completion_base_cash_flows"]
+    amount_dkk: Dkk
 
-type AggregateReconciliation =
-  | { status: "not_stated" }
-  | {
-      status: "not_reconstructable";
-      reasons: NonEmptyArray<UnavailabilityReason>;
-    }
-  | {
-      status: "matching" | "within_rounding_tolerance";
-      providerAmountDkk: Dkk;
-      reconstructedAmountDkk: Dkk;
-      signedDifferenceDkk: SignedDkk;
-      toleranceDkk: Dkk;
-    }
-  | {
-      status: "mismatch";
-      providerAmountDkk: Dkk;
-      reconstructedAmountDkk: Dkk;
-      signedDifferenceDkk: SignedDkk;
-      toleranceDkk: Dkk;
-    };
+
+class AggregateNotStated(CatalogueModel):
+    status: Literal["not_stated"]
+
+
+class AggregateNotReconstructable(CatalogueModel):
+    status: Literal["not_reconstructable"]
+    reasons: Annotated[tuple[UnavailabilityReason, ...], Field(min_length=1)]
+
+
+class ReconciledAggregate(CatalogueModel):
+    status: Literal["matching", "within_rounding_tolerance", "mismatch"]
+    provider_amount_dkk: Dkk
+    reconstructed_amount_dkk: Dkk
+    signed_difference_dkk: SignedDkk
+    tolerance_dkk: Dkk
+
+
+AggregateReconciliation = Annotated[
+    AggregateNotStated | AggregateNotReconstructable | ReconciledAggregate,
+    Field(discriminator="status"),
+]
 ```
 
 A `mismatch` makes `nominalBaseOutlay` and `nominalMonthlyEquivalent` unavailable with reason `aggregate_mismatch`; it does not affect `upfrontCashRequirement`. Validation recomputes the reconstruction and every difference.
 
 ## Quarantined Candidate
 
-```ts
-type QuarantinedCandidate = {
-  offerIdentity: OfferIdentity;
-  providerId: ProviderId;
-  canonicalSourceUrl: HttpsUrl;
-  reasons: NonEmptyArray<QuarantineReason>;
-};
+```py
+EvidenceExcerpt = Annotated[str, Field(min_length=1, max_length=500)]
 
-type QuarantineReason = {
-  criterion:
-    | "offer_identity"
-    | "private_consumer_eligibility"
-    | "passenger_car_scope"
-    | "current_availability"
-    | "supported_leasing_form"
-    | "advertised_monthly_payment"
-    | "term_months"
-    | "candidate_shape";
-  state: "not_stated" | "unclear" | "conflicting";
-  code: NonEmptyString;
-  evidence: NonEmptyArray<QuarantineEvidence>;
-};
 
-type QuarantineEvidence = {
-  sourceUrl: HttpsUrl;
-  excerpt: NonEmptyString; // exact public first-party excerpt, max 500 characters
-};
+class QuarantineEvidence(CatalogueModel):
+    source_url: HttpsUrl
+    excerpt: EvidenceExcerpt
+
+
+class QuarantineReason(CatalogueModel):
+    criterion: Literal[
+        "offer_identity",
+        "private_consumer_eligibility",
+        "passenger_car_scope",
+        "current_availability",
+        "supported_leasing_form",
+        "advertised_monthly_payment",
+        "term_months",
+        "candidate_shape",
+    ]
+    state: Literal["not_stated", "unclear", "conflicting"]
+    code: NonEmptyString
+    evidence: Annotated[tuple[QuarantineEvidence, ...], Field(min_length=1)]
+
+
+class QuarantinedCandidate(CatalogueModel):
+    offer_identity: OfferIdentity
+    provider_id: ProviderId
+    canonical_source_url: HttpsUrl
+    reasons: Annotated[tuple[QuarantineReason, ...], Field(min_length=1)]
 ```
 
 The full Candidate, vehicle facts, cash flows, source documents, and adapter metadata are absent. Evidence is limited to the public designated first-party material needed to support the failed criterion. Multiple reasons may cite the same excerpt; compactness is preferred over adding a global evidence graph.
@@ -351,3 +429,5 @@ Pydantic field validation is not sufficient. `CatalogueDataset` performs one aft
 6. rejects the complete Dataset on any disagreement.
 
 The materialized values are therefore cache-like output inside one validated generation, never a second authority.
+
+Because this Markdown presents models in domain-reading order rather than Python dependency order, the eventual module resolves its forward references after all declarations with `CatalogueDataset.model_rebuild()`.
