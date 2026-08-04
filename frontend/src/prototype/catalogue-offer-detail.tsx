@@ -772,6 +772,61 @@ function AccessibleCashFlow({ offer }: { offer: CatalogueOffer }) {
   );
 }
 
+export function CompactCashFlowChart({ offer }: { offer: CatalogueOffer }) {
+  const data = cashFlowChartData(offer);
+  const unavailableCount = data.reduce(
+    (total, point) => total + point.unavailableCount,
+    0,
+  );
+  const chartMargin = { bottom: 12, left: 58, right: 12, top: 16 };
+
+  return (
+    <div>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <CashFlowLegend showCumulative={false} />
+        <span className="text-xs text-muted-foreground">
+          {offer.baseCashFlowStream.length} poster
+        </span>
+      </div>
+      <div className="mt-2" data-testid="bklit-comparison-cash-flow">
+        <ComposedChart
+          aspectRatio="4 / 3"
+          barGap={2}
+          data={data}
+          margin={chartMargin}
+          maxBarSize={10}
+          xDataKey="date"
+        >
+          <Grid horizontal numTicksRows={3} />
+          <SeriesBar dataKey="receipts" fill="var(--chart-3)" radius={3} />
+          <SeriesBar dataKey="payments" fill="var(--chart-2)" radius={3} />
+          <YAxis formatValue={dkkAxis} numTicks={3} />
+          <ChartTooltip
+            content={({ point }) => <CashFlowTooltip point={point} />}
+            showCrosshair={false}
+            showDatePill={false}
+          />
+        </ComposedChart>
+        <ContractDateAxis
+          data={data}
+          leftMargin={chartMargin.left}
+          rightMargin={chartMargin.right}
+          termMonths={offer.termMonths}
+        />
+      </div>
+      {unavailableCount > 0 && (
+        <p className="mt-3 flex gap-2 rounded-lg bg-secondary/65 p-3 text-xs leading-5 text-muted-foreground">
+          <CircleHelp aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
+          {unavailableCount === 1
+            ? "Ét beløb er ikke tilgængeligt."
+            : `${unavailableCount} beløb er ikke tilgængelige.`}
+        </p>
+      )}
+      <AccessibleCashFlow offer={offer} />
+    </div>
+  );
+}
+
 function CashFlowSection({
   mode,
   offer,

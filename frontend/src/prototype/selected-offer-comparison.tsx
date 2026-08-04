@@ -31,6 +31,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { CompactCashFlowChart } from "@/prototype/catalogue-offer-detail";
 import { PrototypeSwitcher } from "@/prototype/prototype-switcher";
 import type { ComparisonSearch } from "@/routes/prototype.compare";
 
@@ -226,103 +227,13 @@ function totalBlockers(offer: CatalogueOffer) {
     : `Blokeret af ${blockers.join("; ")}.`;
 }
 
-type CashFlowGroup = {
-  amount: CatalogueOffer["baseCashFlowStream"][number]["amount"];
-  direction: CatalogueOffer["baseCashFlowStream"][number]["direction"];
-  endMonth: number;
-  kind: CatalogueOffer["baseCashFlowStream"][number]["kind"];
-  occurrences: number;
-  startMonth: number;
-};
-
-function compactCashFlow(offer: CatalogueOffer): CashFlowGroup[] {
-  const groups: CashFlowGroup[] = [];
-  for (const event of offer.baseCashFlowStream) {
-    const previous = groups.at(-1);
-    const amountKey = JSON.stringify(event.amount);
-    const canExtend =
-      previous !== undefined &&
-      previous.kind === event.kind &&
-      previous.direction === event.direction &&
-      JSON.stringify(previous.amount) === amountKey &&
-      event.occursAtMonth === previous.endMonth + 1;
-
-    if (canExtend) {
-      previous.endMonth = event.occursAtMonth;
-      previous.occurrences += 1;
-      continue;
-    }
-
-    groups.push({
-      amount: event.amount,
-      direction: event.direction,
-      endMonth: event.occursAtMonth,
-      kind: event.kind,
-      occurrences: 1,
-      startMonth: event.occursAtMonth,
-    });
-  }
-  return groups;
-}
-
-function CashFlowSchedule({ offer }: { offer: CatalogueOffer }) {
-  const groups = compactCashFlow(offer);
-  return (
-    <div className="grid gap-3">
-      <p className="text-xs text-muted-foreground">
-        {offer.baseCashFlowStream.length} kronologiske posteringer · komprimeret
-        uden at slå beløb sammen
-      </p>
-      <ol className="grid gap-2">
-        {groups.map((group, index) => {
-          const period =
-            group.startMonth === group.endMonth
-              ? group.startMonth === 0
-                ? "Ved start"
-                : `Måned ${group.startMonth}`
-              : `Måned ${group.startMonth}–${group.endMonth}`;
-          const amount =
-            group.amount.state === "known"
-              ? currency.format(group.amount.value)
-              : unavailableText(group.amount.state);
-          return (
-            <li
-              className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-b border-border/70 pb-2 last:border-0"
-              key={`${group.kind}-${group.startMonth}-${index}`}
-            >
-              <span>
-                <span className="block text-xs font-bold text-muted-foreground">
-                  {period}
-                </span>
-                <span className="text-sm font-semibold">
-                  {cashFlowLabels[group.kind]}
-                  {group.occurrences > 1 ? ` × ${group.occurrences}` : ""}
-                </span>
-              </span>
-              <span
-                className={cn(
-                  "text-right text-sm font-bold",
-                  group.amount.state !== "known" && "text-muted-foreground",
-                )}
-              >
-                {group.direction === "receipt" ? "−" : "+"}
-                {amount}
-              </span>
-            </li>
-          );
-        })}
-      </ol>
-    </div>
-  );
-}
-
 function cashFlowValue(offer: CatalogueOffer): ComparisonValue {
   const key = JSON.stringify(offer.baseCashFlowStream);
   const unavailable = offer.baseCashFlowStream.some(
     (event) => event.amount.state !== "known",
   );
   return {
-    detail: <CashFlowSchedule offer={offer} />,
+    detail: <CompactCashFlowChart offer={offer} />,
     key,
     text: `${offer.baseCashFlowStream.length} kronologiske posteringer`,
     unavailable,
@@ -560,8 +471,11 @@ function ComparisonHeader({
 }) {
   const gridTemplateColumns = `clamp(8.5rem, 14vw, 12rem) repeat(${offers.length}, minmax(15rem, 1fr))`;
   return (
-    <div className="grid w-full border-b" style={{ gridTemplateColumns }}>
-      <div className="sticky left-0 z-20 grid content-end border-r bg-secondary p-3 text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground sm:p-4">
+    <div
+      className="sticky top-0 z-30 grid w-full border-b bg-card shadow-[0_8px_18px_-18px_rgba(0,0,0,0.8)]"
+      style={{ gridTemplateColumns }}
+    >
+      <div className="sticky left-0 z-40 grid content-end border-r bg-secondary p-3 text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground sm:p-4">
         Tilbud
       </div>
       {offers.map((offer) => (
@@ -648,15 +562,30 @@ function SectionBlock({
   );
 }
 
-function ComparisonViewport({ children }: { children: ReactNode }) {
+function ComparisonViewport({
+  children,
+  contained = false,
+}: {
+  children: ReactNode;
+  contained?: boolean;
+}) {
   return (
     <div
-      aria-label="Side om side-sammenligning af leasingtilbud"
-      className="overflow-x-auto rounded-2xl border bg-card shadow-sm"
-      role="region"
-      tabIndex={0}
+      className="min-w-0 max-w-full overflow-hidden rounded-2xl border bg-card shadow-sm"
+      style={{ contain: "layout paint" }}
     >
-      {children}
+      <div
+        aria-label="Side om side-sammenligning af leasingtilbud"
+        className={cn(
+          contained
+            ? "max-h-[calc(100vh-11rem)] min-h-[28rem] overflow-auto"
+            : "overflow-x-auto",
+        )}
+        role="region"
+        tabIndex={0}
+      >
+        {children}
+      </div>
     </div>
   );
 }
@@ -701,85 +630,47 @@ function PageFrame({
   addOffer,
   children,
   dataset,
-  description,
-  eyebrow,
   offers,
   selected,
-  title,
 }: {
   addOffer: (offerIdentity: string) => void;
   children: ReactNode;
   dataset: CatalogueDataset;
-  description: string;
-  eyebrow: string;
   offers: CatalogueOffer[];
   selected: string[];
-  title: string;
 }) {
   return (
     <div className="min-h-screen pb-32">
-      <header className="border-b bg-background/90 backdrop-blur">
-        <div className="mx-auto flex max-w-[96rem] items-center justify-between gap-4 px-4 py-4 sm:px-8">
-          <Link
-            className="flex items-center gap-3"
-            search={{
-              form: "all",
-              power: "all",
-              provider: "all",
-              q: "",
-              selected,
-              sort: "source",
-              variant: "d",
-            }}
-            to="/catalogue"
-          >
-            <span className="grid size-9 place-content-center rounded-full bg-primary text-primary-foreground">
-              <CarFront aria-hidden="true" className="size-5" />
-            </span>
-            <span>
-              <span className="block font-serif text-xl leading-none">Bilvalg</span>
-              <span className="mt-1 block text-[0.68rem] font-bold uppercase tracking-[0.16em] text-muted-foreground">
-                Sammenligning
-              </span>
-            </span>
-          </Link>
-          <p className="hidden text-right text-xs leading-5 text-muted-foreground md:block">
-            Katalog samlet {date.format(new Date(dataset.generatedAt))}
-            <br />
-            Tilbud kan være ændret eller udløbet siden
-          </p>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-[96rem] px-3 py-7 sm:px-6 sm:py-10 lg:px-8">
-        <Link
-          className="inline-flex items-center gap-2 text-sm font-bold text-primary underline-offset-4 hover:underline"
-          search={{
-            form: "all",
-            power: "all",
-            provider: "all",
-            q: "",
-            selected,
-            sort: "source",
-            variant: "d",
-          }}
-          to="/catalogue"
-        >
-          <ArrowLeft aria-hidden="true" className="size-4" />
-          Tilbage til leasingtilbud
-        </Link>
-
-        <div className="mt-7 grid items-end gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(19rem,28rem)]">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">
-              {eyebrow} · {offers.length} valgt
-            </p>
-            <h1 className="mt-2 max-w-4xl font-serif text-4xl leading-[0.96] tracking-[-0.035em] sm:text-6xl">
-              {title}
-            </h1>
-            <p className="mt-4 max-w-3xl text-sm leading-6 text-muted-foreground sm:text-base">
-              {description}
-            </p>
+      <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur">
+        <div className="mx-auto grid max-w-[96rem] items-center gap-3 px-3 py-3 sm:grid-cols-[minmax(0,1fr)_minmax(18rem,28rem)] sm:px-6 lg:px-8">
+          <div className="flex min-w-0 items-center gap-3">
+            <Link
+              aria-label="Tilbage til leasingtilbud"
+              className="grid size-9 shrink-0 place-content-center rounded-full border bg-card text-primary shadow-sm hover:bg-accent"
+              search={{
+                form: "all",
+                power: "all",
+                provider: "all",
+                q: "",
+                selected,
+                sort: "source",
+                variant: "d",
+              }}
+              to="/catalogue"
+            >
+              <ArrowLeft aria-hidden="true" className="size-4" />
+            </Link>
+            <div className="min-w-0">
+              <h1 className="font-serif text-2xl leading-none sm:text-3xl">
+                Sammenlign tilbud
+              </h1>
+              <p className="mt-1 truncate text-xs text-muted-foreground">
+                {offers.length} valgt · Katalog samlet {date.format(new Date(dataset.generatedAt))}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Tilbud kan være ændret eller udløbet siden
+              </p>
+            </div>
           </div>
           <AddOfferControl
             addOffer={addOffer}
@@ -787,17 +678,18 @@ function PageFrame({
             selected={selected}
           />
         </div>
+      </header>
 
-        <div className="mt-6 flex gap-2 rounded-xl bg-secondary/60 p-3 text-xs leading-5 text-muted-foreground sm:max-w-4xl">
+      <main className="mx-auto max-w-[96rem] px-3 py-3 sm:px-6 lg:px-8">
+        <div className="flex gap-2 px-1 text-xs leading-5 text-muted-foreground">
           <Info aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
           <p>
-            Ingen kolonne er en anbefaling. Ukendte værdier bliver aldrig nul,
-            og samme række betyder ikke, at tilbuddene gælder samme fysiske bil
-            eller konfiguration.
+            Ingen rangering · Ukendt er aldrig nul · Samme række er ikke samme
+            fysiske bil eller konfiguration
           </p>
         </div>
 
-        <div className="mt-8">{children}</div>
+        <div className="mt-3">{children}</div>
       </main>
     </div>
   );
@@ -824,13 +716,10 @@ function VariantA({
     <PageFrame
       addOffer={addOffer}
       dataset={dataset}
-      description="Én ubrudt kontrolflade holder hvert faktum på samme linje. Markeringen viser forskelle, men prioriterer ikke et tilbud."
-      eyebrow="Variant A · Kontrolmatrix"
       offers={offers}
       selected={search.selected}
-      title="Sammenlign uden at miste rækken"
     >
-      <ComparisonViewport>
+      <ComparisonViewport contained>
         <ComparisonHeader
           offers={offers}
           removeOffer={removeOffer}
@@ -858,11 +747,8 @@ function VariantB({
     <PageFrame
       addOffer={addOffer}
       dataset={dataset}
-      description="Sammenligningen følger aftalens forløb fra forpligtelsen ved udløb tilbage gennem betalingerne og bilen. Hver fase er en selvstændig, justeret flade."
-      eyebrow="Variant B · Aftalens faser"
       offers={offers}
       selected={search.selected}
-      title="Læs aftalen fra udløbet og tilbage"
     >
       <div className="grid gap-6">
         <ComparisonViewport>
@@ -927,11 +813,8 @@ function VariantC({
     <PageFrame
       addOffer={addOffer}
       dataset={dataset}
-      description="Forskelle og usikre oplysninger står først som et revisionsspor. Fælles fakta følger bagefter, så intet forsvinder fra sammenligningen."
-      eyebrow="Variant C · Afvigelsesregister"
       offers={offers}
       selected={search.selected}
-      title="Begynd dér, hvor tilbuddene skiller sig"
     >
       <div className="grid items-start gap-6 lg:grid-cols-[15rem_minmax(0,1fr)]">
         <aside className="rounded-2xl border bg-card p-5 lg:sticky lg:top-5">
@@ -1015,11 +898,8 @@ function EmptyComparison({
     <PageFrame
       addOffer={addOffer}
       dataset={dataset}
-      description="Tilføj mindst ét katalogtilbud. Valget skrives direkte i URL’en og kan deles eller åbnes igen."
-      eyebrow="Sammenligning"
       offers={[]}
       selected={selected}
-      title="Vælg tilbud at holde op mod hinanden"
     >
       <div className="grid min-h-72 place-content-center rounded-2xl border border-dashed bg-card text-center">
         <Plus aria-hidden="true" className="mx-auto size-8 text-primary" />
