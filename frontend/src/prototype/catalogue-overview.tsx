@@ -5,7 +5,7 @@ import {
   getCoreRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import {
   ArrowDownUp,
   ArrowLeft,
@@ -994,17 +994,27 @@ function SelectionTray({ search, patchSearch }: { search: CatalogueSearch; patch
         </span>
         <div>
           <p className="text-sm font-bold">{search.selected.length} tilbud valgt</p>
-          <p className="text-xs text-muted-foreground">Sammenligningen prototypes senere</p>
+          <p className="text-xs text-muted-foreground">Valget følger med i URL’en</p>
         </div>
       </div>
-      <Button
-        aria-label="Ryd valgte tilbud"
-        onClick={() => patchSearch({ selected: [] })}
-        size="icon"
-        variant="ghost"
-      >
-        <X className="size-4" />
-      </Button>
+      <div className="flex items-center gap-1">
+        <Button asChild size="sm">
+          <Link
+            search={{ selected: search.selected, variant: "a" }}
+            to="/prototype/compare"
+          >
+            Sammenlign
+          </Link>
+        </Button>
+        <Button
+          aria-label="Ryd valgte tilbud"
+          onClick={() => patchSearch({ selected: [] })}
+          size="icon"
+          variant="ghost"
+        >
+          <X className="size-4" />
+        </Button>
+      </div>
     </aside>
   );
 }

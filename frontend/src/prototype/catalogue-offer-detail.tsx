@@ -1270,14 +1270,24 @@ function SelectionStatus({
         <p className="text-sm font-bold">{search.selected.length} tilbud valgt</p>
         <p className="text-xs text-muted-foreground">Valget følger med i URL’en</p>
       </div>
-      <Button
-        aria-label="Ryd valgte tilbud"
-        onClick={() => patchSearch({ selected: [] })}
-        size="icon"
-        variant="ghost"
-      >
-        <X aria-hidden="true" />
-      </Button>
+      <div className="flex items-center gap-1">
+        <Button asChild size="sm">
+          <Link
+            search={{ selected: search.selected, variant: "a" }}
+            to="/prototype/compare"
+          >
+            Sammenlign
+          </Link>
+        </Button>
+        <Button
+          aria-label="Ryd valgte tilbud"
+          onClick={() => patchSearch({ selected: [] })}
+          size="icon"
+          variant="ghost"
+        >
+          <X aria-hidden="true" />
+        </Button>
+      </div>
     </aside>
   );
 }
