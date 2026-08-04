@@ -618,9 +618,6 @@ function VisualOfferCard({
             <h2 className="font-serif text-2xl leading-tight">
               {vehicleName(offer)}
             </h2>
-            <p className="mt-2 text-sm text-muted-foreground">
-              {endMechanism(offer)}
-            </p>
           </div>
           <SelectionControl
             compact
@@ -646,12 +643,26 @@ function VisualOfferCard({
               quiet
               value={money(offer.totalDkk)}
             />
+            <Metric
+              label="Aftaleperiode"
+              quiet
+              value={`${offer.termMonths} mdr.`}
+            />
+            <Metric
+              label="Årligt kilometertal"
+              quiet
+              value={mileage(offer)}
+            />
+            <div className="col-span-2 border-t pt-3">
+              <Metric
+                label="Ved aftalens udløb"
+                quiet
+                value={endMechanism(offer)}
+              />
+            </div>
           </dl>
         </div>
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-xs text-muted-foreground">
-            {offer.termMonths} mdr. · {mileage(offer)}
-          </span>
+        <div className="flex justify-end">
           <OfferLink label="Åbn tilbud" offer={offer} />
         </div>
       </div>
