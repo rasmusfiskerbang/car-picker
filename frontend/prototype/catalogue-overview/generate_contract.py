@@ -482,11 +482,27 @@ def stress_dataset() -> CatalogueDataset:
             {"id": "terminalen", "name": "Terminalen", "url": "https://terminalen.dk", "status": "active"},
             {
                 "id": "example-deferred",
-                "name": "Eksempeludbyder (prototype)",
+                "name": "Nordisk Privatleasing (prototype)",
                 "url": "https://example.com",
                 "status": "inactive",
                 "reason": "deferred",
-                "explanation": "Illustrativ inaktiv Provider i prototypens stressdata.",
+                "explanation": "Kildeadgangen er endnu ikke vurderet, så udbyderen er udskudt til en senere katalogudgivelse.",
+            },
+            {
+                "id": "example-ineligible",
+                "name": "Pendlerbil Erhverv (prototype)",
+                "url": "https://example.com",
+                "status": "inactive",
+                "reason": "ineligible",
+                "explanation": "Udbyderen annoncerer ikke leasingtilbud til private og falder derfor uden for katalogets erklærede omfang.",
+            },
+            {
+                "id": "example-blocked",
+                "name": "Bybil Leasing (prototype)",
+                "url": "https://example.com",
+                "status": "inactive",
+                "reason": "blocked",
+                "explanation": "Den offentlige kilde må ikke indsamles automatisk, så udbyderen deltager ikke i denne katalogudgivelse.",
             },
         ],
         "offers": [catalogue_offer(index) for index in range(24)],
@@ -504,6 +520,42 @@ def stress_dataset() -> CatalogueDataset:
                             {
                                 "sourceUrl": "https://example.com/offers/quarantined",
                                 "excerpt": "12 måneder / 24 måneder",
+                            }
+                        ],
+                    }
+                ],
+            },
+            {
+                "offerIdentity": "fleasing:prototype-quarantine:config-1",
+                "providerId": "fleasing",
+                "canonicalSourceUrl": "https://example.com/offers/quarantined-2",
+                "reasons": [
+                    {
+                        "criterion": "current_availability",
+                        "state": "unclear",
+                        "code": "unclear-current-availability",
+                        "evidence": [
+                            {
+                                "sourceUrl": "https://example.com/offers/quarantined-2",
+                                "excerpt": "Kontakt os for at høre, om bilen stadig er ledig.",
+                            }
+                        ],
+                    }
+                ],
+            },
+            {
+                "offerIdentity": "terminalen:prototype-quarantine:config-0",
+                "providerId": "terminalen",
+                "canonicalSourceUrl": "https://example.com/offers/quarantined-3",
+                "reasons": [
+                    {
+                        "criterion": "leasing_form",
+                        "state": "not_stated",
+                        "code": "missing-leasing-form",
+                        "evidence": [
+                            {
+                                "sourceUrl": "https://example.com/offers/quarantined-3",
+                                "excerpt": "Leasingformen er ikke oplyst.",
                             }
                         ],
                     }
