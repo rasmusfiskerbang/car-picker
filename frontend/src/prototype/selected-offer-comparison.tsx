@@ -7,7 +7,6 @@ import {
   CarFront,
   CircleAlert,
   ExternalLink,
-  Info,
   Plus,
   ReceiptText,
   Scale,
@@ -46,11 +45,6 @@ const currency = new Intl.NumberFormat("da-DK", {
 });
 const decimal = new Intl.NumberFormat("da-DK", { maximumFractionDigits: 1 });
 const integer = new Intl.NumberFormat("da-DK");
-const date = new Intl.DateTimeFormat("da-DK", {
-  day: "numeric",
-  month: "long",
-  year: "numeric",
-});
 const chartDate = new Intl.DateTimeFormat("da-DK", {
   day: "numeric",
   month: "short",
@@ -121,7 +115,6 @@ type ComparisonRow = {
 };
 
 type ComparisonSection = {
-  description: string;
   key: string;
   rows: ComparisonRow[];
   title: string;
@@ -476,7 +469,6 @@ function comparisonSections(
 
   return [
     {
-      description: "Udbyderens beløb står ved siden af katalogets beregninger.",
       key: "money",
       title: "Beløb og totaler",
       rows: [
@@ -513,7 +505,6 @@ function comparisonSections(
       ],
     },
     {
-      description: "Normal afslutning og restværdirisiko læses før leasingformen.",
       key: "end",
       title: "Udløb og forpligtelser",
       rows: [
@@ -533,7 +524,6 @@ function comparisonSections(
       ],
     },
     {
-      description: "Forskellige løbetider og kilometergrænser bevares som egne fakta.",
       key: "agreement",
       title: "Aftalens rammer",
       rows: [
@@ -543,7 +533,6 @@ function comparisonSections(
       ],
     },
     {
-      description: "Tilbuddenes normale betalingsstrømme vises kronologisk på samme akser.",
       key: "cashflow",
       title: "Betalingsstrøm",
       rows: [
@@ -555,7 +544,6 @@ function comparisonSections(
       ],
     },
     {
-      description: "Sammenlignelige køretøjsfakta uden at antage fælles bilidentitet.",
       key: "vehicle",
       title: "Køretøjet",
       rows: [
@@ -595,7 +583,6 @@ function comparisonSections(
       ],
     },
     {
-      description: "Tilbuddet kan genåbnes og kontrolleres hos udbyderen.",
       key: "source",
       title: "Udbyder og kilde",
       rows: [
@@ -691,11 +678,6 @@ function ComparisonRowView({
     >
       <div className="sticky left-0 z-10 border-r bg-card p-3 text-xs font-bold uppercase tracking-[0.08em] text-muted-foreground sm:p-4">
         {row.label}
-        {differs && !quiet && (
-          <span className="mt-2 block w-fit rounded-full bg-secondary px-2 py-1 text-[0.62rem] text-secondary-foreground">
-            Forskellig
-          </span>
-        )}
       </div>
       {row.sharedDetail !== undefined ? (
         <div
@@ -740,9 +722,6 @@ function SectionBlock({
         <h2 className="font-serif text-lg" id={`section-${section.key}`}>
           {section.title}
         </h2>
-        <p className="mt-0.5 max-w-3xl text-xs text-background/70">
-          {section.description}
-        </p>
       </div>
       {section.rows.map((row) => (
         <ComparisonRowView
@@ -855,13 +834,11 @@ function PageFrame({
   addOffer,
   children,
   dataset,
-  offers,
   selected,
 }: {
   addOffer: (offerIdentity: string) => void;
   children: ReactNode;
   dataset: CatalogueDataset;
-  offers: CatalogueOffer[];
   selected: string[];
 }) {
   return (
@@ -885,17 +862,9 @@ function PageFrame({
             >
               <ArrowLeft aria-hidden="true" className="size-4" />
             </Link>
-            <div className="min-w-0">
-              <h1 className="font-serif text-2xl leading-none sm:text-3xl">
-                Sammenlign tilbud
-              </h1>
-              <p className="mt-1 truncate text-xs text-muted-foreground">
-                {offers.length} valgt · Katalog samlet {date.format(new Date(dataset.generatedAt))}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Tilbud kan være ændret eller udløbet siden
-              </p>
-            </div>
+            <h1 className="font-serif text-2xl leading-none sm:text-3xl">
+              Sammenlign tilbud
+            </h1>
           </div>
           <AddOfferControl
             addOffer={addOffer}
@@ -906,15 +875,7 @@ function PageFrame({
       </header>
 
       <main className="mx-auto max-w-[96rem] px-3 py-3 sm:px-6 lg:px-8">
-        <div className="flex gap-2 px-1 text-xs leading-5 text-muted-foreground">
-          <Info aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-          <p>
-            Ingen rangering · Ukendt er aldrig nul · Samme række er ikke samme
-            fysiske bil eller konfiguration
-          </p>
-        </div>
-
-        <div className="mt-3">{children}</div>
+        {children}
       </main>
     </div>
   );
@@ -939,7 +900,6 @@ function VariantA({
     <PageFrame
       addOffer={addOffer}
       dataset={dataset}
-      offers={offers}
       selected={search.selected}
     >
       <PageComparisonViewport
@@ -971,7 +931,6 @@ function VariantB({
     <PageFrame
       addOffer={addOffer}
       dataset={dataset}
-      offers={offers}
       selected={search.selected}
     >
       <div className="grid gap-6">
@@ -1035,7 +994,6 @@ function VariantC({
     <PageFrame
       addOffer={addOffer}
       dataset={dataset}
-      offers={offers}
       selected={search.selected}
     >
       <div className="grid items-start gap-6 lg:grid-cols-[15rem_minmax(0,1fr)]">
@@ -1119,7 +1077,6 @@ function EmptyComparison({
     <PageFrame
       addOffer={addOffer}
       dataset={dataset}
-      offers={[]}
       selected={selected}
     >
       <div className="grid min-h-72 place-content-center rounded-2xl border border-dashed bg-card text-center">
