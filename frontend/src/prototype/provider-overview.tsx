@@ -181,23 +181,38 @@ function Count({ children, label }: { children: number; label: string }) {
   );
 }
 
-function Intro({ dataset }: { dataset: CatalogueDataset }) {
+function Intro({
+  concise = false,
+  dataset,
+}: {
+  concise?: boolean;
+  dataset: CatalogueDataset;
+}) {
   const active = dataset.providers.filter(
     (provider) => provider.status === "active",
   ).length;
   return (
     <div className="grid gap-6 border-b border-border pb-8 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
       <div>
-        <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">
-          Hvem kataloget omfatter
-        </p>
-        <h1 className="mt-3 max-w-4xl font-serif text-4xl leading-tight sm:text-6xl">
+        {!concise && (
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">
+            Hvem kataloget omfatter
+          </p>
+        )}
+        <h1
+          className={cn(
+            "max-w-4xl font-serif text-4xl leading-tight sm:text-6xl",
+            !concise && "mt-3",
+          )}
+        >
           Udbydere i det aktive katalog
         </h1>
-        <p className="mt-4 max-w-3xl text-base leading-7 text-muted-foreground sm:text-lg">
-          Se hvilke udbydere der deltager, hvilke der ikke gør, og hvor mange
-          dokumenterede katalogtilbud der findes fra hver.
-        </p>
+        {!concise && (
+          <p className="mt-4 max-w-3xl text-base leading-7 text-muted-foreground sm:text-lg">
+            Se hvilke udbydere der deltager, hvilke der ikke gør, og hvor mange
+            dokumenterede katalogtilbud der findes fra hver.
+          </p>
+        )}
       </div>
       <div className="flex gap-8 lg:pb-1">
         <Count label="aktive udbydere">{active}</Count>
@@ -251,21 +266,14 @@ function MobileProviderRows({ facts }: { facts: ProviderFacts[] }) {
 function VariantA({ dataset, facts }: VariantProps) {
   return (
     <PageFrame dataset={dataset}>
-      <Intro dataset={dataset} />
+      <Intro concise dataset={dataset} />
       <section aria-labelledby="registry-table-heading" className="mt-8">
-        <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h2 className="font-serif text-3xl" id="registry-table-heading">
-              Udbyderregister
-            </h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Alle registrerede udbydere, aktive og inaktive.
-            </p>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Status er gældende for dette katalogdatasæt
-          </p>
-        </div>
+        <h2
+          className="mb-4 font-serif text-3xl"
+          id="registry-table-heading"
+        >
+          Udbyderregister
+        </h2>
 
         <MobileProviderRows facts={facts} />
         <div className="hidden overflow-hidden rounded-2xl border border-border bg-card shadow-sm md:block">
@@ -324,7 +332,6 @@ function VariantA({ dataset, facts }: VariantProps) {
           </table>
         </div>
       </section>
-      <div className="mt-8"><ScopeNotice generatedAt={dataset.generatedAt} /></div>
     </PageFrame>
   );
 }
