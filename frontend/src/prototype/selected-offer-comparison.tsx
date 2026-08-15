@@ -3,20 +3,17 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
   ArrowLeft,
-  ArrowUpRight,
   CalendarRange,
   CarFront,
   CircleAlert,
   ExternalLink,
-  ImageOff,
   Info,
   Plus,
   ReceiptText,
   Scale,
   ShieldQuestion,
-  X,
 } from "lucide-react";
-import { type ReactNode, type UIEvent, useRef, useState } from "react";
+import { type ReactNode, type UIEvent, useRef } from "react";
 
 import {
   type CatalogueDataset,
@@ -38,13 +35,6 @@ import {
 } from "@/components/charts/tooltip/tooltip-content";
 import { YAxis } from "@/components/charts/y-axis";
 import { Badge } from "@/components/ui/badge";
-import { Button, buttonVariants } from "@/components/ui/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { PrototypeSwitcher } from "@/prototype/prototype-switcher";
 import type { ComparisonSearch } from "@/routes/prototype.compare";
@@ -638,149 +628,48 @@ function rowNeedsAttention(row: ComparisonRow) {
   return rowDiffers(row) || row.values.some((value) => value.unavailable);
 }
 
-function OfferImage({ offer }: { offer: CatalogueOffer }) {
-  const [failed, setFailed] = useState(false);
-  const source = offer.imageUrls[0];
-  if (source === undefined || failed) {
-    return (
-      <div className="grid aspect-[16/9] place-content-center rounded-xl bg-secondary text-muted-foreground">
-        <span className="grid justify-items-center gap-2 text-xs font-bold">
-          <ImageOff aria-hidden="true" className="size-7" />
-          Intet billede
-        </span>
-      </div>
-    );
-  }
-  return (
-    <img
-      alt=""
-      className="aspect-[16/9] w-full rounded-xl bg-secondary object-cover"
-      onError={() => setFailed(true)}
-      referrerPolicy="no-referrer"
-      src={source}
-    />
-  );
-}
-
 function OfferHeader({
-  dataset,
   offer,
-  onRemove,
   selected,
 }: {
-  dataset: CatalogueDataset;
   offer: CatalogueOffer;
-  onRemove: () => void;
   selected: string[];
 }) {
-  const monthly = monthlyPayment(offer);
   return (
-    <article className="grid h-full content-start gap-2 bg-card p-3 sm:p-4">
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            className="min-w-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-            type="button"
-          >
-            <p className="truncate text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">
-              {providerName(dataset, offer)} · {leasingLabels[offer.leasingForm]}
-            </p>
-            <h2 className="mt-1 line-clamp-2 font-serif text-lg leading-tight underline decoration-border underline-offset-4">
-              {vehicleName(offer)}
-            </h2>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {monthly === null
-                ? "Månedsydelse ikke oplyst"
-                : `${currency.format(monthly)}/md.`} · {offer.termMonths} mdr.
-            </p>
-          </button>
-        </TooltipTrigger>
-        <TooltipContent
-          className="w-72 border bg-card p-3 text-card-foreground shadow-xl"
-          side="bottom"
-          sideOffset={8}
-        >
-          <OfferImage offer={offer} />
-          <div className="mt-3">
-            <p className="text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">
-              {providerName(dataset, offer)}
-            </p>
-            <p className="mt-1 font-serif text-lg leading-tight">
-              {vehicleName(offer)}
-            </p>
-            <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 border-t pt-3 text-xs">
-              <div>
-                <dt className="text-muted-foreground">Ved start</dt>
-                <dd className="font-bold">{money(upfrontPayment(offer))}</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">Beregnet total</dt>
-                <dd className="font-bold">{money(offer.totalDkk)}</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">Kilometer</dt>
-                <dd className="font-bold">{mileage(offer).text}</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">Ved udløb</dt>
-                <dd className="font-bold">{endMechanism(offer)}</dd>
-              </div>
-            </dl>
-          </div>
-        </TooltipContent>
-      </Tooltip>
-      <div className="flex flex-wrap gap-2">
-        <Link
-          className={buttonVariants({ size: "sm", variant: "outline" })}
-          params={{ offerIdentity: offer.offerIdentity }}
-          search={{ selected, variant: "c" }}
-          to="/prototype/offers/$offerIdentity"
-        >
-          Se tilbud
-          <ArrowUpRight aria-hidden="true" />
-        </Link>
-        <Button onClick={onRemove} size="sm" variant="ghost">
-          <X aria-hidden="true" />
-          Fjern
-        </Button>
-      </div>
-    </article>
+    <Link
+      className="block h-full bg-card p-3 font-serif text-lg leading-tight underline-offset-4 hover:bg-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:p-4"
+      params={{ offerIdentity: offer.offerIdentity }}
+      search={{ selected, variant: "c" }}
+      to="/prototype/offers/$offerIdentity"
+    >
+      {vehicleName(offer)}
+    </Link>
   );
 }
 
 function ComparisonHeader({
-  dataset,
   offers,
-  removeOffer,
   selected,
 }: {
-  dataset: CatalogueDataset;
   offers: CatalogueOffer[];
-  removeOffer: (offerIdentity: string) => void;
   selected: string[];
 }) {
   const gridTemplateColumns = `clamp(8.5rem, 14vw, 12rem) repeat(${offers.length}, minmax(15rem, 1fr))`;
   return (
-    <TooltipProvider delayDuration={180}>
+    <div
+      className="grid w-full border-b bg-card shadow-[0_8px_18px_-18px_rgba(0,0,0,0.8)]"
+      style={{ gridTemplateColumns }}
+    >
       <div
-        className="grid w-full border-b bg-card shadow-[0_8px_18px_-18px_rgba(0,0,0,0.8)]"
-        style={{ gridTemplateColumns }}
-      >
-        <div className="sticky left-0 z-40 grid content-end border-r bg-secondary p-3 text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground sm:p-4">
-          Tilbud
+        aria-hidden="true"
+        className="sticky left-0 z-40 border-r bg-secondary"
+      />
+      {offers.map((offer) => (
+        <div className="border-r last:border-r-0" key={offer.offerIdentity}>
+          <OfferHeader offer={offer} selected={selected} />
         </div>
-        {offers.map((offer) => (
-          <div className="border-r last:border-r-0" key={offer.offerIdentity}>
-            <OfferHeader
-              dataset={dataset}
-              offer={offer}
-              onRemove={() => removeOffer(offer.offerIdentity)}
-              selected={selected}
-            />
-          </div>
-        ))}
-      </div>
-    </TooltipProvider>
+      ))}
+    </div>
   );
 }
 
@@ -1035,7 +924,6 @@ type VariantProps = {
   addOffer: (offerIdentity: string) => void;
   dataset: CatalogueDataset;
   offers: CatalogueOffer[];
-  removeOffer: (offerIdentity: string) => void;
   search: ComparisonSearch;
   sections: ComparisonSection[];
 };
@@ -1044,7 +932,6 @@ function VariantA({
   addOffer,
   dataset,
   offers,
-  removeOffer,
   search,
   sections,
 }: VariantProps) {
@@ -1058,9 +945,7 @@ function VariantA({
       <PageComparisonViewport
         header={
           <ComparisonHeader
-            dataset={dataset}
             offers={offers}
-            removeOffer={removeOffer}
             selected={search.selected}
           />
         }
@@ -1077,7 +962,6 @@ function VariantB({
   addOffer,
   dataset,
   offers,
-  removeOffer,
   search,
   sections,
 }: VariantProps) {
@@ -1093,9 +977,7 @@ function VariantB({
       <div className="grid gap-6">
         <ComparisonViewport>
           <ComparisonHeader
-            dataset={dataset}
             offers={offers}
-            removeOffer={removeOffer}
             selected={search.selected}
           />
         </ComparisonViewport>
@@ -1141,7 +1023,6 @@ function VariantC({
   addOffer,
   dataset,
   offers,
-  removeOffer,
   search,
   sections,
 }: VariantProps) {
@@ -1184,9 +1065,7 @@ function VariantC({
         <div className="grid gap-6">
           <ComparisonViewport>
             <ComparisonHeader
-              dataset={dataset}
               offers={offers}
-              removeOffer={removeOffer}
               selected={search.selected}
             />
           </ComparisonViewport>
@@ -1275,12 +1154,6 @@ export function SelectedOfferComparisonPrototype({
     if (selected.includes(offerIdentity)) return;
     patchSearch({ selected: [...selected, offerIdentity] });
   };
-  const removeOffer = (offerIdentity: string) => {
-    patchSearch({
-      selected: selected.filter((identity) => identity !== offerIdentity),
-    });
-  };
-
   if (offers.length === 0) {
     return (
       <>
@@ -1303,7 +1176,6 @@ export function SelectedOfferComparisonPrototype({
     addOffer,
     dataset,
     offers,
-    removeOffer,
     search,
     sections,
   };
