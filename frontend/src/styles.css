@@ -164,6 +164,18 @@
   }
 }
 
+.application-shell-content [data-prototype-masthead],
+.application-shell-content [data-prototype-selection-tray],
+.application-shell-content [aria-label="Skift prototypevariant"] {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .application-shell-switcher [aria-label="Skift prototypevariant"] {
+    bottom: 5.25rem;
+  }
+}
+
 .dark {
   --chart-1: oklch(1 0 none);
   --chart-2: oklch(0.73 0 none);

@@ -139,13 +139,16 @@ function providerFor(dataset: CatalogueDataset, offer: CatalogueOffer) {
 
 function Masthead({
   generatedAt,
-  selected,
+  search,
 }: {
   generatedAt: string;
-  selected: string[];
+  search: OfferDetailSearch;
 }) {
   return (
-    <header className="border-b border-border/80 bg-background/90 backdrop-blur">
+    <header
+      className="border-b border-border/80 bg-background/90 backdrop-blur"
+      data-prototype-masthead
+    >
       <div className="mx-auto flex max-w-[92rem] items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
         <Link
           className="flex items-center gap-3"
@@ -154,7 +157,8 @@ function Masthead({
             power: "all",
             provider: "all",
             q: "",
-            selected,
+            selected: search.selected,
+            shell: search.shell,
             sort: "source",
             variant: "d",
           }}
@@ -180,7 +184,7 @@ function Masthead({
   );
 }
 
-function BackToCatalogue({ selected }: { selected: string[] }) {
+function BackToCatalogue({ search }: { search: OfferDetailSearch }) {
   return (
     <Link
       className="inline-flex items-center gap-2 text-sm font-bold text-primary underline-offset-4 hover:underline"
@@ -189,7 +193,8 @@ function BackToCatalogue({ selected }: { selected: string[] }) {
         power: "all",
         provider: "all",
         q: "",
-        selected,
+        selected: search.selected,
+        shell: search.shell,
         sort: "source",
         variant: "d",
       }}
@@ -1015,9 +1020,9 @@ type VariantProps = {
 function VariantA({ dataset, offer, search, toggleSelected }: VariantProps) {
   return (
     <div>
-      <Masthead generatedAt={dataset.generatedAt} selected={search.selected} />
+      <Masthead generatedAt={dataset.generatedAt} search={search} />
       <main className="mx-auto max-w-[92rem] px-4 pb-36 pt-6 sm:px-6 lg:px-8 lg:pt-9">
-        <BackToCatalogue selected={search.selected} />
+        <BackToCatalogue search={search} />
         <div className="mt-6 grid items-start gap-8 lg:grid-cols-[minmax(0,1.35fr)_minmax(21rem,0.65fr)] xl:gap-12">
           <OfferGallery offer={offer} />
           <aside className="lg:sticky lg:top-6">
@@ -1113,9 +1118,9 @@ function TimelineSummary({ offer }: { offer: CatalogueOffer }) {
 function VariantB({ dataset, offer, search, toggleSelected }: VariantProps) {
   return (
     <div>
-      <Masthead generatedAt={dataset.generatedAt} selected={search.selected} />
+      <Masthead generatedAt={dataset.generatedAt} search={search} />
       <main className="mx-auto max-w-[100rem] px-4 pb-36 pt-6 sm:px-6 lg:px-8 lg:pt-9">
-        <BackToCatalogue selected={search.selected} />
+        <BackToCatalogue search={search} />
         <header className="mt-6 grid gap-5 lg:grid-cols-[1fr_auto] lg:items-end">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">
@@ -1184,9 +1189,9 @@ function VariantB({ dataset, offer, search, toggleSelected }: VariantProps) {
 function VariantC({ dataset, offer, search, toggleSelected }: VariantProps) {
   return (
     <div>
-      <Masthead generatedAt={dataset.generatedAt} selected={search.selected} />
+      <Masthead generatedAt={dataset.generatedAt} search={search} />
       <main className="mx-auto max-w-[82rem] px-4 pb-36 pt-6 sm:px-6 lg:px-8 lg:pt-9">
-        <BackToCatalogue selected={search.selected} />
+        <BackToCatalogue search={search} />
         <Card className="mt-6 overflow-hidden">
           <div className="grid lg:grid-cols-[0.9fr_1.1fr]">
             <div className="bg-secondary p-4 sm:p-6">
@@ -1262,7 +1267,10 @@ function SelectionStatus({
   if (search.selected.length === 0) return null;
 
   return (
-    <aside className="fixed bottom-20 right-4 z-40 flex max-w-[calc(100%-2rem)] items-center gap-3 rounded-2xl border border-primary/25 bg-card/95 p-3 shadow-xl backdrop-blur sm:right-6">
+    <aside
+      className="fixed bottom-20 right-4 z-40 flex max-w-[calc(100%-2rem)] items-center gap-3 rounded-2xl border border-primary/25 bg-card/95 p-3 shadow-xl backdrop-blur sm:right-6"
+      data-prototype-selection-tray
+    >
       <span className="grid size-9 place-content-center rounded-full bg-primary text-primary-foreground">
         <Check aria-hidden="true" className="size-4" />
       </span>
@@ -1273,7 +1281,11 @@ function SelectionStatus({
       <div className="flex items-center gap-1">
         <Button asChild size="sm">
           <Link
-            search={{ selected: search.selected, variant: "a" }}
+            search={{
+              selected: search.selected,
+              shell: search.shell,
+              variant: "a",
+            }}
             to="/prototype/compare"
           >
             Sammenlign

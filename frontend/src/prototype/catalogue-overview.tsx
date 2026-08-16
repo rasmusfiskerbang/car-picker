@@ -222,7 +222,10 @@ function MobileFilters(props: Parameters<typeof FilterFields>[0]) {
 
 function PrototypeMasthead({ generatedAt }: { generatedAt: string }) {
   return (
-    <header className="border-b border-border/80 bg-background/85 backdrop-blur">
+    <header
+      className="border-b border-border/80 bg-background/85 backdrop-blur"
+      data-prototype-masthead
+    >
       <div className="mx-auto flex max-w-[92rem] items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
         <div className="flex items-center gap-3">
           <span className="grid size-9 place-content-center rounded-full bg-primary text-primary-foreground">
@@ -987,7 +990,10 @@ type VariantProps = {
 function SelectionTray({ search, patchSearch }: { search: CatalogueSearch; patchSearch: PatchSearch }) {
   if (search.selected.length === 0) return null;
   return (
-    <aside className="fixed bottom-20 left-1/2 z-40 flex w-[min(calc(100%-2rem),34rem)] -translate-x-1/2 items-center justify-between gap-4 rounded-2xl border border-primary/25 bg-card/95 p-3 shadow-xl backdrop-blur">
+    <aside
+      className="fixed bottom-20 left-1/2 z-40 flex w-[min(calc(100%-2rem),34rem)] -translate-x-1/2 items-center justify-between gap-4 rounded-2xl border border-primary/25 bg-card/95 p-3 shadow-xl backdrop-blur"
+      data-prototype-selection-tray
+    >
       <div className="flex items-center gap-3">
         <span className="grid size-9 place-content-center rounded-full bg-primary text-primary-foreground">
           <Check className="size-4" />
@@ -1000,7 +1006,11 @@ function SelectionTray({ search, patchSearch }: { search: CatalogueSearch; patch
       <div className="flex items-center gap-1">
         <Button asChild size="sm">
           <Link
-            search={{ selected: search.selected, variant: "a" }}
+            search={{
+              selected: search.selected,
+              shell: search.shell,
+              variant: "a",
+            }}
             to="/prototype/compare"
           >
             Sammenlign

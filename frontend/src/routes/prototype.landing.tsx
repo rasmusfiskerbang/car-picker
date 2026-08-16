@@ -5,9 +5,12 @@ import { z } from "zod";
 import { catalogueDatasetQuery } from "@/catalogue-data";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LandingPagePrototype } from "@/prototype/landing-page";
+import { optionalApplicationShellSearch } from "@/prototype/application-shell-state";
 
 const landingSearchSchema = z.object({
+  ...optionalApplicationShellSearch,
   variant: z.enum(["a", "b", "c"]).catch("a"),
+  selected: z.array(z.string()).catch([]),
 });
 
 export type LandingSearch = z.infer<typeof landingSearchSchema>;
@@ -15,7 +18,12 @@ export type LandingSearch = z.infer<typeof landingSearchSchema>;
 function LandingPage() {
   const { data } = useSuspenseQuery(catalogueDatasetQuery);
   const search = Route.useSearch();
-  return <LandingPagePrototype dataset={data} search={search} />;
+  return (
+    <LandingPagePrototype
+      dataset={data}
+      search={search.shell === undefined ? search : { ...search, variant: "b" }}
+    />
+  );
 }
 
 function LandingPending() {

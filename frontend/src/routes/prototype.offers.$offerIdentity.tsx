@@ -5,8 +5,10 @@ import { z } from "zod";
 import { catalogueDatasetQuery } from "@/catalogue-data";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CatalogueOfferDetailPrototype } from "@/prototype/catalogue-offer-detail";
+import { optionalApplicationShellSearch } from "@/prototype/application-shell-state";
 
 const detailSearchSchema = z.object({
+  ...optionalApplicationShellSearch,
   variant: z.enum(["a", "b", "c"]).catch("a"),
   selected: z.array(z.string()).catch([]),
 });
@@ -40,7 +42,7 @@ function OfferDetailPage() {
       dataset={data}
       key={offer.offerIdentity}
       offer={offer}
-      search={search}
+      search={search.shell === undefined ? search : { ...search, variant: "c" }}
     />
   );
 }

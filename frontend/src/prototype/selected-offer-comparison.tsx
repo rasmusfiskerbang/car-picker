@@ -617,16 +617,20 @@ function rowNeedsAttention(row: ComparisonRow) {
 
 function OfferHeader({
   offer,
-  selected,
+  search,
 }: {
   offer: CatalogueOffer;
-  selected: string[];
+  search: ComparisonSearch;
 }) {
   return (
     <Link
       className="block h-full bg-card p-3 font-serif text-lg leading-tight underline-offset-4 hover:bg-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:p-4"
       params={{ offerIdentity: offer.offerIdentity }}
-      search={{ selected, variant: "c" }}
+      search={{
+        selected: search.selected,
+        shell: search.shell,
+        variant: "c",
+      }}
       to="/prototype/offers/$offerIdentity"
     >
       {vehicleName(offer)}
@@ -636,10 +640,10 @@ function OfferHeader({
 
 function ComparisonHeader({
   offers,
-  selected,
+  search,
 }: {
   offers: CatalogueOffer[];
-  selected: string[];
+  search: ComparisonSearch;
 }) {
   const gridTemplateColumns = `clamp(8.5rem, 14vw, 12rem) repeat(${offers.length}, minmax(15rem, 1fr))`;
   return (
@@ -653,7 +657,7 @@ function ComparisonHeader({
       />
       {offers.map((offer) => (
         <div className="border-r last:border-r-0" key={offer.offerIdentity}>
-          <OfferHeader offer={offer} selected={selected} />
+          <OfferHeader offer={offer} search={search} />
         </div>
       ))}
     </div>
@@ -834,12 +838,12 @@ function PageFrame({
   addOffer,
   children,
   dataset,
-  selected,
+  search,
 }: {
   addOffer: (offerIdentity: string) => void;
   children: ReactNode;
   dataset: CatalogueDataset;
-  selected: string[];
+  search: ComparisonSearch;
 }) {
   return (
     <div className="min-h-screen pb-32">
@@ -854,7 +858,8 @@ function PageFrame({
                 power: "all",
                 provider: "all",
                 q: "",
-                selected,
+                selected: search.selected,
+                shell: search.shell,
                 sort: "source",
                 variant: "d",
               }}
@@ -869,7 +874,7 @@ function PageFrame({
           <AddOfferControl
             addOffer={addOffer}
             dataset={dataset}
-            selected={selected}
+            selected={search.selected}
           />
         </div>
       </header>
@@ -900,13 +905,13 @@ function VariantA({
     <PageFrame
       addOffer={addOffer}
       dataset={dataset}
-      selected={search.selected}
+      search={search}
     >
       <PageComparisonViewport
         header={
           <ComparisonHeader
             offers={offers}
-            selected={search.selected}
+            search={search}
           />
         }
       >
@@ -931,13 +936,13 @@ function VariantB({
     <PageFrame
       addOffer={addOffer}
       dataset={dataset}
-      selected={search.selected}
+      search={search}
     >
       <div className="grid gap-6">
         <ComparisonViewport>
           <ComparisonHeader
             offers={offers}
-            selected={search.selected}
+            search={search}
           />
         </ComparisonViewport>
         {order.map((key, index) => {
@@ -994,7 +999,7 @@ function VariantC({
     <PageFrame
       addOffer={addOffer}
       dataset={dataset}
-      selected={search.selected}
+      search={search}
     >
       <div className="grid items-start gap-6 lg:grid-cols-[15rem_minmax(0,1fr)]">
         <aside className="rounded-2xl border bg-card p-5 lg:sticky lg:top-5">
@@ -1024,7 +1029,7 @@ function VariantC({
           <ComparisonViewport>
             <ComparisonHeader
               offers={offers}
-              selected={search.selected}
+              search={search}
             />
           </ComparisonViewport>
 
@@ -1067,17 +1072,17 @@ function VariantC({
 function EmptyComparison({
   addOffer,
   dataset,
-  selected,
+  search,
 }: {
   addOffer: (offerIdentity: string) => void;
   dataset: CatalogueDataset;
-  selected: string[];
+  search: ComparisonSearch;
 }) {
   return (
     <PageFrame
       addOffer={addOffer}
       dataset={dataset}
-      selected={selected}
+      search={search}
     >
       <div className="grid min-h-72 place-content-center rounded-2xl border border-dashed bg-card text-center">
         <Plus aria-hidden="true" className="mx-auto size-8 text-primary" />
@@ -1117,7 +1122,7 @@ export function SelectedOfferComparisonPrototype({
         <EmptyComparison
           addOffer={addOffer}
           dataset={dataset}
-          selected={selected}
+          search={search}
         />
         <PrototypeSwitcher
           current={search.variant}

@@ -74,7 +74,13 @@ function ProviderStatus({ provider }: { provider: Provider }) {
   );
 }
 
-function CatalogueLink({ facts }: { facts: ProviderFacts }) {
+function CatalogueLink({
+  facts,
+  search,
+}: {
+  facts: ProviderFacts;
+  search: ProviderSearch;
+}) {
   if (facts.provider.status !== "active") return null;
   return (
     <Link
@@ -84,7 +90,8 @@ function CatalogueLink({ facts }: { facts: ProviderFacts }) {
         power: "all",
         provider: facts.provider.id,
         q: "",
-        selected: [],
+        selected: search.selected,
+        shell: search.shell,
         sort: "source",
         variant: "d",
       }}
@@ -112,7 +119,10 @@ function ProviderWebsite({ provider }: { provider: Provider }) {
 
 function RegistryMasthead({ generatedAt }: { generatedAt: string }) {
   return (
-    <header className="border-b border-border/80 bg-background/90 backdrop-blur">
+    <header
+      className="border-b border-border/80 bg-background/90 backdrop-blur"
+      data-prototype-masthead
+    >
       <div className="mx-auto flex max-w-[92rem] items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
         <Link
           className="flex items-center gap-3 rounded-md"
@@ -222,7 +232,13 @@ function Intro({
   );
 }
 
-function MobileProviderRows({ facts }: { facts: ProviderFacts[] }) {
+function MobileProviderRows({
+  facts,
+  search,
+}: {
+  facts: ProviderFacts[];
+  search: ProviderSearch;
+}) {
   return (
     <div className="grid gap-4 md:hidden">
       {facts.map((item) => (
@@ -253,7 +269,7 @@ function MobileProviderRows({ facts }: { facts: ProviderFacts[] }) {
               </p>
             )}
             <div className="mt-5 grid gap-2">
-              <CatalogueLink facts={item} />
+              <CatalogueLink facts={item} search={search} />
               <ProviderWebsite provider={item.provider} />
             </div>
           </CardContent>
@@ -263,7 +279,7 @@ function MobileProviderRows({ facts }: { facts: ProviderFacts[] }) {
   );
 }
 
-function VariantA({ dataset, facts }: VariantProps) {
+function VariantA({ dataset, facts, search }: VariantProps) {
   return (
     <PageFrame dataset={dataset}>
       <Intro concise dataset={dataset} />
@@ -275,7 +291,7 @@ function VariantA({ dataset, facts }: VariantProps) {
           Udbyderregister
         </h2>
 
-        <MobileProviderRows facts={facts} />
+        <MobileProviderRows facts={facts} search={search} />
         <div className="hidden overflow-hidden rounded-2xl border border-border bg-card shadow-sm md:block">
           <table className="w-full border-collapse text-left text-sm">
             <thead className="bg-secondary/60 text-xs uppercase tracking-[0.12em] text-muted-foreground">
@@ -314,7 +330,8 @@ function VariantA({ dataset, facts }: VariantProps) {
                           power: "all",
                           provider: item.provider.id,
                           q: "",
-                          selected: [],
+                          selected: search.selected,
+                          shell: search.shell,
                           sort: "source",
                           variant: "d",
                         }}
@@ -336,7 +353,13 @@ function VariantA({ dataset, facts }: VariantProps) {
   );
 }
 
-function ActiveProviderCard({ facts }: { facts: ProviderFacts }) {
+function ActiveProviderCard({
+  facts,
+  search,
+}: {
+  facts: ProviderFacts;
+  search: ProviderSearch;
+}) {
   return (
     <Card className="flex min-h-80 flex-col">
       <CardHeader>
@@ -358,7 +381,7 @@ function ActiveProviderCard({ facts }: { facts: ProviderFacts }) {
           <Count label="i karantæne">{facts.quarantinedCount}</Count>
         </div>
         <div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-          <CatalogueLink facts={facts} />
+          <CatalogueLink facts={facts} search={search} />
           <ProviderWebsite provider={facts.provider} />
         </div>
       </CardContent>
@@ -366,7 +389,7 @@ function ActiveProviderCard({ facts }: { facts: ProviderFacts }) {
   );
 }
 
-function VariantB({ dataset, facts }: VariantProps) {
+function VariantB({ dataset, facts, search }: VariantProps) {
   const active = facts.filter((item) => item.provider.status === "active");
   const inactive = facts.filter((item) => item.provider.status === "inactive");
   return (
@@ -382,7 +405,9 @@ function VariantB({ dataset, facts }: VariantProps) {
             </div>
           </div>
           <div className="mt-5 grid gap-5 lg:grid-cols-2">
-            {active.map((item) => <ActiveProviderCard facts={item} key={item.provider.id} />)}
+            {active.map((item) => (
+              <ActiveProviderCard facts={item} key={item.provider.id} search={search} />
+            ))}
           </div>
         </section>
 
@@ -417,7 +442,13 @@ function VariantB({ dataset, facts }: VariantProps) {
   );
 }
 
-function ProviderDetail({ facts }: { facts: ProviderFacts }) {
+function ProviderDetail({
+  facts,
+  search,
+}: {
+  facts: ProviderFacts;
+  search: ProviderSearch;
+}) {
   const { provider } = facts;
   return (
     <Card className="overflow-hidden">
@@ -458,7 +489,7 @@ function ProviderDetail({ facts }: { facts: ProviderFacts }) {
               </div>
             </div>
             <div className="mt-8 flex flex-col gap-2 sm:flex-row">
-              <CatalogueLink facts={facts} />
+              <CatalogueLink facts={facts} search={search} />
               <ProviderWebsite provider={provider} />
             </div>
           </>
@@ -517,7 +548,7 @@ function VariantC({ dataset, facts, search, setProvider }: VariantProps) {
             })}
           </div>
         </nav>
-        <ProviderDetail facts={selected} />
+        <ProviderDetail facts={selected} search={search} />
       </div>
       <div className="mt-8"><ScopeNotice generatedAt={dataset.generatedAt} /></div>
     </PageFrame>

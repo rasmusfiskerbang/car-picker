@@ -68,7 +68,10 @@ function activeProviderCount(dataset: CatalogueDataset) {
 
 function LandingMasthead({ generatedAt }: { generatedAt: string }) {
   return (
-    <header className="border-b border-border/75 bg-background/90 backdrop-blur">
+    <header
+      className="border-b border-border/75 bg-background/90 backdrop-blur"
+      data-prototype-masthead
+    >
       <div className="mx-auto flex max-w-[92rem] items-center justify-between gap-5 px-5 py-4 sm:px-8">
         <div className="flex items-center gap-3">
           <span className="grid size-10 place-content-center rounded-full bg-primary text-primary-foreground">
@@ -94,16 +97,22 @@ function LandingMasthead({ generatedAt }: { generatedAt: string }) {
 function CatalogueLink({
   children,
   className,
+  search,
   variant = "default",
 }: {
   children: ReactNode;
   className?: string;
+  search: LandingSearch;
   variant?: "default" | "outline";
 }) {
   return (
     <Link
       className={cn(buttonVariants({ size: "lg", variant }), className)}
-      search={catalogueSearch}
+      search={{
+        ...catalogueSearch,
+        selected: search.selected,
+        shell: search.shell,
+      }}
       to="/catalogue"
     >
       {children}
@@ -197,7 +206,7 @@ function TrustStrip({ dataset }: { dataset: CatalogueDataset }) {
   );
 }
 
-function VariantA({ dataset }: { dataset: CatalogueDataset }) {
+function VariantA({ dataset, search }: { dataset: CatalogueDataset; search: LandingSearch }) {
   const offer = dataset.offers.find((candidate) => candidate.totalDkk !== null);
   return (
     <div>
@@ -218,7 +227,9 @@ function VariantA({ dataset }: { dataset: CatalogueDataset }) {
               første betaling til aftalens afslutning.
             </p>
             <div className="mt-8 flex flex-col items-start gap-4 sm:flex-row sm:items-center">
-              <CatalogueLink>Se alle {dataset.offers.length} tilbud</CatalogueLink>
+              <CatalogueLink search={search}>
+                Se alle {dataset.offers.length} tilbud
+              </CatalogueLink>
               <p className="max-w-xs text-xs leading-5 text-muted-foreground">
                 Kataloget dækker navngivne udbydere, ikke nødvendigvis hele
                 markedet.
@@ -266,7 +277,7 @@ const guideSteps: GuideStep[] = [
   },
 ];
 
-function VariantB({ dataset }: { dataset: CatalogueDataset }) {
+function VariantB({ dataset, search }: { dataset: CatalogueDataset; search: LandingSearch }) {
   return (
     <div>
       <LandingMasthead generatedAt={dataset.generatedAt} />
@@ -334,6 +345,7 @@ function VariantB({ dataset }: { dataset: CatalogueDataset }) {
           </div>
           <CatalogueLink
             className="shrink-0 bg-primary-foreground text-primary hover:bg-primary-foreground/90"
+            search={search}
           >
             Se alle {dataset.offers.length} tilbud
           </CatalogueLink>
@@ -410,7 +422,7 @@ function OfferPreview({
   );
 }
 
-function VariantC({ dataset }: { dataset: CatalogueDataset }) {
+function VariantC({ dataset, search }: { dataset: CatalogueDataset; search: LandingSearch }) {
   const previews = dataset.offers.slice(0, 3);
   return (
     <div>
@@ -428,7 +440,10 @@ function VariantC({ dataset }: { dataset: CatalogueDataset }) {
               Gå direkte til tilbuddene. Bilvalg viser månedsydelsen sammen med
               startbetalingen, den beregnede total og aftalens afslutning.
             </p>
-            <CatalogueLink className="mt-7 w-full sm:w-auto lg:w-full">
+            <CatalogueLink
+              className="mt-7 w-full sm:w-auto lg:w-full"
+              search={search}
+            >
               Se hele kataloget
             </CatalogueLink>
 
@@ -489,7 +504,11 @@ function VariantC({ dataset }: { dataset: CatalogueDataset }) {
                   periode, kilometer og afslutning.
                 </p>
               </div>
-              <CatalogueLink className="shrink-0" variant="outline">
+              <CatalogueLink
+                className="shrink-0"
+                search={search}
+                variant="outline"
+              >
                 Se alle {dataset.offers.length}
               </CatalogueLink>
             </div>
@@ -509,14 +528,14 @@ export function LandingPagePrototype({
 }) {
   const navigate = useNavigate({ from: "/prototype/landing" });
   const changeVariant = (variant: LandingSearch["variant"]) => {
-    void navigate({ search: { variant } });
+    void navigate({ search: (previous) => ({ ...previous, variant }) });
   };
 
   return (
     <>
-      {search.variant === "a" && <VariantA dataset={dataset} />}
-      {search.variant === "b" && <VariantB dataset={dataset} />}
-      {search.variant === "c" && <VariantC dataset={dataset} />}
+      {search.variant === "a" && <VariantA dataset={dataset} search={search} />}
+      {search.variant === "b" && <VariantB dataset={dataset} search={search} />}
+      {search.variant === "c" && <VariantC dataset={dataset} search={search} />}
       <PrototypeSwitcher
         current={search.variant}
         onChange={changeVariant}

@@ -1,9 +1,17 @@
+import { useSuspenseQuery } from "@tanstack/react-query";
 import { Outlet, createRootRouteWithContext } from "@tanstack/react-router";
 
+import { catalogueDatasetQuery } from "@/catalogue-data";
+import { ApplicationShellPrototype } from "@/prototype/application-shell";
 import type { RouterContext } from "@/router";
 
 function RootLayout() {
-  return <Outlet />;
+  const { data } = useSuspenseQuery(catalogueDatasetQuery);
+  return (
+    <ApplicationShellPrototype dataset={data}>
+      <Outlet />
+    </ApplicationShellPrototype>
+  );
 }
 
 function InvalidApplication() {
@@ -24,4 +32,6 @@ function InvalidApplication() {
 export const Route = createRootRouteWithContext<RouterContext>()({
   component: RootLayout,
   errorComponent: InvalidApplication,
+  loader: ({ context }) =>
+    context.queryClient.ensureQueryData(catalogueDatasetQuery),
 });

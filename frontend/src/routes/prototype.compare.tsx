@@ -5,6 +5,7 @@ import { z } from "zod";
 import { catalogueDatasetQuery } from "@/catalogue-data";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SelectedOfferComparisonPrototype } from "@/prototype/selected-offer-comparison";
+import { optionalApplicationShellSearch } from "@/prototype/application-shell-state";
 
 const defaultSelection = [
   "fleasing:prototype-00:config-0",
@@ -13,6 +14,7 @@ const defaultSelection = [
 ] as const;
 
 const comparisonSearchSchema = z.object({
+  ...optionalApplicationShellSearch,
   variant: z.enum(["a", "b", "c"]).catch("a"),
   selected: z.array(z.string()).catch([...defaultSelection]),
 });
@@ -22,7 +24,12 @@ export type ComparisonSearch = z.infer<typeof comparisonSearchSchema>;
 function ComparisonPage() {
   const { data } = useSuspenseQuery(catalogueDatasetQuery);
   const search = Route.useSearch();
-  return <SelectedOfferComparisonPrototype dataset={data} search={search} />;
+  return (
+    <SelectedOfferComparisonPrototype
+      dataset={data}
+      search={search.shell === undefined ? search : { ...search, variant: "a" }}
+    />
+  );
 }
 
 function ComparisonPending() {

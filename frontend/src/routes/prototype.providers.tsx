@@ -5,10 +5,13 @@ import { z } from "zod";
 import { catalogueDatasetQuery } from "@/catalogue-data";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ProviderOverviewPrototype } from "@/prototype/provider-overview";
+import { optionalApplicationShellSearch } from "@/prototype/application-shell-state";
 
 const providerSearchSchema = z.object({
+  ...optionalApplicationShellSearch,
   variant: z.enum(["a", "b", "c"]).catch("a"),
   provider: z.string().catch("fleasing"),
+  selected: z.array(z.string()).catch([]),
 });
 
 export type ProviderSearch = z.infer<typeof providerSearchSchema>;
@@ -16,7 +19,12 @@ export type ProviderSearch = z.infer<typeof providerSearchSchema>;
 function ProviderOverviewPage() {
   const { data } = useSuspenseQuery(catalogueDatasetQuery);
   const search = Route.useSearch();
-  return <ProviderOverviewPrototype dataset={data} search={search} />;
+  return (
+    <ProviderOverviewPrototype
+      dataset={data}
+      search={search.shell === undefined ? search : { ...search, variant: "a" }}
+    />
+  );
 }
 
 function ProviderOverviewPending() {

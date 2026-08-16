@@ -5,8 +5,10 @@ import { z } from "zod";
 import { catalogueDatasetQuery } from "@/catalogue-data";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CatalogueOverviewPrototype } from "@/prototype/catalogue-overview";
+import { optionalApplicationShellSearch } from "@/prototype/application-shell-state";
 
 const catalogueSearchSchema = z.object({
+  ...optionalApplicationShellSearch,
   variant: z.enum(["a", "b", "c", "d"]).catch("a"),
   q: z.string().catch(""),
   provider: z.string().catch("all"),
@@ -23,7 +25,12 @@ export type CatalogueSearch = z.infer<typeof catalogueSearchSchema>;
 function CataloguePage() {
   const { data } = useSuspenseQuery(catalogueDatasetQuery);
   const search = Route.useSearch();
-  return <CatalogueOverviewPrototype dataset={data} search={search} />;
+  return (
+    <CatalogueOverviewPrototype
+      dataset={data}
+      search={search.shell === undefined ? search : { ...search, variant: "d" }}
+    />
+  );
 }
 
 function CataloguePending() {
