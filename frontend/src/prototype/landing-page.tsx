@@ -24,7 +24,6 @@ import {
   upfrontPayment,
   vehicleName,
 } from "@/catalogue-data";
-import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -273,15 +272,17 @@ function VariantB({ dataset }: { dataset: CatalogueDataset }) {
       <LandingMasthead generatedAt={dataset.generatedAt} />
       <main className="mx-auto max-w-[92rem] px-5 pb-36 pt-10 sm:px-8 lg:pt-14">
         <section className="mx-auto max-w-5xl text-center">
-          <Badge className="border-primary/20 bg-accent text-accent-foreground hover:bg-accent">
-            Neutral sammenligning af privatleasing
-          </Badge>
+          <p className="text-xs font-bold uppercase tracking-[0.19em] text-primary">
+            Privatleasing i Danmark
+          </p>
           <h1 className="mt-6 font-serif text-5xl leading-[0.98] tracking-[-0.04em] sm:text-6xl lg:text-7xl">
-            En månedsydelse er ikke en aftale
+            Sammenlign aftalen,
+            <br />
+            ikke kun månedsprisen.
           </h1>
           <p className="mx-auto mt-5 max-w-2xl text-base leading-7 text-muted-foreground sm:text-lg">
-            Bilvalg gør det tydeligt, hvad du sammenligner, hvor oplysningerne
-            kommer fra, og hvad der stadig ikke er oplyst.
+            Se dokumenterede privatleasingtilbud på samme grundlag — fra første
+            betaling til aftalens afslutning.
           </p>
         </section>
 
@@ -334,7 +335,7 @@ function VariantB({ dataset }: { dataset: CatalogueDataset }) {
           <CatalogueLink
             className="shrink-0 bg-primary-foreground text-primary hover:bg-primary-foreground/90"
           >
-            Åbn kataloget
+            Se alle {dataset.offers.length} tilbud
           </CatalogueLink>
         </section>
       </main>
