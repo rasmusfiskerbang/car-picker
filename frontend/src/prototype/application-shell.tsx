@@ -62,11 +62,13 @@ function isCurrent(pathname: string, destination: "landing" | "catalogue" | "com
 
 function NavLinks({
   compact = false,
+  includeLanding = true,
   onNavigate,
   selected,
   variant,
 }: {
   compact?: boolean;
+  includeLanding?: boolean;
   onNavigate?: () => void;
   selected: string[];
   variant: ApplicationShellVariant;
@@ -85,15 +87,17 @@ function NavLinks({
 
   return (
     <>
-      <Link
-        aria-current={isCurrent(pathname, "landing") ? "page" : undefined}
-        className={linkClass(isCurrent(pathname, "landing"))}
-        onClick={onNavigate}
-        search={{ selected, shell: variant, variant: "b" }}
-        to="/prototype/landing"
-      >
-        <Home aria-hidden="true" className="size-4" /> Forside
-      </Link>
+      {includeLanding && (
+        <Link
+          aria-current={isCurrent(pathname, "landing") ? "page" : undefined}
+          className={linkClass(isCurrent(pathname, "landing"))}
+          onClick={onNavigate}
+          search={{ selected, shell: variant, variant: "b" }}
+          to="/prototype/landing"
+        >
+          <Home aria-hidden="true" className="size-4" /> Forside
+        </Link>
+      )}
       <Link
         aria-current={isCurrent(pathname, "catalogue") ? "page" : undefined}
         className={linkClass(isCurrent(pathname, "catalogue"))}
@@ -327,17 +331,24 @@ function VariantC({ children, dataset, selected, variant }: ShellProps) {
           <div className="hidden h-7 w-px bg-border sm:block" />
           <p className="hidden font-serif text-lg sm:block">{pageTitle}</p>
           <nav aria-label="Primær navigation" className="ml-auto hidden items-center gap-1 lg:flex">
-            <NavLinks compact selected={selected} variant={variant} />
+            <NavLinks
+              compact
+              includeLanding={false}
+              selected={selected}
+              variant={variant}
+            />
           </nav>
-          <div className="ml-auto lg:ml-2">
-            <CompareAction selected={selected} variant={variant} />
-          </div>
         </div>
         <nav
           aria-label="Mobil navigation"
           className="flex gap-1 overflow-x-auto border-t px-3 py-1.5 lg:hidden"
         >
-          <NavLinks compact selected={selected} variant={variant} />
+          <NavLinks
+            compact
+            includeLanding={false}
+            selected={selected}
+            variant={variant}
+          />
         </nav>
       </header>
       <ShellContent>{children}</ShellContent>
