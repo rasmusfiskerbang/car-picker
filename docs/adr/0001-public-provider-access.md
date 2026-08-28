@@ -5,7 +5,8 @@ public first-party pages and same-provider APIs used by those pages unless an
 applicable robots rule, published term, technical access control, rate limit, or
 provider instruction explicitly prohibits it. This chooses bounded public access
 over requiring affirmative written permission while preserving source ownership,
-low request volume, content minimization, and immediate withdrawal handling.
+low request volume, content minimization, and prompt owner-controlled blocking
+when a provider asks collection to stop.
 
 The decision does not authorize authentication bypass, bot-challenge evasion,
 identity rotation, unrelated crawling, personal or accidentally exposed data, or

@@ -9,11 +9,10 @@ from pathlib import Path
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
-FIXTURE_DATASET = REPOSITORY_ROOT / "tests/fixtures/one-offer-catalogue-dataset.json"
 
 
 class OwnerOperationsTest(unittest.TestCase):
-    def test_validate_checks_schemas_and_rejects_generated_artifacts_in_git_history(
+    def test_history_and_legal_checks_are_separate_and_history_rejects_generated_artifacts(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -42,10 +41,13 @@ class OwnerOperationsTest(unittest.TestCase):
                 "-m",
                 "record pending legal review",
             )
-            valid_checkout_result = run_cli(
-                "validate",
-                "--dataset",
-                str(FIXTURE_DATASET),
+            valid_history_result = run_cli(
+                "history-check",
+                "--repository",
+                str(repository),
+            )
+            valid_legal_result = run_cli(
+                "legal-check",
                 "--repository",
                 str(repository),
                 "--legal-record",
@@ -74,21 +76,17 @@ class OwnerOperationsTest(unittest.TestCase):
             )
 
             generated_artifact_result = run_cli(
-                "validate",
-                "--dataset",
-                str(FIXTURE_DATASET),
+                "history-check",
                 "--repository",
                 str(repository),
-                "--legal-record",
-                str(legal_record_path),
             )
 
         self.assertEqual(
-            valid_checkout_result.returncode, 0, valid_checkout_result.stderr
+            valid_history_result.returncode, 0, valid_history_result.stderr
         )
-        self.assertIn(
-            "schema and Git-history validation passed", valid_checkout_result.stdout
-        )
+        self.assertEqual(valid_legal_result.returncode, 0, valid_legal_result.stderr)
+        self.assertIn("Repository history check passed", valid_history_result.stdout)
+        self.assertIn("Legal gate:", valid_legal_result.stdout)
         self.assertNotEqual(generated_artifact_result.returncode, 0)
         self.assertIn(
             "generated provider content or built artifacts",

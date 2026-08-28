@@ -7,23 +7,30 @@ but the resulting current catalogue dataset contains no admitted offers. The
 required fixed set and four owner tasks are therefore unavailable. No release is
 authorized by this record.
 
+## Historical disposition
+
+This record is retained as historical evidence of an unsigned, zero-admission
+intermediate candidate, not as a current acceptance or product requirement.
+Its prior source-audit wording, provider-aggregate terminology, and 1280 × 720
+task boundary are superseded by #67 and the later #86 live gate. No retained
+candidate, source document, or intermediate access control became a current
+authority.
+
 ## Application and dataset
 
 - Application commit: `c85a41f9c3ab9bb98f533a911814e01b2252238c`
 - Acceptance run: `2026-07-29T09:32:55+02:00` to
   `2026-07-29T09:38:46+02:00`
 - Catalogue generation: `2026-07-29T07:32:55.089180Z`
-- Provider access policy: ADR-0001; the dated Fleasing and Terminalen source
-  audits both record `allowed`, matching `config/provider-access.json`.
-- Provider control: Fleasing and Terminalen retrieval enabled; no withdrawals
-  recorded.
+- Source audits: ADR-0001; the dated Fleasing and Terminalen source audits
+  both recorded `allowed` for this historical run.
+- Provider Registry: Fleasing and Terminalen were active; no inactive records were present.
 - Dataset result: zero admitted catalogue offers and 161 quarantined
   candidates—159 Fleasing and two Terminalen.
 
 ## Refresh and source checks
 
-`uv run car-picker refresh-catalogue --dataset
-var/catalogue-dataset.json` completed both bounded first-party providers and
+`uv run --locked car-picker catalogue refresh` completed both bounded first-party providers and
 reported:
 
 > Provider aggregate reconciliation: no mismatches.
@@ -73,7 +80,7 @@ audit, or a separately agreed change to the admission model.
 
 | Check | Actual | Result |
 | --- | --- | --- |
-| Checkout validation | Dataset, projection, provider access/control, generated-content boundary, and pre-transition legal gate passed | Pass |
+| Direct history-check, legal-check, and contract checks | Pass |
 | Live static build | Completed zero-offer artifact built successfully from the current dataset | Pass |
 | Python suite | 72 tests passed | Pass |
 | Fixture browser suite | 11 Playwright tests passed sequentially at desktop and mobile viewports | Pass |

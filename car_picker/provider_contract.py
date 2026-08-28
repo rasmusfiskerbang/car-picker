@@ -3,29 +3,11 @@
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Mapping
 from typing import Any
 
 from pydantic import JsonValue
 
-from car_picker.catalogue_model import UnavailableFactState
-
-
-ADMISSION_FACTS = (
-    "privateConsumerEligibility",
-    "passengerCarScope",
-    "currentAvailability",
-    "supportedLeasingForm",
-)
-
-
-def admission_reasons(candidate: Mapping[str, Any]) -> list[dict[str, str]]:
-    """Explain every admission requirement not established by source evidence."""
-    return [
-        {"fact": name, "state": candidate[name]["state"]}
-        for name in ADMISSION_FACTS
-        if candidate[name]["state"] != "known"
-    ]
+from car_picker.catalogue import UnavailableState
 
 
 def evidence(source_url: str, wording: str) -> dict[str, str]:
@@ -41,7 +23,7 @@ def known_fact(value: JsonValue, source_url: str, wording: str) -> dict[str, Any
 
 
 def unavailable_fact(
-    state: UnavailableFactState, source_url: str, wording: str
+    state: UnavailableState, source_url: str, wording: str
 ) -> dict[str, Any]:
     return {"state": state, "evidence": evidence(source_url, wording)}
 

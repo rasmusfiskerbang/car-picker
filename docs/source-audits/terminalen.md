@@ -1,6 +1,6 @@
 # Terminalen designated offer-source audit
 
-Checked 29 July 2026 under
+Checked 24 August 2026 under
 [ADR-0001](../adr/0001-public-provider-access.md).
 
 ## Designated source
@@ -35,8 +35,10 @@ version; fetched documents are not written to the active catalogue dataset.
 
 ## Current arithmetic conflict
 
-The 29 July source exposes two admitted IONIQ 5 configurations, but its stated
-provider aggregates do not reconcile with its other exact-offer amounts:
+The 24 August 2026 audit confirmed the unchanged conflict first recorded on 29
+July. The current source still exposes two admitted IONIQ 5 configurations,
+but its stated provider aggregates do not reconcile with its other exact-offer
+amounts:
 
 - `49,995 + (2,795 × 36) + 1,000 = 151,615 DKK`, while the source advertises
   `151,395 DKK`;
@@ -53,7 +55,7 @@ unexplained rather than selecting one side as a correction for the other.
 ## Access decision
 
 - Decision: **allowed**
-- `robots.txt`: checked 29 July 2026; `User-agent: *` explicitly allows `/`.
+- `robots.txt`: checked 24 August 2026; `User-agent: *` explicitly allows `/`.
 - Published terms surfaces: the publicly discoverable privacy, cookie, and
   contact material contained no explicit prohibition on bounded automated
   collection or minimized factual reuse.

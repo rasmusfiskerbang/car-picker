@@ -6,12 +6,19 @@
 because the complete all-provider refresh was rejected. No release is
 authorized by this record.
 
+## Historical disposition
+
+This record is retained as historical evidence of a blocked pre-replacement
+candidate, not as a current acceptance or product requirement. Its failed
+source run, 1280 × 720 observation, and provider-aggregate diagnostic are
+superseded by the #67 contract and the later #86 live gate. None of those
+intermediate behaviors or diagnostics crossed the clean-room boundary.
+
 ## Application and dataset
 
 - Application commit: `0995d983d4a37725d2efba1a38b70c054967e1b9`
 - Acceptance run started: `2026-07-28T16:05:00+02:00`
-- Provider control: Fleasing and Terminalen retrieval both enabled;
-  no withdrawals recorded.
+- Provider Registry: Fleasing and Terminalen were active; no inactive records were present.
 - Requested dataset generation: not created. The prior fixture dataset is not
   a substitute for a current real-offer dataset.
 
@@ -22,7 +29,7 @@ The run used the bounded first-party sources defined by the owner guide:
 - Fleasing catalogue: <https://fleasing.dk/biler/>
 - Terminalen catalogue: <https://www.terminalen.dk/nye-biler/hyundai>
 
-`uv run car-picker refresh-catalogue --dataset var/catalogue-dataset.json`
+`uv run --locked car-picker catalogue refresh`
 retried Fleasing and rejected the complete replacement. Its designated catalogue
 contained `https://fleasing.dk/bil/?bmw-m3-competition-dkg&vid=1904312905`, but
 that URL resolved to Fleasing's generic `/bil/` page rather than a page with
@@ -47,7 +54,7 @@ the real-offer acceptance:
 
 | Check | Expected | Actual | Result |
 | --- | --- | --- | --- |
-| Checkout validation | Schema, generated-content boundary, and pre-transition legal status pass | Passed; legal gate reports the 20 November 2026 horizon and pending post-transition revalidation | Pass |
+| Direct history-check, legal-check, and contract checks | Schema, generated-content boundary, and pre-transition legal status pass | Passed; legal gate reports the 20 November 2026 horizon and pending post-transition revalidation | Pass |
 | Fixture static build | Completed verified artifact is produced | Passed into ignored `var/site` | Pass |
 | Desktop catalogue (1280 × 720) | Catalogue is usable without page horizontal overflow and unavailable totals name their blockers | Passed; derived totals state that the complete payment stream is missing | Pass |
 | Mobile catalogue (390 × 844) | Stacked catalogue row without page horizontal overflow | Passed; one catalogue card and no page horizontal overflow | Pass |

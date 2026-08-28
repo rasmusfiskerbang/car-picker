@@ -16,7 +16,6 @@ from car_picker.__main__ import main
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
-FIXTURE_DATASET = REPOSITORY_ROOT / "tests/fixtures/one-offer-catalogue-dataset.json"
 
 
 class LegalReleaseGateTest(unittest.TestCase):
@@ -36,9 +35,7 @@ class LegalReleaseGateTest(unittest.TestCase):
 
             result = run_cli_on_date(
                 date(2026, 11, 19),
-                "validate",
-                "--dataset",
-                str(FIXTURE_DATASET),
+                "legal-check",
                 "--repository",
                 str(repository),
                 "--legal-record",
@@ -51,9 +48,7 @@ class LegalReleaseGateTest(unittest.TestCase):
             )
             uncommitted_update_result = run_cli_on_date(
                 date(2026, 11, 19),
-                "validate",
-                "--dataset",
-                str(FIXTURE_DATASET),
+                "legal-check",
                 "--repository",
                 str(repository),
                 "--legal-record",
@@ -84,9 +79,7 @@ class LegalReleaseGateTest(unittest.TestCase):
 
             result = run_cli_on_date(
                 date(2026, 11, 20),
-                "validate",
-                "--dataset",
-                str(FIXTURE_DATASET),
+                "legal-check",
                 "--repository",
                 str(repository),
                 "--legal-record",
@@ -111,9 +104,7 @@ class LegalReleaseGateTest(unittest.TestCase):
 
             result = run_cli_on_date(
                 date(2026, 11, 20),
-                "validate",
-                "--dataset",
-                str(FIXTURE_DATASET),
+                "legal-check",
                 "--repository",
                 str(repository),
                 "--legal-record",
@@ -150,9 +141,7 @@ class LegalReleaseGateTest(unittest.TestCase):
 
                 result = run_cli_on_date(
                     date(2026, 11, 20),
-                    "validate",
-                    "--dataset",
-                    str(FIXTURE_DATASET),
+                    "legal-check",
                     "--repository",
                     str(repository),
                     "--legal-record",

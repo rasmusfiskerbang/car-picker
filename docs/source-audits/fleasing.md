@@ -1,6 +1,6 @@
 # Fleasing designated offer-source audit
 
-Originally checked 22 July 2026; access decision revalidated 29 July 2026 under
+Originally checked 22 July 2026; access decision revalidated 24 August 2026 under
 [ADR-0001](../adr/0001-public-provider-access.md).
 
 ## Designated source
@@ -40,7 +40,7 @@ version; fetched documents are not written to the active catalogue dataset.
 ## Access decision
 
 - Decision: **allowed**
-- `robots.txt`: checked 29 July 2026; public paths remain permitted,
+- `robots.txt`: checked 24 August 2026; public paths remain permitted,
   `/wp-admin/` is disallowed, and `/wp-admin/admin-ajax.php` is allowed. The
   designated catalogue and detail paths are outside the disallowed boundary.
 - Published terms surfaces: the public catalogue, footer, sitemap, privacy, and
