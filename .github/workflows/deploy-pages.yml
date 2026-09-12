@@ -1,0 +1,95 @@
+name: Deploy GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install locked Python dependencies
+        run: uv sync --locked --dev
+
+      - name: Install locked frontend dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Refresh the complete catalogue
+        run: uv run --locked car-picker --workspace . catalogue refresh
+
+      - name: Generate the frontend contract and routes
+        working-directory: frontend
+        run: |
+          pnpm generate-contract
+          pnpm generate-routes
+
+      - name: Type-check the frontend
+        working-directory: frontend
+        run: pnpm typecheck
+
+      - name: Build the static Site
+        run: uv run --locked car-picker --workspace . site build
+
+      - name: Inspect the completed Site
+        run: uv run --locked car-picker --workspace . site inspect
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload the Site artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: var/site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      pages: write
+      id-token: write
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

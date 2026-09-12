@@ -57,7 +57,7 @@ identities, expected and actual results, and any defects for every task.
 ## Record and sign-off
 
 The record is a version-controlled Markdown file. It must state the application
-commit, dataset generation time, provider-control status, source checks,
+commit, dataset generation time, Provider Registry status, source checks,
 viewports, selected identities, arithmetic checks, task results, defects and
 their disposition, legal-gate result, and an explicit owner-only release
 decision. A record without the owner's dated name and approval is not a passed

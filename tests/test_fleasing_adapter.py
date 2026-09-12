@@ -3,7 +3,6 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 
-from car_picker.comparison import calculate_comparison_values
 from car_picker.fleasing import (
     FleasingAdapter,
     StructuralSourceError,
@@ -34,6 +33,118 @@ class FixtureHttpClient:
 
 
 class FleasingAdapterTest(unittest.TestCase):
+    def test_collects_vehicle_fuel_from_the_current_short_specs_shape(self) -> None:
+        current_catalogue = (
+            '<a href="/biler/">Personbiler</a>'
+            '<a href="/bil/?aston-martin-db9-volante-aut&amp;vid=442795427">'
+            "Aston Martin DB9</a>"
+        )
+        client = FixtureHttpClient(
+            {
+                CATALOGUE_URL: current_catalogue,
+                DETAIL_URL: (FIXTURE_DIRECTORY / "current-detail.html").read_text(
+                    encoding="utf-8"
+                ),
+            }
+        )
+
+        candidates = FleasingAdapter(
+            client, retrieved_at="2026-08-24T06:00:00Z"
+        ).collect()
+
+        self.assertEqual(
+            candidates[0]["vehicleSpecification"],
+            {
+                "state": "known",
+                "value": {
+                    "make": "Aston Martin",
+                    "model": "DB9",
+                    "trim": "Volante aut.",
+                    "drivetrain": "gasoline",
+                },
+                "evidence": {
+                    "sourceUrl": DETAIL_URL,
+                    "wording": "Aston Martin DB9 Volante aut.; Brændstof: Benzin",
+                },
+            },
+        )
+
+    def test_preserves_legacy_drivetrain_source_wording(self) -> None:
+        catalogue_html = f'<a href="{DETAIL_URL}">Aston Martin DB9</a>'
+        client = FixtureHttpClient(
+            {
+                CATALOGUE_URL: catalogue_html,
+                DETAIL_URL: (FIXTURE_DIRECTORY / "aston-martin-db9.html").read_text(
+                    encoding="utf-8"
+                ),
+            }
+        )
+
+        candidate = FleasingAdapter(
+            client, retrieved_at="2026-07-22T12:00:00Z"
+        ).collect()[0]
+
+        self.assertEqual(
+            candidate["vehicleSpecification"]["evidence"],
+            {
+                "sourceUrl": DETAIL_URL,
+                "wording": "Aston Martin DB9 Volante aut.; Drivmiddel Benzin",
+            },
+        )
+
+    def test_preserves_source_wording_for_unclear_and_conflicting_drivetrains(
+        self,
+    ) -> None:
+        cases = (
+            (
+                "<dt>Drivmiddel</dt><dd>Hybrid</dd>",
+                "unclear",
+                "Drivmiddel Hybrid",
+            ),
+            (
+                "<dt>Drivmiddel</dt><dd>Benzin</dd>"
+                '<div class="vehicle-page-short-specs">'
+                "<span><b>Brændstof:</b> Diesel</span></div>",
+                "conflicting",
+                "Drivmiddel Benzin; Brændstof: Diesel",
+            ),
+        )
+
+        for drivetrain_markup, state, wording in cases:
+            with self.subTest(state=state):
+                detail_html = f"""
+                    <div class="vehicle-page-info">
+                      <h1>Aston Martin DB9</h1><h3>Volante aut.</h3>
+                      <dl>{drivetrain_markup}</dl>
+                      <div id="privat">
+                        <h2>Privatleasing · inkl. moms</h2>
+                        <ul>
+                          <li>Ydelse pr. måned 15.865 kr. /inkl. moms</li>
+                          <li>Udbetaling 142.813 kr. /inkl. moms</li>
+                          <li>Leasingperiode 12</li>
+                        </ul>
+                      </div>
+                    </div>
+                """
+                client = FixtureHttpClient(
+                    {
+                        CATALOGUE_URL: f'<a href="{DETAIL_URL}">DB9</a>',
+                        DETAIL_URL: detail_html,
+                    }
+                )
+
+                candidate = FleasingAdapter(
+                    client, retrieved_at="2026-08-24T06:00:00Z"
+                ).collect()[0]
+
+                self.assertEqual(
+                    candidate["vehicleSpecification"],
+                    {
+                        "state": state,
+                        "evidence": {"sourceUrl": DETAIL_URL, "wording": wording},
+                    },
+                )
+
     def test_ignores_catalogue_links_to_an_undesignated_host(self) -> None:
         detail_urls = catalogue_detail_urls(
             """
@@ -76,23 +187,16 @@ class FleasingAdapterTest(unittest.TestCase):
             ],
         )
         self.assertEqual(
+            [candidate["offerIdentity"] for candidate in candidates],
             [
-                (candidate["offerIdentity"], candidate["admissionOutcome"])
-                for candidate in candidates
-            ],
-            [
-                ("fleasing:442795427:private-b3e29d362bda", "admitted"),
-                ("fleasing:771869804:private-390493d196b5", "admitted"),
+                "fleasing:442795427:private-b3e29d362bda",
+                "fleasing:771869804:private-390493d196b5",
             ],
         )
         candidate = candidates[0]
         self.assertEqual(candidate["advertisedMonthlyPayment"]["valueDkk"], 15865)
         self.assertEqual(candidate["termMonths"]["value"], 12)
         self.assertIsNone(candidate["baseCashFlowBlockers"])
-        self.assertEqual(
-            calculate_comparison_values(candidate)["nominalBaseOutlay"],
-            {"state": "known", "valueDkk": 333193},
-        )
         self.assertEqual(
             candidate["baseCashFlowStream"],
             [
@@ -132,6 +236,7 @@ class FleasingAdapterTest(unittest.TestCase):
                 "make": "Aston Martin",
                 "model": "DB9",
                 "trim": "Volante aut.",
+                "drivetrain": "gasoline",
             },
         )
         self.assertEqual(
@@ -142,7 +247,7 @@ class FleasingAdapterTest(unittest.TestCase):
             },
         )
         self.assertEqual(
-            candidate["sourceMetadata"]["parserVersion"], "fleasing-html-v4"
+            candidate["sourceMetadata"]["parserVersion"], "fleasing-html-v7"
         )
         self.assertEqual(
             len(candidate["sourceMetadata"]["documents"][0]["contentSha256"]), 64
@@ -224,7 +329,7 @@ class FleasingAdapterTest(unittest.TestCase):
             client, retrieved_at="2026-07-29T12:00:00Z"
         ).collect()[0]
 
-        self.assertEqual(candidate["admissionOutcome"], "admitted")
+        self.assertNotIn("admissionOutcome", candidate)
         self.assertEqual(candidate["advertisedMonthlyPayment"]["valueDkk"], 15865)
         self.assertEqual(
             [event["amountBasis"] for event in candidate["baseCashFlowStream"]],
@@ -257,16 +362,8 @@ class FleasingAdapterTest(unittest.TestCase):
             client, retrieved_at="2026-07-29T12:00:00Z"
         ).collect()[0]
 
-        self.assertEqual(candidate["admissionOutcome"], "quarantined")
         self.assertEqual(candidate["advertisedMonthlyPayment"]["state"], "conflicting")
-        self.assertIn(
-            {
-                "fact": "baseCashFlowStream",
-                "state": "conflicting",
-                "code": "private_consumer_price_excludes_vat",
-            },
-            candidate["quarantineReasons"],
-        )
+        self.assertNotIn("quarantineReasons", candidate)
 
     def test_collects_each_explicit_private_configuration_as_an_admitted_offer(
         self,
@@ -293,15 +390,14 @@ class FleasingAdapterTest(unittest.TestCase):
             [
                 (
                     candidate["sourceLocalConfigurationKey"],
-                    candidate["admissionOutcome"],
                     candidate["advertisedMonthlyPayment"]["valueDkk"],
                     candidate["termMonths"]["value"],
                 )
                 for candidate in candidates
             ],
             [
-                ("private-standard", "admitted", 9995, 12),
-                ("private-low-upfront", "admitted", 11995, 12),
+                ("private-standard", 9995, 12),
+                ("private-low-upfront", 11995, 12),
             ],
         )
         for candidate in candidates:
@@ -375,13 +471,10 @@ class FleasingAdapterTest(unittest.TestCase):
             ],
         )
         self.assertEqual(
+            [candidate["offerIdentity"] for candidate in candidates],
             [
-                (candidate["offerIdentity"], candidate["admissionOutcome"])
-                for candidate in candidates
-            ],
-            [
-                ("fleasing:442795427:detail-unavailable", "quarantined"),
-                ("fleasing:771869804:private-390493d196b5", "admitted"),
+                "fleasing:442795427:detail-unavailable",
+                "fleasing:771869804:private-390493d196b5",
             ],
         )
         stale_candidate = candidates[0]
@@ -391,15 +484,7 @@ class FleasingAdapterTest(unittest.TestCase):
             stale_candidate["advertisedMonthlyPayment"]["state"], "not_stated"
         )
         self.assertEqual(stale_candidate["termMonths"]["state"], "not_stated")
-        self.assertEqual(
-            stale_candidate["quarantineReasons"],
-            [
-                {"fact": "privateConsumerEligibility", "state": "not_stated"},
-                {"fact": "passengerCarScope", "state": "not_stated"},
-                {"fact": "currentAvailability", "state": "unclear"},
-                {"fact": "supportedLeasingForm", "state": "not_stated"},
-            ],
-        )
+        self.assertNotIn("quarantineReasons", stale_candidate)
 
     def test_quarantines_conflicting_admission_evidence_without_choosing_a_value(
         self,
@@ -439,13 +524,7 @@ class FleasingAdapterTest(unittest.TestCase):
 
         self.assertEqual(candidate["passengerCarScope"]["state"], "conflicting")
         self.assertEqual(candidate["supportedLeasingForm"]["state"], "conflicting")
-        self.assertEqual(
-            candidate["quarantineReasons"],
-            [
-                {"fact": "passengerCarScope", "state": "conflicting"},
-                {"fact": "supportedLeasingForm", "state": "conflicting"},
-            ],
-        )
+        self.assertNotIn("quarantineReasons", candidate)
 
     def test_quarantines_duplicate_configuration_ids_without_collapsing_candidates(
         self,
@@ -491,17 +570,8 @@ class FleasingAdapterTest(unittest.TestCase):
             len({candidate["offerIdentity"] for candidate in candidates}), 2
         )
         for candidate in candidates:
-            self.assertEqual(candidate["admissionOutcome"], "quarantined")
-            self.assertEqual(
-                candidate["quarantineReasons"],
-                [
-                    {
-                        "fact": "sourceLocalConfigurationKey",
-                        "state": "conflicting",
-                        "code": "duplicate_configuration_id",
-                    }
-                ],
-            )
+            self.assertNotIn("admissionOutcome", candidate)
+            self.assertNotIn("quarantineReasons", candidate)
 
     def test_private_tab_without_explicit_vat_inclusive_heading_is_quarantined(
         self,
@@ -525,14 +595,11 @@ class FleasingAdapterTest(unittest.TestCase):
         ).collect()
 
         for candidate in candidates:
-            self.assertEqual(candidate["admissionOutcome"], "quarantined")
-            self.assertIn(
-                {
-                    "fact": "privateConsumerEligibility",
-                    "state": "not_stated",
-                },
-                candidate["quarantineReasons"],
+            self.assertEqual(
+                candidate["privateConsumerEligibility"]["state"], "not_stated"
             )
+            self.assertNotIn("admissionOutcome", candidate)
+            self.assertNotIn("quarantineReasons", candidate)
 
     def test_quarantines_identical_configurations_without_source_ids_as_distinct_candidates(
         self,
@@ -577,17 +644,8 @@ class FleasingAdapterTest(unittest.TestCase):
             len({candidate["offerIdentity"] for candidate in candidates}), 2
         )
         for candidate in candidates:
-            self.assertEqual(candidate["admissionOutcome"], "quarantined")
-            self.assertEqual(
-                candidate["quarantineReasons"],
-                [
-                    {
-                        "fact": "sourceLocalConfigurationKey",
-                        "state": "unclear",
-                        "code": "ambiguous_derived_configuration_id",
-                    }
-                ],
-            )
+            self.assertNotIn("admissionOutcome", candidate)
+            self.assertNotIn("quarantineReasons", candidate)
 
     def test_detects_a_detail_page_that_loses_the_private_configuration_structure(
         self,

@@ -1,0 +1,7 @@
+{
+  "invalidGeneratedAt": "not-a-timestamp",
+  "invalidGeneratedAtCalendarDate": "2026-02-31T10:00:00Z",
+  "invalidProviderUrl": "javascript:alert(1)",
+  "invalidProviderCredentialsUrl": "https://user:pass@example.test/",
+  "invalidOfferUrl": "http://example.test/terminalen/demo"
+}

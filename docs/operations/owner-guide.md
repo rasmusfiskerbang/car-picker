@@ -2,166 +2,197 @@
 
 This is the canonical operating guide for the owner-only private-leasing
 comparison. Run commands from the repository root with Python 3.14 or newer.
-Generated catalogue data and static sites stay local and must never be committed.
+The Provider Registry is authoritative for active coverage. Catalogue Datasets,
+route outputs, and Sites are reproducible local artifacts and must never be
+committed.
 
-## Verify a fresh checkout with fixtures
+## Locked verification matrix
 
-The committed hand-minimized fixture does not contact a provider. Use it to
-verify the data contracts, automated checks, static build, and LAN server:
-
-```sh
-uv run car-picker validate \
-  --dataset tests/fixtures/one-offer-catalogue-dataset.json \
-  --repository .
-uv run -m compileall -q car_picker tests
-uv run pytest
-uv run car-picker build-site \
-  --dataset tests/fixtures/one-offer-catalogue-dataset.json \
-  --output var/site
-uv run car-picker serve-site --site var/site --port 4173
-```
-
-Open `http://127.0.0.1:4173/` on the owner computer. For another device on the
-same LAN, open `http://<owner-computer-LAN-address>:4173/`. The server binds
-`0.0.0.0`; stop it with Ctrl-C. It serves only the completed static artifact and
-has no runtime application backend.
-
-`validate` checks the canonical catalogue dataset, the minimized presentation
-projection, the provider control, and every reachable Git-history path. It
-fails if generated provider data such as `var/catalogue-dataset.json` or files
-under a generated `site/` directory have entered history. It also enforces the
-[dated consumer-credit release gate](consumer-credit-revalidation.md).
-
-## Refresh, validate, build, and serve
-
-Run collection and publication as separate operations:
+There is no catch-all validation command. Each direct command owns one seam and
+must use the committed dependency locks:
 
 ```sh
-uv run car-picker refresh-catalogue \
-  --dataset var/catalogue-dataset.json
-uv run car-picker validate \
-  --dataset var/catalogue-dataset.json \
-  --repository .
-uv run car-picker build-site \
-  --dataset var/catalogue-dataset.json \
-  --output site
-uv run car-picker serve-site --site site --port 4173
+uv sync --locked --dev
+uv run --locked ruff format --check .
+uv run --locked ruff check .
+uv run --locked ty check car_picker tests
+uv run --locked pytest
+uv run --locked pytest tests/test_collection.py tests/test_fleasing_adapter.py tests/test_terminalen_adapter.py tests/test_production_composition.py
+uv run --locked pytest tests/test_catalogue_refresh_contracts.py tests/test_catalogue_contract.py
+uv run --locked pytest tests/test_clean_room_cutover.py tests/test_cutover_corrections.py
+cd frontend
+pnpm install --frozen-lockfile
+pnpm generate-contract
+pnpm generate-routes
+pnpm typecheck
+pnpm test:module
+pnpm exec playwright install chromium
+pnpm test:e2e
+cd ..
+uv run --locked car-picker --workspace . site build
+uv run --locked car-picker --workspace . site inspect
+uv run --locked car-picker history-check --repository .
+uv run --locked car-picker legal-check --repository .
 ```
 
-The refresh is the only operation that contacts covered providers. It collects
-Fleasing first and Terminalen second into one catalogue dataset with one
-generation timestamp. The separate build reads that completed dataset and replaces
-the static artifact only after projection and artifact validation succeeds.
+The Python formatting, Ruff lint, `ty` typing, Python tests, Provider Adapter
+tests, contract tests, clean-room architecture/import/style tests, frontend
+contract and route generators, frontend type/module tests, production Site
+build, and Playwright commands are intentionally separate. `pnpm install
+--frozen-lockfile` and `uv sync --locked` are required in a fresh checkout;
+`uv run --locked` refuses to alter the Python lock during checks.
 
-## Diagnose provider aggregate totals
+The contract generator writes ignored files under `frontend/src/generated/`.
+The route generator reads the tracked `frontend/src/route-manifest.json` and
+writes the ignored `frontend/src/generated/route-output.ts`. Site build and
+Playwright write ignored `var/`, `frontend/dist/`, and test-result artifacts.
+Remove generated files and caches before committing and confirm
+`git status --short` is empty.
 
-Diagnose every catalogue offer:
+For a clean-room proof, clone the final commit into a new directory without
+copying `var/`, `frontend/src/generated/`, `frontend/dist/`, or caches, then
+run the same locked setup and direct checks. The committed inputs are the
+Provider Registry, source audits and ADRs, legal record, reviewed fixtures,
+application code, and route manifest.
+
+`history-check` and `legal-check` are separate repository-maintenance gates,
+not a catch-all release command. `site inspect` is the narrow inspection
+operation under the `site` noun and is retained because the accepted #86 live
+gate records the completed artifact through that operation. The contract
+generator is an internal Site-owned build step used by `pnpm generate-contract`;
+it is not a package-facade or owner-CLI API.
+
+## Provider Registry operations
+
+Inspect the complete ordered Registry:
 
 ```sh
-uv run car-picker diagnose-aggregates \
-  --dataset var/catalogue-dataset.json
+uv run --locked car-picker provider inspect
+uv run --locked car-picker --json provider inspect
 ```
 
-Diagnose one exact offer identity:
+Replace one complete record atomically. An inactive record requires an explicit
+reason and explanation; changing the Registry does not mutate the active
+Catalogue Dataset or Site:
 
 ```sh
-uv run car-picker diagnose-aggregates \
-  --dataset tests/fixtures/one-offer-catalogue-dataset.json \
-  --offer 'terminalen:ioniq-5:essential-84'
+uv run --locked car-picker provider set terminalen inactive \
+  --reason blocked \
+  --explanation "Owner paused retrieval pending source review."
+git diff -- config/provider-registry.jsonl
 ```
 
-For a live dataset, replace both paths with `var/catalogue-dataset.json` and an
-exact identity copied from that dataset or a refresh warning. Diagnostics report
-provider assertions, reconstructed cash-flow events, difference, tolerance,
-recurrence, VAT basis, evidence references, and investigation prompts. A
-mismatch leaves the reconstructed derived values available and appears in the
-browser as an unexplained aggregate-difference warning; diagnostics do not edit
-the dataset or choose one total as a correction for the other.
+Reactivate a record by replacing it with the complete public record:
 
-## Failure guarantees
+```sh
+uv run --locked car-picker provider set terminalen active
+```
 
-- A provider retrieval, enumeration, or source-wide structural parsing failure
-  rejects the complete replacement after at most two retries. The prior
-  catalogue dataset remains byte-for-byte active; a partial or mixed-age dataset
-  is never written. A listed detail page that lacks the required private-offer
-  sections is instead retained as a quarantined candidate with no published
-  private-offer facts.
-- A schema, projection, browser-bundle, or artifact verification failure leaves
-  the prior completed static artifact active.
-- Full fetched provider documents exist only for the running refresh, in process
-  memory. The active dataset retains normalized facts, short evidence wording,
-  provenance, and hashes where applicable—not full fetched pages or a history of
-  prior datasets.
-- `var/`, every generated `site/` directory, and
-  `catalogue-dataset.json` are ignored boundaries. Do not force-add them.
+Commit Registry changes before a refresh. Do not add a provider-specific CLI
+switch, source URL, adapter selector, force flag, or second control file.
+Before live retrieval, review the [Fleasing](../source-audits/fleasing.md) and
+[Terminalen](../source-audits/terminalen.md) audits under
+[ADR-0001](../adr/0001-public-provider-access.md). A source audit that is not
+currently allowed blocks contact with that active provider; the Registry's
+active/inactive state remains the sole participation control.
 
-If `validate` reports generated paths in Git history, stop before sharing or
-pushing the repository. Removing the current file is insufficient because the
-validation scans all reachable commits; clean the accidental history, then run
-validation again.
+## Refresh and inspection
 
-## Designated sources and access boundaries
+Refresh is one complete all-active-provider operation. It uses the statically
+composed Provider Adapters, assigns one generation timestamp, admits only
+strict public Offers, quarantines incomplete Candidates, and atomically
+replaces `var/catalogue-dataset.json`:
 
-Collection is deliberately bounded:
+```sh
+uv run --locked car-picker --workspace . catalogue refresh
+uv run --locked car-picker --workspace . catalogue inspect
+uv run --locked car-picker --workspace . --json catalogue inspect
+uv run --locked car-picker --workspace . catalogue inspect 'terminalen:offer:identity'
+```
 
-- Fleasing: `https://fleasing.dk/biler/` and only the linked first-party
-  passenger-car detail pages.
-- Terminalen: current Hyundai model price pages under
-  `https://www.terminalen.dk/nye-biler/hyundai` and each page's corresponding
-  same-path first-party API response.
+The refresh contacts only the designated first-party source paths documented
+in the audits. It retains normalized facts and necessary transient evidence in
+memory; it does not retain full fetched pages or prior Datasets. A provider,
+enumeration, or structural failure leaves the previous active Dataset
+byte-for-byte unchanged.
 
-Do not enrich an offer from third-party indexes, unlisted related pages, or a
-document whose applicability to that exact offer is uncertain. Missing source
-facts retain an explicit offer fact state.
+## Site build and serve
 
-Under [ADR-0001](../adr/0001-public-provider-access.md), public first-party facts
-may be collected unless an applicable robots rule, published term, technical
-access control, rate limit, or provider instruction explicitly prohibits the
-bounded use. Absence of a reuse licence and a generic copyright notice are not
-opt-outs. Same-provider APIs used by the public page are allowed only as exact,
-bounded structured representations; embedded third-party endpoints require
-their own access decision.
+The Site commands are grouped under the workspace-bound `site` noun. They
+always read and write the conventional workspace artifacts:
 
-Before a live refresh, review the current
-[Fleasing](../source-audits/fleasing.md) and
-[Terminalen](../source-audits/terminalen.md) source audits. Revalidate a provider
-after a material source or terms change, access failure, or provider contact.
-Ambiguous restrictions pause that provider for owner review. Never bypass a
-login, bot challenge, persistent authorization denial, rate limit, or other
-access control, and never rotate identity or choose another route to evade one.
-Record the current `allowed`, `paused`, or `blocked` decision, check date, and
-source-audit path in `config/provider-access.json`. Both `refresh-catalogue` and
-`validate` reject malformed access records, and refresh refuses to contact an
-enabled provider unless its decision is `allowed`.
+```sh
+uv run --locked car-picker --workspace . site build
+uv run --locked car-picker --workspace . site inspect
+uv run --locked car-picker --workspace . site serve --port 4173
+```
 
-Keep collection low-frequency and bounded. Retain normalized facts, provenance,
-hashes, and only short audit wording; do not retain full fetched pages, personal
-or accidentally exposed data, images, or long descriptions. An authenticated
-provider instruction to stop overrides the public-source decision immediately;
-follow the provider withdrawal procedure below.
+Build packages the exact active Dataset bytes, generates the Pydantic contract
+and frontend route output, compiles the frontend, writes the integrity
+manifest, and verifies the completed artifact before atomic replacement. A
+failed build leaves the prior completed Site active. `site serve` validates the
+Site before binding and serves no runtime backend.
 
-## Provider withdrawal and routine maintenance
+## Diagnostics and recovery
 
-For an authenticated provider request, follow the
-[provider withdrawal procedure](provider-withdrawal.md). It disables retrieval
-before the next refresh, removes the provider's offers and evidence from the
-replacement dataset and static artifact, and records the 24-hour deadline.
+Use inspection output and structured refresh/Site errors as the diagnostics
+surface; they never alter generated artifacts:
 
-After changes to adapters, schemas, projection code, or operating configuration:
+```sh
+uv run --locked car-picker --workspace . --json catalogue inspect
+uv run --locked car-picker --workspace . --json site inspect
+```
 
-1. Update the hand-minimized fixture only with evidence needed by its test.
-2. Run `validate`, the focused affected test file, and then the full automated
-   checks before release.
-3. Build from the validated catalogue dataset; never edit generated JSON or site
-   files by hand.
-4. Inspect refresh warnings and run aggregate diagnostics before serving or
-   deploying the completed artifact.
+- If refresh fails, inspect its error and confirm the active Dataset is
+  unchanged. Repair the source audit, Registry, or adapter boundary, then
+  rerun the complete refresh. Never hand-edit the Dataset.
+- If Site build fails, keep serving the last completed Site. Repair the input
+  or frontend contract/build failure, rerun `site build`, then run `site inspect`
+  before serving. Never hand-edit Site files.
+- If generated output or a Site was accidentally committed, stop release and
+  run `history-check`; current ignored files alone are not a history repair.
 
-Before a release, follow the [fixed real-offer acceptance
-procedure](fixed-real-offer-acceptance.md). Its dated, version-controlled record
-is required even when a changed designated source prevents the acceptance from
-passing; in that case it must record the blocker and an explicit non-approval.
+## Blocking post-cutover rollback
 
-For every release, record the legal-gate result. Releases on or after 20
-November 2026 require the completed, committed consumer-credit revalidation
-described above.
+The repository keeps the named tag `pre-cutover-issue-85` at the prior `main`
+revision `79deb767ece2aaa6ffe33d512fa5e0b1521471bb`. It is the only rollback
+anchor for a blocking post-cutover recovery; do not choose an arbitrary
+reviewed commit:
+
+```sh
+git fetch --tags
+git rev-parse pre-cutover-issue-85^{commit}
+git rev-parse main^{commit}
+git log --oneline pre-cutover-issue-85..HEAD
+git revert --no-edit pre-cutover-issue-85..HEAD
+uv sync --locked --dev
+uv run --locked car-picker history-check --repository .
+```
+
+Preserve the incident, reason, rollback commit, and operational result in the
+dated acceptance record. The rollback is a normal revert, so it does not erase
+the audit trail.
+
+## Conditional consumer-credit revalidation
+
+The consumer-credit gate is mandatory for any cutover or release on or after
+20 November 2026. Run it separately from the history check:
+
+```sh
+uv run --locked car-picker legal-check --repository .
+```
+
+Before the horizon, the committed
+`config/consumer-credit-legal-review.json` deliberately has
+`"revalidation": null`. On or after the horizon, `legal-check` fails until the
+record contains a completed, dated review against then-current official law and
+official guidance, explicit classification and disclosure conclusions,
+implementation impact, and dated owner sign-off. The record and any required
+code changes must be committed together. See
+[consumer-credit-revalidation.md](consumer-credit-revalidation.md).
+
+Before release, also complete the dated
+[fixed real-offer acceptance procedure](fixed-real-offer-acceptance.md),
+including reviewed fixtures, source audits, and recorded operational facts or
+non-approval. Those records remain normative evidence; generated Dataset and
+Site outputs do not become repository inputs.

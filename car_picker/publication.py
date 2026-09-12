@@ -1,44 +1,49 @@
+"""Build, open, verify, and serve the static Catalogue Site."""
+
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
+import socket
 import subprocess
 import tempfile
 import uuid
 from collections.abc import Mapping
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, cast
+from socketserver import BaseServer
+from typing import Any
 
-from pydantic import BaseModel, JsonValue
+from pydantic import JsonValue
 
-from car_picker.catalogue_model import (
-    CatalogueDataset,
-    CatalogueOffer,
-    KnownFact,
-    VehicleSpecification,
+from car_picker import CatalogueDataset, catalogue_dataset_json_schema
+
+
+_CATALOGUE_DATASET_FILENAME = "catalogue-dataset.json"
+_CATALOGUE_DATASET_SCHEMA_FILENAME = "catalogue-dataset-schema.json"
+_SITE_INTEGRITY_FILENAME = "catalogue-site-integrity.json"
+_SITE_INTEGRITY_SCHEMA_VERSION = "catalogue-site-integrity/v1"
+_CATALOGUE_DATASET_SCHEMA_SOURCE = (
+    Path(__file__).resolve().parents[1]
+    / "frontend/src/generated/catalogue-dataset-schema.json"
 )
-from car_picker.comparison import (
-    calculate_catalogue_offer_comparison,
-    reconcile_provider_advertised_aggregate,
+_CATALOGUE_DATASET_SCHEMA_MODULE = (
+    Path(__file__).resolve().parents[1]
+    / "frontend/src/generated/catalogue-dataset-schema.ts"
 )
-from car_picker.presentation_model import (
-    CataloguePresentation,
-    presentation_json_schema,
-)
-
-
-PRESENTATION_SCHEMA_VERSION = "catalogue-presentation/v1"
-STATIC_ARTIFACT_FILENAMES = {
+_CATALOGUE_STATIC_ARTIFACT_FILENAMES = {
     "app.js",
     "index.html",
-    "projection-schema.json",
-    "projection.json",
+    _CATALOGUE_DATASET_FILENAME,
+    _CATALOGUE_DATASET_SCHEMA_FILENAME,
+    _SITE_INTEGRITY_FILENAME,
     "styles.css",
 }
-REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
-FRONTEND_ROOT = REPOSITORY_ROOT / "frontend"
-FORBIDDEN_ARTIFACT_KEYS = {
+_REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+_FRONTEND_ROOT = _REPOSITORY_ROOT / "frontend"
+_FORBIDDEN_ARTIFACT_KEYS = {
     "contentSha256",
     "hash",
     "parserMetadata",
@@ -47,208 +52,180 @@ FORBIDDEN_ARTIFACT_KEYS = {
     "sourceMetadata",
 }
 
-PRESENTATION_SCHEMA = presentation_json_schema()
+
+class SiteBuildError(ValueError):
+    """A Site build failed before replacing the active artifact."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        output_path: Path,
+        safe_artifact: Path | None,
+    ) -> None:
+        super().__init__(message)
+        self.output_path = output_path
+        self.safe_artifact = safe_artifact
 
 
-def build_site(dataset_path: Path, output_path: Path) -> None:
-    """Project a canonical catalogue dataset and atomically replace a static site."""
-    dataset = CatalogueDataset.model_validate(read_json(dataset_path))
-    projection = project_catalogue(dataset)
-    validate_presentation_projection(projection)
-    write_site_atomically(output_path, projection)
+class CatalogueSite:
+    """The workspace-bound public lifecycle for one completed Catalogue Site."""
+
+    def __init__(
+        self,
+        workspace: Path,
+    ) -> None:
+        self.workspace = workspace.resolve()
+        self.dataset_path = self.workspace / "var/catalogue-dataset.json"
+        self.site_path = self.workspace / "var/site"
+
+    def build(self) -> None:
+        """Build the active workspace Dataset into its ignored Site artifact."""
+        _build_site(self.dataset_path, self.site_path)
+
+    def open(self) -> CatalogueDataset:
+        """Open and validate the completed workspace Site."""
+        return _open_site(self.site_path)
+
+    def serve(self, port: int = 4173) -> None:
+        """Validate and serve the completed workspace Site."""
+        _serve_site(self.site_path, port)
 
 
-def read_json(path: Path) -> Mapping[str, Any]:
+def _build_site(dataset_path: Path, output_path: Path) -> None:
+    """Validate and atomically publish one exact Catalogue Dataset."""
+    output_path = output_path.absolute()
+    safe_artifact = _find_safe_artifact(output_path)
+    dataset_bytes, raw_dataset = _read_json_with_bytes(
+        dataset_path, "canonical catalogue dataset"
+    )
+    CatalogueDataset.model_validate(raw_dataset)
+    schema = catalogue_dataset_json_schema()
+
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
-        raise ValueError(
-            f"Cannot read canonical catalogue dataset at {path}: {error}"
+        _write_site_atomically(output_path, dataset_bytes, schema)
+    except SiteBuildError:
+        raise
+    except (OSError, UnicodeError, ValueError, TypeError) as error:
+        raise SiteBuildError(
+            f"Catalogue Site build failed: {error}",
+            output_path=output_path,
+            safe_artifact=safe_artifact,
         ) from error
-    return object_value(value, "canonical catalogue dataset")
+    return None
 
 
-def project_catalogue(dataset: CatalogueDataset) -> dict[str, Any]:
-    return {
-        "schemaVersion": PRESENTATION_SCHEMA_VERSION,
-        "generatedAt": dataset.generated_at,
-        "coverage": {
-            "providers": [
-                provider.model_dump(mode="json", by_alias=True)
-                for provider in dataset.coverage.providers
-            ]
-        },
-        "coverageEnded": [
-            provider.model_dump(mode="json", by_alias=True)
-            for provider in dataset.coverage_ended
-        ],
-        "offers": [project_offer(offer) for offer in dataset.catalogue_offers],
-    }
+def _open_site(site_path: Path) -> CatalogueDataset:
+    """Open and validate the Site's own completed Dataset and schema."""
+    return _read_verified_site(site_path)[0]
 
 
-def project_offer(offer: CatalogueOffer) -> dict[str, Any]:
-    comparison_values = calculate_catalogue_offer_comparison(offer)
-    source_url = canonical_source_url(offer)
-    projected_offer = {
-        "offerIdentity": offer.offer_identity,
-        "provider": offer.provider,
-        "providerSourceUrl": source_url,
-        "vehicleSpecification": project_canonical_vehicle(offer),
-        "supportedLeasingForm": serialize_fact(offer.supported_leasing_form),
-        "providerFormLabel": project_canonical_provider_form_label(offer),
-        "residualRiskAllocation": serialize_fact(offer.residual_risk_allocation),
-        "registrationTaxTreatment": serialize_fact(offer.registration_tax_treatment),
-        "serviceArrangements": serialize_fact(offer.service_arrangements),
-        "exclusions": serialize_fact(offer.exclusions),
-        "exposureScenarios": serialize_fact(offer.exposure_scenarios),
-        "advertisedMonthlyPayment": serialize_fact(offer.advertised_monthly_payment),
-        "upfrontCashRequirement": project_derived_money_fact(
-            comparison_values["upfrontCashRequirement"], offer
-        ),
-        "nominalBaseOutlay": project_derived_money_fact(
-            comparison_values["nominalBaseOutlay"], offer
-        ),
-        "nominalMonthlyEquivalent": project_derived_money_fact(
-            comparison_values["nominalMonthlyEquivalent"], offer
-        ),
-        "operationReadiness": comparison_values["operationReadiness"],
-        "aggregateReconciliation": project_aggregate_reconciliation(offer),
-        "termMonths": serialize_fact(offer.term_months),
-        "annualMileageKm": serialize_fact(offer.annual_mileage_km),
-        "normalEndMechanism": serialize_fact(offer.normal_end_mechanism),
-    }
-    projected_offer["cashFlowBreakdown"] = [
-        {
-            key: value
-            for key, value in event.model_dump(
-                mode="json",
-                by_alias=True,
-                exclude={"included_in_base"},
-                exclude_none=False,
-            ).items()
-            if value is not None or key in {"amountDkk", "recurrenceCount"}
-        }
-        for event in offer.base_cash_flow_stream
-    ]
-    return projected_offer
+def _serve_site(site_path: Path, port: int = 4173) -> None:
+    """Validate a completed Site before binding its HTTP server."""
+    _read_verified_site(site_path)
+    if not 1 <= port <= 65535:
+        raise ValueError("--port must be between 1 and 65535")
 
+    site_path = site_path.absolute()
 
-def project_aggregate_reconciliation(offer: CatalogueOffer) -> dict[str, Any]:
-    diagnostic = reconcile_provider_advertised_aggregate(
-        offer.model_dump(mode="json", by_alias=True)
-    )
-    assertion = diagnostic["providerAdvertisedAggregate"]
-    return {
-        "status": diagnostic["status"],
-        "providerAdvertisedAggregate": (
-            None
-            if assertion is None
-            else {
-                "valueDkk": assertion["valueDkk"],
-                "evidence": assertion["evidence"],
-            }
-        ),
-        "reconstructedNominalBaseOutlayDkk": diagnostic[
-            "reconstructedNominalBaseOutlayDkk"
-        ],
-        "unexplainedDifferenceDkk": diagnostic["differenceDkk"],
-        "toleranceDkk": diagnostic["toleranceDkk"],
-    }
+    class StaticSiteHandler(SimpleHTTPRequestHandler):
+        def __init__(
+            self,
+            request: socket.socket,
+            client_address: tuple[str, int],
+            server: BaseServer,
+        ) -> None:
+            super().__init__(request, client_address, server, directory=str(site_path))
 
-
-def project_derived_money_fact(
-    value: Mapping[str, Any], offer: CatalogueOffer
-) -> dict[str, Any]:
-    calculation = {
-        "method": "base_cash_flow_stream",
-        "inputEvidence": [
-            event.evidence.model_dump(mode="json", by_alias=True)
-            for event in offer.base_cash_flow_stream
-        ],
-    }
-    if value["state"] == "known":
-        return {
-            "state": "known",
-            "valueDkk": value["valueDkk"],
-            "calculation": calculation,
-        }
-    return {
-        "state": "not_stated",
-        "calculation": calculation,
-        "blockingFacts": value["blockingFacts"],
-    }
-
-
-def serialize_fact(value: BaseModel | None) -> dict[str, Any]:
-    if value is None:
-        raise ValueError("admitted catalogue offer requires public comparison facts")
-    return cast(
-        dict[str, Any],
-        value.model_dump(mode="json", by_alias=True, exclude_none=True),
-    )
-
-
-def project_canonical_vehicle(offer: CatalogueOffer) -> dict[str, Any]:
-    fact = serialize_fact(offer.vehicle_specification)
-    if isinstance(offer.vehicle_specification, KnownFact) and isinstance(
-        offer.vehicle_specification.value, VehicleSpecification
-    ):
-        vehicle = offer.vehicle_specification.value
-        fact["value"] = " ".join(
-            part for part in (vehicle.make, vehicle.model, vehicle.trim) if part
+    with ThreadingHTTPServer(("0.0.0.0", port), StaticSiteHandler) as server:
+        print(
+            f"Serving completed static artifact on http://0.0.0.0:{port}/",
+            flush=True,
         )
-    return fact
+        server.serve_forever()
 
 
-def project_canonical_provider_form_label(offer: CatalogueOffer) -> dict[str, Any]:
-    if offer.provider_form_label is not None:
-        return serialize_fact(offer.provider_form_label)
-    fact = serialize_fact(offer.supported_leasing_form)
-    if fact["state"] == "known":
-        fact["value"] = offer.supported_leasing_form.evidence.wording
-    return fact
+def _read_json_with_bytes(
+    path: Path,
+    name: str,
+) -> tuple[bytes, Mapping[str, Any]]:
+    try:
+        raw = path.read_bytes()
+        value = json.loads(
+            raw.decode("utf-8"),
+            object_pairs_hook=_reject_duplicate_json_keys,
+        )
+    except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as error:
+        raise ValueError(f"Cannot read {name} at {path}: {error}") from error
+    return raw, _object_value(value, name)
 
 
-def canonical_source_url(offer: CatalogueOffer) -> str:
-    if offer.canonical_offer_url:
-        return offer.canonical_offer_url
-    return offer.base_cash_flow_stream[0].evidence.source_url
-
-
-def validate_presentation_projection(projection: Mapping[str, Any]) -> None:
-    """Validate the browser contract before it is published."""
-    CataloguePresentation.model_validate(projection)
-
-
-def write_site_atomically(output_path: Path, projection: Mapping[str, Any]) -> None:
+def _write_site_atomically(
+    output_path: Path,
+    dataset: Mapping[str, Any] | bytes,
+    schema: Mapping[str, Any],
+) -> None:
+    """Stage and verify one Site before atomically replacing the prior one."""
     output_path = output_path.absolute()
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    dataset_bytes = (
+        dataset
+        if isinstance(dataset, bytes)
+        else json.dumps(dataset, ensure_ascii=False, separators=(",", ":")).encode(
+            "utf-8"
+        )
+    )
+    schema_bytes = json.dumps(schema, ensure_ascii=False, separators=(",", ":")).encode(
+        "utf-8"
+    )
     with tempfile.TemporaryDirectory(
         prefix=".car-picker-site-", dir=output_path.parent
     ) as staging_root:
         staging_path = Path(staging_root) / "site"
         staging_path.mkdir()
-        (staging_path / "projection.json").write_text(
-            json.dumps(projection, ensure_ascii=False, separators=(",", ":")),
-            encoding="utf-8",
-        )
-        (staging_path / "projection-schema.json").write_text(
-            json.dumps(PRESENTATION_SCHEMA, ensure_ascii=False, separators=(",", ":")),
-            encoding="utf-8",
-        )
-        build_frontend(staging_path)
-        verify_static_artifact(staging_path)
-        replace_directory(staging_path, output_path)
+        (staging_path / _CATALOGUE_DATASET_FILENAME).write_bytes(dataset_bytes)
+        (staging_path / _CATALOGUE_DATASET_SCHEMA_FILENAME).write_bytes(schema_bytes)
+        _build_frontend(staging_path)
+        _add_asset_integrity(staging_path)
+        _verify_static_artifact(staging_path, schema)
+        _replace_directory(staging_path, output_path)
 
 
-def build_frontend(staging_path: Path) -> None:
-    """Generate the browser contract input and compile the production application."""
-    generated_schema = FRONTEND_ROOT / "src/generated/presentation-schema.json"
-    generated_schema.write_text(
-        json.dumps(PRESENTATION_SCHEMA, ensure_ascii=False, separators=(",", ":")),
+def _build_frontend(staging_path: Path) -> None:
+    """Generate the contract once, then run compile-only production build."""
+    environment = _frontend_environment(staging_path)
+    _run_frontend_command(["pnpm", "generate-contract"], environment)
+    _run_frontend_command(["pnpm", "generate-routes"], environment)
+    _run_frontend_command(["pnpm", "build"], environment)
+
+
+def _add_asset_integrity(site_path: Path) -> None:
+    files = {}
+    for filename in sorted(
+        _CATALOGUE_STATIC_ARTIFACT_FILENAMES - {_SITE_INTEGRITY_FILENAME}
+    ):
+        content = (site_path / filename).read_bytes()
+        files[filename] = {
+            "sha256": hashlib.sha256(content).hexdigest(),
+            "size": len(content),
+        }
+    manifest = {
+        "files": files,
+        "schemaVersion": _SITE_INTEGRITY_SCHEMA_VERSION,
+    }
+    (site_path / _SITE_INTEGRITY_FILENAME).write_text(
+        json.dumps(manifest, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+        + "\n",
         encoding="utf-8",
     )
-    environment = os.environ | {"CAR_PICKER_SITE_OUTPUT": str(staging_path)}
+
+
+def _frontend_environment(staging_path: Path) -> dict[str, str]:
+    environment = dict(os.environ)
+    # The workspace command owns the Python used for contract generation; an
+    # ambient override would make Site builds differ from frontend checks.
+    environment.pop("CAR_PICKER_PYTHON", None)
+    environment["CAR_PICKER_SITE_OUTPUT"] = str(staging_path)
     if shutil.which("node", path=environment.get("PATH")) is None:
         codex_node_directory = Path(
             "/Applications/ChatGPT.app/Contents/Resources/cua_node/bin"
@@ -257,10 +234,14 @@ def build_frontend(staging_path: Path) -> None:
             environment["PATH"] = (
                 f"{codex_node_directory}{os.pathsep}{environment.get('PATH', '')}"
             )
+    return environment
+
+
+def _run_frontend_command(command: list[str], environment: Mapping[str, str]) -> None:
     result = subprocess.run(
-        ["pnpm", "build"],
-        cwd=FRONTEND_ROOT,
-        env=environment,
+        command,
+        cwd=_FRONTEND_ROOT,
+        env=dict(environment),
         capture_output=True,
         text=True,
         check=False,
@@ -271,43 +252,140 @@ def build_frontend(staging_path: Path) -> None:
             for output in (result.stdout.strip(), result.stderr.strip())
             if output
         )
-        raise ValueError(f"frontend build failed: {detail}")
+        if not detail:
+            detail = f"exit status {result.returncode}"
+        raise ValueError(f"frontend command {' '.join(command)} failed: {detail}")
 
 
-def verify_static_artifact(site_path: Path) -> None:
-    """Reject an incomplete or internally detailed static artifact before publication."""
+def generate_catalogue_contract_sources() -> dict[str, Any]:
+    """Generate the frontend contract directly from the Catalogue schema."""
+    pinned_schema = catalogue_dataset_json_schema()
+    serialized_schema = json.dumps(pinned_schema, ensure_ascii=False, indent=2)
+    _CATALOGUE_DATASET_SCHEMA_SOURCE.write_text(
+        f"{serialized_schema}\n", encoding="utf-8"
+    )
+    _CATALOGUE_DATASET_SCHEMA_MODULE.write_text(
+        "/* Generated from the Pydantic serialization schema. Do not edit. */\n"
+        "export const catalogueDatasetJsonSchema = "
+        f"{serialized_schema} as const;\n\n"
+        "export default catalogueDatasetJsonSchema;\n",
+        encoding="utf-8",
+    )
+    return pinned_schema
+
+
+def _verify_static_artifact(
+    site_path: Path,
+    schema: Mapping[str, Any] | None = None,
+) -> None:
+    """Reject an incomplete or corrupt static Site artifact."""
+    _read_verified_site(site_path, schema)
+
+
+def _read_verified_site(
+    site_path: Path,
+    schema: Mapping[str, Any] | None = None,
+) -> tuple[CatalogueDataset, Mapping[str, Any]]:
+    if not site_path.is_dir():
+        raise ValueError("static artifact must be a directory")
     entries = tuple(site_path.iterdir())
     if any(not path.is_file() or path.is_symlink() for path in entries):
         raise ValueError("static artifact must contain only approved regular files")
     files = {path.name for path in entries}
-    if files != STATIC_ARTIFACT_FILENAMES:
+    if files != _CATALOGUE_STATIC_ARTIFACT_FILENAMES:
         raise ValueError("static artifact contains unexpected or missing files")
-    projection = read_json(site_path / "projection.json")
-    validate_presentation_projection(projection)
-    schema = read_json(site_path / "projection-schema.json")
-    if schema != PRESENTATION_SCHEMA:
+    _verify_asset_integrity(site_path)
+
+    _, raw_dataset = _read_json_with_bytes(
+        site_path / _CATALOGUE_DATASET_FILENAME,
+        "packaged Catalogue Dataset",
+    )
+    dataset = CatalogueDataset.model_validate(raw_dataset)
+    _, packaged_schema = _read_json_with_bytes(
+        site_path / _CATALOGUE_DATASET_SCHEMA_FILENAME,
+        "packaged Catalogue Dataset schema",
+    )
+    expected_schema = (
+        dict(schema) if schema is not None else catalogue_dataset_json_schema()
+    )
+    if packaged_schema != expected_schema:
         raise ValueError(
-            "static artifact must export the presentation serialization schema"
+            "static artifact must export the Pydantic Dataset serialization schema"
         )
-    if contains_forbidden_artifact_key(projection):
-        raise ValueError("static artifact projection contains internal metadata")
+    if _contains_forbidden_artifact_key(raw_dataset):
+        raise ValueError("static artifact Dataset contains internal metadata")
+
     index = (site_path / "index.html").read_text(encoding="utf-8")
-    if 'type="module"' not in index or 'src="./app.js"' not in index:
+    required_index_markers = ('type="module"', 'src="./app.js"', 'href="./styles.css"')
+    if any(marker not in index for marker in required_index_markers):
         raise ValueError("static artifact browser application is incomplete")
+    return dataset, packaged_schema
 
 
-def contains_forbidden_artifact_key(value: object) -> bool:
+def _verify_asset_integrity(site_path: Path) -> None:
+    _, raw_manifest = _read_json_with_bytes(
+        site_path / _SITE_INTEGRITY_FILENAME,
+        "static artifact integrity manifest",
+    )
+    if set(raw_manifest) != {"files", "schemaVersion"}:
+        raise ValueError("static artifact integrity manifest has an invalid shape")
+    if raw_manifest["schemaVersion"] != _SITE_INTEGRITY_SCHEMA_VERSION:
+        raise ValueError(
+            "static artifact integrity manifest has an unsupported version"
+        )
+    files = raw_manifest["files"]
+    if not isinstance(files, Mapping):
+        raise ValueError("static artifact integrity manifest files must be an object")
+    expected_files = _CATALOGUE_STATIC_ARTIFACT_FILENAMES - {_SITE_INTEGRITY_FILENAME}
+    if set(files) != expected_files:
+        raise ValueError("static artifact integrity manifest has an invalid file list")
+
+    for filename in sorted(expected_files):
+        entry = files[filename]
+        if not isinstance(entry, Mapping) or set(entry) != {"sha256", "size"}:
+            raise ValueError(
+                f"static artifact integrity manifest has an invalid entry for {filename}"
+            )
+        digest = entry["sha256"]
+        size = entry["size"]
+        if (
+            not isinstance(digest, str)
+            or len(digest) != 64
+            or any(character not in "0123456789abcdef" for character in digest)
+            or not isinstance(size, int)
+            or isinstance(size, bool)
+            or size < 0
+        ):
+            raise ValueError(
+                f"static artifact integrity manifest has an invalid entry for {filename}"
+            )
+        content = (site_path / filename).read_bytes()
+        if size != len(content) or digest != hashlib.sha256(content).hexdigest():
+            raise ValueError(f"static artifact integrity mismatch for {filename}")
+
+
+def _find_safe_artifact(output_path: Path) -> Path | None:
+    if not output_path.exists() and not output_path.is_symlink():
+        return None
+    try:
+        _open_site(output_path)
+    except OSError, UnicodeError, ValueError:
+        return None
+    return output_path
+
+
+def _contains_forbidden_artifact_key(value: object) -> bool:
     if isinstance(value, Mapping):
         return any(
-            key in FORBIDDEN_ARTIFACT_KEYS or contains_forbidden_artifact_key(item)
+            key in _FORBIDDEN_ARTIFACT_KEYS or _contains_forbidden_artifact_key(item)
             for key, item in value.items()
         )
     if isinstance(value, list):
-        return any(contains_forbidden_artifact_key(item) for item in value)
+        return any(_contains_forbidden_artifact_key(item) for item in value)
     return False
 
 
-def replace_directory(staging_path: Path, output_path: Path) -> None:
+def _replace_directory(staging_path: Path, output_path: Path) -> None:
     """Publish an immutable artifact through one atomic pointer replacement."""
     if output_path.exists() and not output_path.is_symlink():
         raise ValueError(
@@ -336,7 +414,22 @@ def replace_directory(staging_path: Path, output_path: Path) -> None:
         shutil.rmtree(previous_artifact)
 
 
-def object_value(value: JsonValue, name: str) -> dict[str, JsonValue]:
+def _reject_duplicate_json_keys(
+    pairs: list[tuple[str, JsonValue]],
+) -> dict[str, JsonValue]:
+    value = dict(pairs)
+    if len(value) != len(pairs):
+        raise ValueError("duplicate JSON object keys are not permitted")
+    return value
+
+
+def _object_value(value: JsonValue, name: str) -> dict[str, JsonValue]:
     if not isinstance(value, dict):
         raise ValueError(f"{name} must be an object")
     return value
+
+
+__all__ = [
+    "CatalogueSite",
+    "SiteBuildError",
+]

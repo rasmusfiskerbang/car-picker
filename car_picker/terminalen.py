@@ -4,23 +4,191 @@ import hashlib
 import json
 import re
 from collections.abc import Mapping
+from dataclasses import dataclass
 from html.parser import HTMLParser
-from typing import Any, cast
+from typing import Annotated, Any, Generic, Literal, TypeVar, cast
 from urllib.parse import urljoin, urlparse
 
-from pydantic import JsonValue
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+    Field,
+    JsonValue,
+    StringConstraints,
+    model_validator,
+)
 
 from car_picker.fleasing import StructuralSourceError, TextHttpClient
 from car_picker.provider_contract import (
-    admission_reasons,
     evidence,
     source_document,
     unavailable_fact,
 )
 
 
-PARSER_VERSION = "terminalen-model-price-v1"
+PARSER_VERSION = "terminalen-model-price-v3"
 NAVIGATION_STATE_KEY = "G./api/navigation?culture=da-DK&levels=10"
+AUDITED_IONIQ_5_MODEL_IDS = frozenset({"HY_IONIQ5", "HY_IONIQ5_NE_DK_IONIQ5_MY27"})
+AUDITED_BATTERY_ELECTRIC_MODELS = frozenset(
+    {"inster", "kona electric", "ioniq 5", "ioniq 6", "ioniq 9"}
+)
+
+
+@dataclass(frozen=True)
+class PrivateConsumerAmountAssessment:
+    """One typed ADR-0002 result shared by events and Candidate admission."""
+
+    amount_basis: Literal["including_vat", "excluding_vat", "not_stated"]
+    admissible: bool
+    evidence_wording: str
+
+
+def _validate_terminalen_source_url(value: str) -> str:
+    parsed = urlparse(value)
+    if (
+        parsed.scheme != "https"
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.fragment
+    ):
+        raise ValueError(
+            "Terminalen boundary URLs must be absolute HTTPS URLs without credentials or fragments"
+        )
+    return value
+
+
+TerminalenSourceUrl = Annotated[
+    str,
+    StringConstraints(min_length=1),
+    AfterValidator(_validate_terminalen_source_url),
+]
+TerminalenBoundaryState = Literal[
+    "known", "not_stated", "unclear", "conflicting", "not_applicable"
+]
+BoundaryValue = TypeVar("BoundaryValue")
+
+
+class _TerminalenBoundaryModel(BaseModel):
+    model_config = ConfigDict(
+        alias_generator=lambda name: (
+            name.split("_")[0]
+            + "".join(part.capitalize() for part in name.split("_")[1:])
+        ),
+        populate_by_name=True,
+        extra="forbid",
+        strict=True,
+    )
+
+
+class TerminalenBoundaryEvidence(_TerminalenBoundaryModel):
+    source_url: TerminalenSourceUrl
+    wording: str = Field(min_length=1)
+
+
+class TerminalenBoundaryVehicle(_TerminalenBoundaryModel):
+    make: str = Field(min_length=1)
+    model: str = Field(min_length=1)
+
+
+class TerminalenBoundaryServiceArrangement(_TerminalenBoundaryModel):
+    category: str = Field(min_length=1)
+    treatment: str = Field(min_length=1)
+    scope: str = Field(min_length=1)
+
+
+class TerminalenBoundaryFact(_TerminalenBoundaryModel, Generic[BoundaryValue]):
+    state: TerminalenBoundaryState
+    value: BoundaryValue | None = None
+    evidence: TerminalenBoundaryEvidence
+
+    @model_validator(mode="after")
+    def known_values_are_present(self) -> "TerminalenBoundaryFact[BoundaryValue]":
+        if self.state == "known" and self.value is None:
+            raise ValueError("known Terminalen facts must carry a value")
+        if self.state != "known" and self.value is not None:
+            raise ValueError("unavailable Terminalen facts must not carry a value")
+        return self
+
+
+class TerminalenBoundaryMoneyFact(_TerminalenBoundaryModel):
+    state: TerminalenBoundaryState
+    value_dkk: int | float | None = None
+    scope: Literal["normal_completion_base_cash_flows"] | None = None
+    evidence: TerminalenBoundaryEvidence
+
+    @model_validator(mode="after")
+    def known_values_are_present(self) -> "TerminalenBoundaryMoneyFact":
+        has_value = self.value_dkk is not None
+        if self.state == "known" and not has_value:
+            raise ValueError("known Terminalen money facts must carry a value")
+        if self.state != "known" and has_value:
+            raise ValueError(
+                "unavailable Terminalen money facts must not carry a value"
+            )
+        if self.state != "known" and self.scope is not None:
+            raise ValueError(
+                "unavailable Terminalen money facts must not carry a scope"
+            )
+        return self
+
+
+class TerminalenBoundaryCashFlowEvent(_TerminalenBoundaryModel):
+    meaning: str = Field(min_length=1)
+    direction: Literal["payment", "receipt"]
+    amount_dkk: int | float | None
+    amount_basis: Literal["including_vat", "excluding_vat", "not_stated"]
+    timing: Literal["acceptance_to_handover", "recurring", "normal_completion_end"]
+    recurrence_count: int | None
+    refundability: Literal["refundable", "not_refundable", "not_stated"]
+    included_in_base: Literal[True]
+    evidence: TerminalenBoundaryEvidence
+
+
+class TerminalenBoundarySourceDocument(_TerminalenBoundaryModel):
+    source_url: TerminalenSourceUrl
+    content_sha256: str = Field(min_length=64, max_length=64, pattern=r"^[0-9a-f]{64}$")
+    retrieved_at: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
+
+
+class TerminalenBoundarySourceMetadata(_TerminalenBoundaryModel):
+    parser_version: str = Field(min_length=1)
+    documents: list[TerminalenBoundarySourceDocument] = Field(min_length=1)
+
+
+class TerminalenBoundaryRecord(_TerminalenBoundaryModel):
+    """Validated transient Terminalen data crossing into composition."""
+
+    offer_identity: str = Field(min_length=1)
+    provider: Literal["Terminalen"]
+    provider_source_id: str = Field(min_length=1)
+    canonical_offer_url: TerminalenSourceUrl
+    source_local_configuration_key: str = Field(min_length=1)
+    vehicle_specification: TerminalenBoundaryFact[TerminalenBoundaryVehicle]
+    vehicle_drivetrain: TerminalenBoundaryFact[str]
+    private_consumer_eligibility: TerminalenBoundaryFact[bool]
+    private_consumer_amount_admissibility: TerminalenBoundaryFact[bool]
+    passenger_car_scope: TerminalenBoundaryFact[bool]
+    current_availability: TerminalenBoundaryFact[bool]
+    supported_leasing_form: TerminalenBoundaryFact[
+        Literal["financial", "flex", "operational", "hybrid"]
+    ]
+    provider_form_label: TerminalenBoundaryFact[str]
+    advertised_monthly_payment: TerminalenBoundaryMoneyFact
+    provider_advertised_aggregate: TerminalenBoundaryMoneyFact
+    term_months: TerminalenBoundaryFact[int]
+    annual_mileage_km: TerminalenBoundaryFact[int]
+    normal_end_mechanism: TerminalenBoundaryFact[str]
+    residual_risk_allocation: TerminalenBoundaryFact[str]
+    registration_tax_treatment: TerminalenBoundaryFact[JsonValue]
+    base_cash_flow_stream: list[TerminalenBoundaryCashFlowEvent] = Field(min_length=1)
+    service_arrangements: TerminalenBoundaryFact[
+        list[TerminalenBoundaryServiceArrangement]
+    ]
+    exclusions: TerminalenBoundaryFact[list[TerminalenBoundaryServiceArrangement]]
+    exposure_scenarios: TerminalenBoundaryFact[JsonValue]
+    source_metadata: TerminalenBoundarySourceMetadata
 
 
 class TerminalenAdapter:
@@ -53,11 +221,16 @@ class TerminalenAdapter:
                     retrieved_at=self._retrieved_at,
                 )
             )
-        if not candidates:
-            raise StructuralSourceError(
-                "Terminalen designated model-price pages contain no private lease offers"
-            )
         return candidates
+
+    def collect_boundary_records(
+        self, catalogue_url: str = "https://www.terminalen.dk/"
+    ) -> list[TerminalenBoundaryRecord]:
+        """Validate every fetched record before trusted Catalogue composition."""
+        return [
+            TerminalenBoundaryRecord.model_validate(record)
+            for record in self.collect(catalogue_url)
+        ]
 
 
 def model_price_urls(catalogue_html: str, catalogue_url: str) -> list[str]:
@@ -112,6 +285,8 @@ def model_price_urls(catalogue_html: str, catalogue_url: str) -> list[str]:
             parsed.scheme == origin.scheme
             and parsed.hostname == origin.hostname
             and parsed.port == origin.port
+            and parsed.username is None
+            and parsed.password is None
             and parsed.path.startswith(scope_prefix)
             and re.fullmatch(
                 f"{re.escape(scope_prefix)}[^/]+/pris-og-udstyr", parsed.path
@@ -190,7 +365,8 @@ def map_model_page(
     brand = required_string(vehicle, "brand")
     model = required_string(vehicle, "model")
     vehicle_wording = json.dumps(vehicle, ensure_ascii=False, separators=(",", ":"))
-    passenger_car_scope = passenger_car_fact(api_url, vehicle)
+    passenger_car_scope = passenger_car_fact(api_url, model_id, vehicle)
+    vehicle_drivetrain = audited_vehicle_drivetrain_fact(api_url, model_id, model)
     current_availability = availability_fact(
         api_url, payload, private_eligibility_wording
     )
@@ -208,6 +384,7 @@ def map_model_page(
             brand=brand,
             model=model,
             vehicle_wording=vehicle_wording,
+            vehicle_drivetrain=vehicle_drivetrain,
             passenger_car_scope=passenger_car_scope,
             current_availability=current_availability,
             private_eligibility_wording=private_eligibility_wording,
@@ -229,6 +406,7 @@ def map_configuration(
     brand: str,
     model: str,
     vehicle_wording: str,
+    vehicle_drivetrain: dict[str, Any],
     passenger_car_scope: dict[str, Any],
     current_availability: dict[str, Any],
     private_eligibility_wording: str,
@@ -245,8 +423,10 @@ def map_configuration(
     aggregate = required_int(row, "aggregatePaymentDkk")
     card_evidence = evidence(api_url, wording)
     vehicle_evidence = evidence(api_url, vehicle_wording)
-    vat_basis, vat_conflict = private_consumer_amount_basis(legal_wording)
-    payment_evidence = combined_evidence(api_url, wording, legal_wording)
+    vat_assessment = private_consumer_amount_basis(
+        combined_wording(wording, legal_wording)
+    )
+    payment_evidence = evidence(api_url, vat_assessment.evidence_wording)
     mileage = mileage_fact(api_url, legal_wording)
     end_fee = inspection_fee(legal_wording)
     events = [
@@ -255,11 +435,16 @@ def map_configuration(
             upfront,
             "acceptance_to_handover",
             1,
-            vat_basis,
+            vat_assessment.amount_basis,
             payment_evidence,
         ),
         event(
-            "Månedlig ydelse", monthly, "recurring", term, vat_basis, payment_evidence
+            "Månedlig ydelse",
+            monthly,
+            "recurring",
+            term,
+            vat_assessment.amount_basis,
+            payment_evidence,
         ),
     ]
     if end_fee is not None:
@@ -269,7 +454,7 @@ def map_configuration(
                 end_fee,
                 "normal_completion_end",
                 1,
-                vat_basis,
+                vat_assessment.amount_basis,
                 evidence(api_url, legal_wording),
             )
         )
@@ -282,9 +467,13 @@ def map_configuration(
         "vehicleSpecification": known(
             {"make": brand, "model": model}, vehicle_evidence
         ),
+        "vehicleDrivetrain": vehicle_drivetrain,
         "privateConsumerEligibility": known(
             True,
             evidence(api_url, private_eligibility_wording),
+        ),
+        "privateConsumerAmountAdmissibility": private_consumer_amount_admissibility_fact(
+            api_url, vat_assessment
         ),
         "passengerCarScope": passenger_car_scope,
         "currentAvailability": current_availability,
@@ -309,12 +498,6 @@ def map_configuration(
         "exposureScenarios": not_stated(api_url, legal_wording),
         "sourceMetadata": {"parserVersion": PARSER_VERSION, "documents": documents},
     }
-    reasons = admission_reasons(candidate)
-    if vat_conflict is not None:
-        reasons.append(vat_conflict)
-    candidate["admissionOutcome"] = "quarantined" if reasons else "admitted"
-    if reasons:
-        candidate["quarantineReasons"] = reasons
     return candidate
 
 
@@ -430,7 +613,18 @@ def lease_row(title: str, text: str) -> dict[str, Any]:
         upfront = money_in(text, r"^([\d.]+)\s*kr\.")
     term = integer_in(text, r"Periode:\s*(\d+)\s*mdr")
     aggregate = money_in(text, r"Samlet betaling i perioden:\s*([\d.]+)\s*kr")
-    configuration_values = f"{title}\n{monthly}\n{upfront}\n{term}\n{aggregate}\n{text}"
+    configuration_values = json.dumps(
+        {
+            "title": title.strip(),
+            "monthlyPaymentDkk": monthly,
+            "upfrontPaymentDkk": upfront,
+            "termMonths": term,
+            "aggregatePaymentDkk": aggregate,
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
     return {
         "configurationId": f"private-{hashlib.sha256(configuration_values.encode('utf-8')).hexdigest()[:12]}",
         "trim": title,
@@ -469,46 +663,56 @@ def integer_in(value: str, pattern: str) -> int:
     return int(match.group(1))
 
 
-def private_consumer_amount_basis(
-    wording: str,
-) -> tuple[str, dict[str, str] | None]:
+def private_consumer_amount_basis(wording: str) -> PrivateConsumerAmountAssessment:
     """Apply ADR-0002 after the source establishes private-consumer eligibility."""
     states_in_wording: set[str] = set()
     if re.search(r"\binkl(?:\.|usive)?\s*moms\b", wording, flags=re.IGNORECASE):
         states_in_wording.add("including_vat")
     if re.search(
-        r"\b(?:ekskl|excl|ex)(?:\.)?\s*moms\b|\buden\s+moms\b",
+        r"(?:\b(?:ekskl(?:\.|usive)?|excl(?:\.|usive|uding)?|ex)\s*moms\b"
+        r"|\buden\s+moms\b"
+        r"|\b(?:ikke|ej)\s+inkl(?:\.|usive)?\s*moms\b"
+        r"|\bmoms\s+(?:er\s+)?(?:ikke|ej)\s+inkluderet\b)",
         wording,
         flags=re.IGNORECASE,
     ):
         states_in_wording.add("excluding_vat")
 
     if len(states_in_wording) > 1:
-        return (
-            "not_stated",
-            {
-                "fact": "baseCashFlowStream",
-                "state": "conflicting",
-                "code": "vat_basis_conflicting",
-            },
+        return PrivateConsumerAmountAssessment(
+            amount_basis="not_stated",
+            admissible=False,
+            evidence_wording=wording,
         )
     if states_in_wording == {"excluding_vat"}:
-        return (
-            "excluding_vat",
-            {
-                "fact": "baseCashFlowStream",
-                "state": "conflicting",
-                "code": "private_consumer_price_excludes_vat",
-            },
+        return PrivateConsumerAmountAssessment(
+            amount_basis="excluding_vat",
+            admissible=False,
+            evidence_wording=wording,
         )
-    return "including_vat", None
+    return PrivateConsumerAmountAssessment(
+        amount_basis="including_vat",
+        admissible=True,
+        evidence_wording=wording,
+    )
+
+
+def private_consumer_amount_admissibility_fact(
+    source_url: str, assessment: PrivateConsumerAmountAssessment
+) -> dict[str, Any]:
+    if assessment.admissible:
+        return known(True, evidence(source_url, assessment.evidence_wording))
+    return unavailable_fact("conflicting", source_url, assessment.evidence_wording)
+
+
+def combined_wording(card_wording: str, legal_wording: str) -> str:
+    return card_wording if not legal_wording else f"{card_wording}; {legal_wording}"
 
 
 def combined_evidence(
     source_url: str, card_wording: str, legal_wording: str
 ) -> dict[str, str]:
-    wording = card_wording if not legal_wording else f"{card_wording}; {legal_wording}"
-    return evidence(source_url, wording)
+    return evidence(source_url, combined_wording(card_wording, legal_wording))
 
 
 def mileage_fact(source_url: str, legal_wording: str) -> dict[str, Any]:
@@ -523,11 +727,20 @@ def mileage_fact(source_url: str, legal_wording: str) -> dict[str, Any]:
     )
 
 
-def passenger_car_fact(source_url: str, vehicle: Mapping[str, Any]) -> dict[str, Any]:
+def passenger_car_fact(
+    source_url: str, model_id: str, vehicle: Mapping[str, Any]
+) -> dict[str, Any]:
     vehicle_type = vehicle.get("vehicleType")
     if vehicle_type is None:
         body_type = vehicle.get("bodyType")
-        if isinstance(body_type, str) and body_type.casefold() == "suv":
+        model = vehicle.get("model")
+        if (
+            model_id in AUDITED_IONIQ_5_MODEL_IDS
+            and isinstance(model, str)
+            and model.casefold() == "ioniq 5"
+            and isinstance(body_type, str)
+            and body_type.casefold() == "suv"
+        ):
             return known(
                 True,
                 evidence(
@@ -564,6 +777,24 @@ def passenger_car_fact(source_url: str, vehicle: Mapping[str, Any]) -> dict[str,
             },
         )
     return unclear(source_url, vehicle_type)
+
+
+def audited_vehicle_drivetrain_fact(
+    source_url: str, model_id: str, model: str
+) -> dict[str, Any]:
+    normalized_model = " ".join(model.casefold().split())
+    wording = json.dumps(
+        {
+            "pimModelId": model_id,
+            "model": model,
+            "drivetrain": "battery_electric",
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    if normalized_model in AUDITED_BATTERY_ELECTRIC_MODELS:
+        return known("battery_electric", evidence(source_url, wording))
+    return unavailable_fact("not_stated", source_url, wording)
 
 
 def availability_fact(

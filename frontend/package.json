@@ -3,12 +3,17 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "pnpm generate-contract && tsc -b && vite build",
-    "generate-contract": "json2ts -i src/generated/presentation-schema.json -o src/generated/presentation.ts --bannerComment '/* Generated from Python presentation schema. Do not edit. */'",
-    "test:e2e": "cd .. && .venv/bin/python -m car_picker build-site --dataset tests/fixtures/one-offer-catalogue-dataset.json --output var/site && cd frontend && playwright test",
-    "typecheck": "tsc -b --pretty false"
+    "build": "tsc -b --pretty false && vite build",
+    "generate-contract": "node scripts/generate-contract.mjs && json2ts -i src/generated/catalogue-dataset-schema.json -o src/generated/catalogue-dataset.ts --bannerComment '/* Generated from the Pydantic Catalogue Dataset serialization schema. Do not edit. */'",
+    "generate-routes": "node scripts/generate-routes.mjs",
+    "prepare-e2e-fixture": "node scripts/prepare-e2e-fixture.mjs",
+    "test:e2e": "playwright test",
+    "typecheck": "pnpm generate-contract && pnpm generate-routes && tsc -b --pretty false",
+    "test:module": "pnpm generate-contract && pnpm generate-routes && playwright test e2e/catalogue-dataset-module.spec.ts",
+    "dev": "pnpm generate-contract && pnpm generate-routes && vite"
   },
   "dependencies": {
+    "@tanstack/charts": "0.16.0",
     "@tanstack/react-query": "^5.83.0",
     "@tanstack/react-router": "^1.130.2",
     "class-variance-authority": "^0.7.1",

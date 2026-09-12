@@ -9,8 +9,9 @@ export default defineConfig({
   },
   webServer: {
     command:
-      "../.venv/bin/python -m car_picker serve-site --site ../var/site --port 4173",
-    cwd: ".",
+      "pnpm --dir frontend prepare-e2e-fixture && .venv/bin/python -m car_picker --workspace . site build && exec .venv/bin/python -m car_picker --workspace . site serve --port 4173",
+    cwd: "..",
+    url: "http://127.0.0.1:4173",
     reuseExistingServer: false,
     timeout: 30_000,
   },
