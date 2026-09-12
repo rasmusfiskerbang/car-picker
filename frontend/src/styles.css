@@ -2007,12 +2007,6 @@ summary:focus-visible {
     display: block;
   }
 
-  .offer-source-link {
-    display: inline-block;
-    margin-top: 0.8rem;
-    text-align: left;
-  }
-
   .offer-card .offer-actions {
     align-items: start;
     flex-direction: column;
