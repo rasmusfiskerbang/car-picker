@@ -1,4 +1,5 @@
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { ExternalLink, FileText } from "lucide-react";
 import {
   type CatalogueDatasetIndex,
   type CatalogueOffer,
@@ -95,10 +96,10 @@ export function CatalogueOfferCard({
               rel="noreferrer"
               target="_blank"
             >
-              Åbn hos {facts.providerName}
+              <ExternalLink aria-hidden="true" />
             </a>
             <a aria-label={`Se detaljer for ${vehicle}`} href={detailHref}>
-              Se aftalevilkår og kilder
+              <FileText aria-hidden="true" />
             </a>
           </div>
         </footer>

@@ -699,15 +699,16 @@ a {
   bottom: 1rem;
   left: 1rem;
   display: flex;
-  flex-wrap: wrap;
+  justify-content: center;
   align-items: center;
-  gap: 0.75rem 1rem;
-  width: min(calc(100% - 2rem), 62rem);
+  gap: 0.6rem;
+  width: fit-content;
+  max-width: calc(100% - 2rem);
   margin: 0 auto;
   transform: translateX(0);
   border: 1px solid rgb(53 81 60 / 24%);
   border-radius: 1rem;
-  padding: 0.8rem 1rem;
+  padding: 0.55rem;
   background: rgb(255 254 250 / 97%);
   box-shadow: 0 1rem 3rem rgb(63 55 40 / 18%);
   backdrop-filter: blur(12px);
@@ -788,7 +789,6 @@ a {
 }
 
 .offer-selection-tray-items {
-  flex: 1 1 12rem;
   display: flex;
   flex-wrap: wrap;
   gap: 0.35rem 0.6rem;
@@ -817,21 +817,27 @@ a {
   white-space: nowrap;
 }
 
-.offer-selection-tray-items button,
-.offer-selection-tray-clear {
+.offer-selection-tray-items button {
+  display: inline-grid;
+  width: 1.35rem;
+  height: 1.35rem;
+  place-items: center;
   border: 0;
+  border-radius: 999px;
+  padding: 0;
   color: #65705f;
   background: transparent;
-  font: inherit;
-  font-size: 0.7rem;
-  font-weight: 800;
-  text-decoration: underline;
   cursor: pointer;
 }
 
-.offer-selection-tray-items button:hover,
-.offer-selection-tray-clear:hover {
+.offer-selection-tray-items button svg {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+
+.offer-selection-tray-items button:hover {
   color: #20221f;
+  background: #e4e1d9;
 }
 
 .offer-selection-tray-actions {
@@ -844,16 +850,21 @@ a {
 }
 
 .offer-selection-tray-compare {
-  display: inline-flex;
-  min-height: 2.25rem;
-  align-items: center;
-  border-radius: 0.55rem;
-  padding: 0.35rem 0.75rem;
+  display: inline-grid;
+  width: 2.25rem;
+  height: 2.25rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 999px;
+  padding: 0;
   color: #f8f8f1;
   background: #35513c;
-  font-size: 0.76rem;
-  font-weight: 800;
   text-decoration: none;
+}
+
+.offer-selection-tray-compare svg {
+  width: 1rem;
+  height: 1rem;
 }
 
 .offer-selection-tray-compare:hover {
@@ -1148,11 +1159,13 @@ a {
   }
 
   .offer-selection-tray {
-    align-items: stretch;
-    flex-direction: column;
-    gap: 0.6rem;
-    width: calc(100% - 1.5rem);
-    padding: 0.75rem;
+    width: fit-content;
+    max-width: calc(100% - 5.5rem);
+    align-items: center;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    gap: 0.5rem;
+    padding: 0.5rem;
   }
 
   .offer-selection-tray-actions {
@@ -1161,7 +1174,9 @@ a {
   }
 
   .offer-selection-tray-items {
-    flex: 0 0 auto !important;
+    flex: 0 1 auto !important;
+    flex-wrap: nowrap;
+    overflow-x: auto;
   }
 
   .offer-selection-tray-add {
@@ -1596,7 +1611,7 @@ a {
 /* Catalogue Overview */
 .catalogue-page {
   width: min(100% - 2rem, 88rem);
-  padding-top: 3.5rem;
+  padding-top: 2rem;
 }
 
 .catalogue-overview-header {
@@ -1656,7 +1671,7 @@ a {
   grid-template-columns: 17rem minmax(0, 1fr);
   grid-template-areas: "sidebar results";
   gap: 2rem;
-  margin-top: 2rem;
+  margin-top: 0;
   align-items: start;
 }
 
@@ -1676,18 +1691,40 @@ a {
   padding: 1.1rem;
 }
 
-.catalogue-sidebar .filter-heading {
-  grid-column: auto;
-  align-items: start;
+.search-filter-control {
+  display: grid;
+  gap: 0.4rem;
 }
 
-.catalogue-sidebar .filter-heading h2 {
-  font-size: 1.4rem;
+.search-filter-label {
+  display: flex;
+  min-height: 1rem;
+  align-items: center;
+  justify-content: space-between;
+  color: #65705f;
+  font-size: 0.8rem;
+  font-weight: 700;
 }
 
-.catalogue-sidebar .filter-heading .eyebrow {
-  margin-bottom: 0.25rem;
-  font-size: 0.65rem;
+.search-filter-label button {
+  display: inline-grid;
+  width: 1rem;
+  height: 1rem;
+  place-items: center;
+  border: 0;
+  padding: 0;
+  color: #65705f;
+  background: transparent;
+  cursor: pointer;
+}
+
+.search-filter-label button:hover {
+  color: #20221f;
+}
+
+.search-filter-label button svg {
+  width: 0.85rem;
+  height: 0.85rem;
 }
 
 .catalogue-results {
@@ -1920,10 +1957,31 @@ summary:focus-visible {
 
   .catalogue-mobile-toolbar {
     display: flex;
-    margin-top: 1.5rem;
+    position: fixed;
+    z-index: 40;
+    right: 1rem;
+    bottom: 1rem;
+    margin: 0;
   }
 
-  .filter-trigger,
+  .filter-trigger {
+    display: inline-grid;
+    width: 3rem;
+    height: 3rem;
+    place-items: center;
+    border: 0;
+    border-radius: 999px;
+    padding: 0;
+    color: #f8f8f1;
+    background: #35513c;
+    box-shadow: 0 0.6rem 1.5rem rgb(32 34 31 / 24%);
+  }
+
+  .filter-trigger svg {
+    width: 1.15rem;
+    height: 1.15rem;
+  }
+
   .filter-sheet-done {
     min-height: 2.7rem;
     border: 0;
@@ -1965,17 +2023,18 @@ summary:focus-visible {
     z-index: 50;
     inset: 0;
     display: flex;
-    align-items: end;
+    align-items: stretch;
     justify-content: center;
     padding: 0;
-    background: rgb(32 34 31 / 52%);
+    background: #f3f0e9;
   }
 
   .filter-sheet {
-    width: min(100%, 32rem);
-    max-height: min(92vh, 46rem);
+    width: 100%;
+    height: 100dvh;
+    max-height: none;
     overflow-y: auto;
-    border-radius: 1.25rem 1.25rem 0 0;
+    border-radius: 0;
     padding: 1.25rem 1rem calc(1rem + env(safe-area-inset-bottom));
     background: #f3f0e9;
     box-shadow: 0 -1rem 3rem rgb(32 34 31 / 18%);
@@ -2090,26 +2149,38 @@ summary:focus-visible {
 
 .offer-selection {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 0.5rem;
   font-weight: 700;
 }
 
 .offer-selection input {
   flex: 0 0 auto;
-  margin: 0.2rem 0 0;
+  margin: 0;
 }
 
 .offer-card-links {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: flex-end;
-  gap: 0.4rem;
+  gap: 0.5rem;
   text-align: right;
 }
 
-.offer-card-links .offer-source-link {
-  margin: 0;
+.offer-card-links a {
+  display: inline-grid;
+  width: 2.25rem;
+  height: 2.25rem;
+  place-items: center;
+  border: 1px solid #cbd2c6;
+  border-radius: 999px;
+  color: #35513c;
+  background: #fffefa;
+}
+
+.offer-card-links a svg {
+  width: 1rem;
+  height: 1rem;
 }
 
 .offer-card .card-content {
@@ -2130,13 +2201,14 @@ summary:focus-visible {
   }
 
   .offer-card-footer {
-    align-items: flex-start;
-    flex-direction: column;
+    align-items: center;
+    flex-direction: row;
   }
 
   .offer-card-links {
-    align-items: flex-start;
-    text-align: left;
+    margin-left: auto;
+    align-items: center;
+    text-align: right;
   }
 }
 

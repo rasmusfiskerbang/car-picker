@@ -286,12 +286,6 @@ function CatalogueRoute() {
       index={index}
       search={canonicalSearch}
       selectedOfferIdentities={selectedOfferIdentities}
-      comparisonHref={router.history.createHref(
-        router.buildLocation({
-          to: routePaths.comparison,
-          search: offerSelectionSearch(selectedOfferIdentities),
-        }).href,
-      )}
       offerDetailHref={(identity) =>
         router.history.createHref(
           router.buildLocation({

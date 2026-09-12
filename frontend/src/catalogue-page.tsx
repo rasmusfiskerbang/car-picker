@@ -1,4 +1,5 @@
 import { type RefObject, useEffect, useRef, useState } from "react";
+import { SlidersHorizontal } from "lucide-react";
 
 import {
   type CatalogueDataset,
@@ -7,7 +8,6 @@ import {
 import { CatalogueFilterControls } from "@/catalogue-filter-controls";
 import { CatalogueOfferCard } from "@/catalogue-offer-card";
 import {
-  catalogueSortLabel,
   matchesCatalogueSearch,
   MAX_SELECTED_OFFERS,
   sortCatalogueOffers,
@@ -22,7 +22,6 @@ export interface CatalogueOverviewProps {
   index: CatalogueDatasetIndex;
   search: CatalogueSearch;
   selectedOfferIdentities: readonly string[];
-  comparisonHref: string;
   offerDetailHref: (identity: string) => string;
   onSearchChange: (value: string | undefined) => void;
   onProviderChange: (value: string | undefined) => void;
@@ -38,7 +37,6 @@ export function CatalogueOverview({
   index,
   search,
   selectedOfferIdentities,
-  comparisonHref,
   offerDetailHref,
   onSearchChange,
   onProviderChange,
@@ -114,48 +112,23 @@ export function CatalogueOverview({
         className="page catalogue-page"
         inert={mobileFiltersOpen}
       >
-        <header className="catalogue-overview-header">
-          <p className="eyebrow">Aktivt katalog</p>
-          <h1>Leasingtilbud</h1>
-        </header>
-
         <div className="catalogue-mobile-toolbar">
-          <p className="catalogue-result-summary" aria-live="polite">
-            {resultLabel(displayedOffers.length)}
-          </p>
           <button
             ref={filterTriggerRef}
+            aria-label="Åbn filtre"
             aria-controls="mobile-filter-sheet"
             aria-expanded={mobileFiltersOpen}
             className="filter-trigger"
+            title="Åbn filtre"
             type="button"
             onClick={() => setMobileFiltersOpen(true)}
           >
-            Åbn filtre
+            <SlidersHorizontal aria-hidden="true" />
           </button>
         </div>
 
         <div className="catalogue-layout">
           <section aria-label="Katalogtilbud" className="catalogue-results">
-            <div className="catalogue-results-toolbar">
-              <p className="catalogue-result-summary" aria-live="polite">
-                {resultLabel(displayedOffers.length)}
-              </p>
-              <p className="catalogue-order-note">
-                {catalogueSortLabel(search.sort)} · ingen anbefalinger
-              </p>
-            </div>
-
-            <aside aria-label="Sammenligning" className="comparison-control">
-              {selected.length === 0 ? (
-                <p>Vælg mindst ét tilbud for at sammenligne det.</p>
-              ) : (
-                <a href={comparisonHref}>
-                  Sammenlign {selected.length} tilbud
-                </a>
-              )}
-            </aside>
-
             <div className="offer-list">
               {displayedOffers.map((offer) => (
                 <CatalogueOfferCard

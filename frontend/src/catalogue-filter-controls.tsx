@@ -1,4 +1,5 @@
 import type { CatalogueDataset } from "@/catalogue-dataset";
+import { RotateCcw } from "lucide-react";
 import type {
   CatalogueSearch,
   CatalogueSort,
@@ -46,19 +47,20 @@ export function CatalogueFilterControls({
 }: CatalogueFilterControlsProps) {
   return (
     <form className="filters" onSubmit={(event) => event.preventDefault()}>
-      {heading && (
-        <div className="filter-heading">
-          <div>
-            <p className="eyebrow">Find et tilbud</p>
-            <h2>Filtre</h2>
-          </div>
-          <button type="button" onClick={onReset}>
-            Nulstil
-          </button>
+      <div className="search-filter-control">
+        <div className="search-filter-label">
+          <span>Søg</span>
+          {heading && (
+            <button
+              aria-label="Nulstil filtre"
+              title="Nulstil filtre"
+              type="button"
+              onClick={onReset}
+            >
+              <RotateCcw aria-hidden="true" />
+            </button>
+          )}
         </div>
-      )}
-      <label>
-        Søg i køretøjsspecifikation eller dækket udbyder
         <input
           aria-label="Søg i køretøjsspecifikation eller dækket udbyder"
           placeholder="Fx BMW, i4 eller Terminalen"
@@ -66,7 +68,7 @@ export function CatalogueFilterControls({
           value={search.search ?? ""}
           onChange={(event) => onSearchChange(emptyToUndefined(event.target.value))}
         />
-      </label>
+      </div>
       <label>
         Udbyder
         <select
