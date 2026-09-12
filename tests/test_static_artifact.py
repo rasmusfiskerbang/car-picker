@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import copy
 import json
+import os
 import socket
 import subprocess
 import sys
@@ -8,140 +10,89 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
-from unittest.mock import patch
 from urllib.request import urlopen
 
-from car_picker.publication import build_site
+from tests.site_helpers import build_site, write_workspace_dataset
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
-FIXTURE_DATASET = REPOSITORY_ROOT / "tests/fixtures/one-offer-catalogue-dataset.json"
+FIXTURE_DATASET = REPOSITORY_ROOT / "tests/fixtures/browser-catalogue-dataset.json"
 
 
 class StaticArtifactTest(unittest.TestCase):
-    def test_build_exports_a_minimized_verified_artifact_and_preserves_the_prior_artifact_on_failure(
+    def test_failed_frontend_generation_reports_and_preserves_the_prior_site(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             temporary_path = Path(temporary_directory)
-            site_path = temporary_path / "site"
-            first_build = run_cli(
-                "build-site",
-                "--dataset",
-                str(FIXTURE_DATASET),
-                "--output",
-                str(site_path),
-            )
-            initial_projection = (site_path / "projection.json").read_bytes()
-            initial_files = sorted(path.name for path in site_path.iterdir())
-            malformed_dataset = json.loads(FIXTURE_DATASET.read_text(encoding="utf-8"))
-            malformed_dataset["catalogueOffers"][0]["vehicleSpecification"] = {
-                "state": "known",
-                "evidence": {
-                    "sourceUrl": "https://example.test",
-                    "wording": "Missing value",
-                },
+            site_path = temporary_path / "var/site"
+            write_workspace_dataset(temporary_path, FIXTURE_DATASET)
+            build_site(FIXTURE_DATASET, site_path)
+            initial_site = {
+                path.name: path.read_bytes() for path in site_path.iterdir()
             }
-            malformed_path = temporary_path / "catalogue-dataset.json"
-            malformed_path.write_text(json.dumps(malformed_dataset), encoding="utf-8")
-            failed_build = run_cli(
-                "build-site",
-                "--dataset",
-                str(malformed_path),
-                "--output",
-                str(site_path),
+
+            fake_bin = temporary_path / "bin"
+            fake_bin.mkdir()
+            fake_pnpm = fake_bin / "pnpm"
+            fake_pnpm.write_text("#!/bin/sh\nexit 17\n", encoding="utf-8")
+            fake_pnpm.chmod(0o755)
+            environment = os.environ | {"PATH": str(fake_bin)}
+
+            result = run_cli(
+                "--workspace",
+                str(temporary_path),
+                "site",
+                "build",
+                env=environment,
             )
 
-            projection = json.loads(initial_projection)
-            schema = json.loads(
-                (site_path / "projection-schema.json").read_text(encoding="utf-8")
+            final_site = {path.name: path.read_bytes() for path in site_path.iterdir()}
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("safe state", result.stderr)
+        self.assertIn(str(site_path), result.stderr)
+        self.assertEqual(final_site, initial_site)
+
+    def test_failed_dataset_build_preserves_the_prior_artifact(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_path = Path(temporary_directory)
+            site_path = temporary_path / "var/site"
+            build_site(FIXTURE_DATASET, site_path)
+            initial_dataset = (site_path / "catalogue-dataset.json").read_bytes()
+
+            invalid_dataset = copy.deepcopy(
+                json.loads(FIXTURE_DATASET.read_text(encoding="utf-8"))
             )
-            final_projection = (site_path / "projection.json").read_bytes()
+            invalid_dataset["offers"][0]["canonicalOfferUrl"] = (
+                "http://example.test/invalid"
+            )
+            invalid_path = temporary_path / "invalid-dataset.json"
+            invalid_path.write_text(json.dumps(invalid_dataset), encoding="utf-8")
 
-        self.assertEqual(first_build.returncode, 0, first_build.stderr)
-        self.assertEqual(
-            initial_files,
-            [
-                "app.js",
-                "index.html",
-                "projection-schema.json",
-                "projection.json",
-                "styles.css",
-            ],
-        )
-        self.assertEqual(
-            schema["$id"],
-            "https://car-picker.local/schemas/catalogue-presentation-v1.json",
-        )
-        self.assertEqual(
-            projection["schemaVersion"], schema["properties"]["schemaVersion"]["const"]
-        )
-        self.assertNotIn("sourceMetadata", json.dumps(projection))
-        self.assertNotIn("quarantineReasons", json.dumps(projection))
-        self.assertNotIn("contentSha256", json.dumps(projection))
-        self.assertNotEqual(failed_build.returncode, 0)
-        self.assertEqual(final_projection, initial_projection)
+            with self.assertRaises(ValueError):
+                build_site(invalid_path, site_path)
 
-    def test_failed_browser_output_does_not_replace_the_completed_artifact(
-        self,
-    ) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            site_path = Path(temporary_directory) / "site"
-            build_site(FIXTURE_DATASET, site_path)
-            initial_app = (site_path / "app.js").read_bytes()
-            with patch(
-                "car_picker.publication.build_frontend",
-                side_effect=ValueError("frontend build failed"),
-            ):
-                with self.assertRaisesRegex(ValueError, "frontend build failed"):
-                    build_site(FIXTURE_DATASET, site_path)
+            final_dataset = (site_path / "catalogue-dataset.json").read_bytes()
 
-            final_app = (site_path / "app.js").read_bytes()
-
-        self.assertEqual(final_app, initial_app)
-
-    def test_invalid_presentation_projection_does_not_replace_the_completed_artifact(
-        self,
-    ) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            site_path = Path(temporary_directory) / "site"
-            build_site(FIXTURE_DATASET, site_path)
-            initial_projection = (site_path / "projection.json").read_bytes()
-
-            with patch(
-                "car_picker.publication.project_catalogue",
-                return_value={
-                    "schemaVersion": "catalogue-presentation/v1",
-                    "generatedAt": "2026-07-22T12:00:00Z",
-                },
-            ):
-                with self.assertRaises(ValueError):
-                    build_site(FIXTURE_DATASET, site_path)
-
-            final_projection = (site_path / "projection.json").read_bytes()
-
-        self.assertEqual(final_projection, initial_projection)
+        self.assertEqual(final_dataset, initial_dataset)
 
     def test_serve_site_binds_the_completed_artifact_on_all_interfaces(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
-            temporary_path = Path(temporary_directory)
-            site_path = temporary_path / "site"
-            build = run_cli(
-                "build-site",
-                "--dataset",
-                str(FIXTURE_DATASET),
-                "--output",
-                str(site_path),
-            )
+            workspace = Path(temporary_directory)
+            site_path = workspace / "var/site"
+            write_workspace_dataset(workspace, FIXTURE_DATASET)
+            build_site(FIXTURE_DATASET, site_path)
             port = free_port()
             server = subprocess.Popen(
                 [
                     sys.executable,
                     "-m",
                     "car_picker",
-                    "serve-site",
-                    "--site",
-                    str(site_path),
+                    "--workspace",
+                    str(workspace),
+                    "site",
+                    "serve",
                     "--port",
                     str(port),
                 ],
@@ -155,32 +106,50 @@ class StaticArtifactTest(unittest.TestCase):
             finally:
                 server.terminate()
                 server.wait(timeout=5)
-                assert server.stdout is not None
-                assert server.stderr is not None
-                server.stdout.close()
-                server.stderr.close()
+                if server.stdout is not None:
+                    server.stdout.close()
+                if server.stderr is not None:
+                    server.stderr.close()
 
-        self.assertEqual(build.returncode, 0, build.stderr)
         self.assertIn("<title>Bilvalg</title>", response)
 
     def test_serve_site_rejects_nested_internal_files(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
-            site_path = Path(temporary_directory) / "site"
+            workspace = Path(temporary_directory)
+            site_path = workspace / "var/site"
+            write_workspace_dataset(workspace, FIXTURE_DATASET)
             build_site(FIXTURE_DATASET, site_path)
             internal_path = site_path / "internal"
             internal_path.mkdir()
             (internal_path / "sourceMetadata.json").write_text("{}", encoding="utf-8")
 
-            serve = run_cli("serve-site", "--site", str(site_path))
+            serve = run_cli("--workspace", str(workspace), "site", "serve")
 
         self.assertNotEqual(serve.returncode, 0)
         self.assertIn("must contain only approved regular files", serve.stderr)
 
+    def test_serve_site_rejects_a_nonempty_corrupt_compiled_asset(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            workspace = Path(temporary_directory)
+            site_path = workspace / "var/site"
+            write_workspace_dataset(workspace, FIXTURE_DATASET)
+            build_site(FIXTURE_DATASET, site_path)
+            (site_path / "styles.css").write_bytes(b"corrupt but non-empty")
 
-def run_cli(*arguments: str) -> subprocess.CompletedProcess[str]:
+            serve = run_cli("--workspace", str(workspace), "site", "serve")
+
+        self.assertNotEqual(serve.returncode, 0)
+        self.assertIn("integrity", serve.stderr)
+
+
+def run_cli(
+    *arguments: str,
+    env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, "-m", "car_picker", *arguments],
         cwd=REPOSITORY_ROOT,
+        env=env,
         capture_output=True,
         text=True,
         check=False,

@@ -6,13 +6,21 @@
 start because the complete all-provider refresh was rejected. No release is
 authorized by this record.
 
+## Historical disposition
+
+This record is retained as historical evidence of a blocked pre-replacement
+candidate, not as a current acceptance or product requirement. Its failed
+withdrawal-isolation regression, provider-aggregate diagnostic, coverage
+wording, and 1280 × 720 fixture observation are superseded by #67 and #86.
+The current tree has no withdrawal workflow or coverage authority, and the
+historical failed test does not define the current test contract.
+
 ## Application and dataset
 
 - Application commit: `7f7a076f10856cf2ab396654135151b6e50484ad`
 - Acceptance run: `2026-07-29T08:08:00+02:00` to
   `2026-07-29T08:13:00+02:00`
-- Provider control: Fleasing and Terminalen retrieval both enabled; no
-  withdrawals recorded.
+- Provider Registry: Fleasing and Terminalen were active; no inactive records were present.
 - Requested dataset generation: not created. There was no prior active dataset
   at `var/catalogue-dataset.json`, and the fixture dataset is not a substitute
   for a current real-offer dataset.
@@ -24,8 +32,7 @@ The run used the bounded first-party sources defined by the owner guide:
 - Fleasing catalogue: <https://fleasing.dk/biler/>
 - Terminalen catalogue: <https://www.terminalen.dk/nye-biler/hyundai>
 
-`uv run car-picker refresh-catalogue --dataset
-var/catalogue-dataset.json` completed Fleasing collection far enough to begin
+`uv run --locked car-picker catalogue refresh` completed Fleasing collection far enough to begin
 Terminalen collection, then retried Terminalen and rejected the complete
 replacement. The reported blocker was:
 
@@ -54,7 +61,7 @@ the real-offer acceptance:
 
 | Check | Expected | Actual | Result |
 | --- | --- | --- | --- |
-| Checkout validation | Schema, generated-content boundary, provider control, and pre-transition legal status pass | Passed; legal gate reports the 20 November 2026 horizon and pending post-transition revalidation | Pass |
+| Direct history-check, legal-check, and contract checks | Passed; legal gate reports the 20 November 2026 horizon and pending post-transition revalidation | Pass |
 | Fixture static build | Completed verified artifact is produced | Passed into ignored `var/site` | Pass |
 | Browser suite | Completed artifact passes catalogue, detail, comparison, evidence, unknown-value, and route checks | 11 of 11 Playwright tests passed | Pass |
 | Full Python suite | All repository tests pass | 62 passed; `test_terminalen_withdrawal_leaves_only_the_ended_coverage_fact` failed because the generated browser schema still names Terminalen | Fail |

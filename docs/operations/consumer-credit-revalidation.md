@@ -20,14 +20,12 @@ deliberately contains:
 20 November 2026 and do not treat current research as a prediction of the rules
 that will then apply.
 
-## Release validation
+## Legal validation
 
 The normal owner validation includes the legal gate:
 
 ```sh
-uv run car-picker validate \
-  --dataset var/catalogue-dataset.json \
-  --repository .
+uv run --locked car-picker legal-check --repository .
 ```
 
 It evaluates today's date by default. A future planned release can be checked
@@ -54,7 +52,7 @@ At review time:
 4. Implement and test any required application or operating changes. The legal
    record never silently changes how catalogue offers are classified or shown.
 5. Add the dated owner sign-off, commit the code and record together, then rerun
-   `validate`.
+   `legal-check`.
 
 Replace `revalidation: null` with this shape, using conclusions and sources from
 the actual review rather than the illustrative text:
@@ -92,7 +90,7 @@ the actual review rather than the illustrative text:
 }
 ```
 
-Validation rejects missing or extra fields, non-HTTPS source URLs, missing law
+`legal-check` rejects missing or extra fields, non-HTTPS source URLs, missing law
 or guidance coverage, checks dated before the horizon or after review, sources
 whose effective interval does not include the review date, a review dated before
 the horizon, and sign-off before review or after release. If the official

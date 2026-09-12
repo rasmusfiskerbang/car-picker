@@ -8,13 +8,9 @@
     "baseColor": "stone",
     "cssVariables": true
   },
-  "iconLibrary": "radix",
   "aliases": {
-    "components": "src/components",
-    "utils": "src/lib/utils",
-    "ui": "src/components/ui"
-  },
-  "registries": {
-    "@bklit": "https://ui.bklit.com/r/{name}.json"
+    "components": "@/components",
+    "utils": "@/lib/utils",
+    "ui": "@/components/ui"
   }
 }

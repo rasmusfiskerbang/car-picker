@@ -1,7 +1,5 @@
 node_modules/
-.tanstack/
 dist/
-src/routeTree.gen.ts
 test-results/
 *.tsbuildinfo
 playwright.config.js

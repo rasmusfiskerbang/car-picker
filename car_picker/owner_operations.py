@@ -3,22 +3,9 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path, PurePosixPath
 
-from car_picker.catalogue_model import CatalogueDataset
-from car_picker.provider_withdrawal import read_provider_control
-from car_picker.publication import (
-    project_catalogue,
-    read_json,
-    validate_presentation_projection,
-)
 
-
-def validate_owner_checkout(
-    dataset_path: Path, repository_path: Path, provider_control_path: Path
-) -> None:
-    """Validate data contracts and the generated-content boundary for an owner checkout."""
-    dataset = CatalogueDataset.model_validate(read_json(dataset_path))
-    validate_presentation_projection(project_catalogue(dataset))
-    read_provider_control(provider_control_path)
+def validate_repository_history(repository_path: Path) -> None:
+    """Reject generated datasets and Sites that have entered Git history."""
     generated_paths = generated_paths_in_history(repository_path)
     if generated_paths:
         joined_paths = ", ".join(generated_paths)

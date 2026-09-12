@@ -1,5 +1,4 @@
-presentation-schema.json
-presentation.ts
-catalogue-dataset.schema.json
-catalogue-dataset.schema.generated.ts
-catalogue-dataset.generated.ts
+catalogue-dataset-schema.json
+catalogue-dataset-schema.ts
+catalogue-dataset.ts
+route-output.ts

@@ -5,9 +5,11 @@ import unittest
 from pathlib import Path
 
 from car_picker.fleasing import StructuralSourceError
+from car_picker.collection import TerminalenProviderAdapter
 from car_picker.terminalen import (
     NAVIGATION_STATE_KEY,
     TerminalenAdapter,
+    TerminalenBoundaryRecord,
     model_price_urls,
 )
 
@@ -29,7 +31,26 @@ class FixtureHttpClient:
         return self.responses[url]
 
 
+def fixture_responses() -> dict[str, str]:
+    return {
+        CATALOGUE_URL: (FIXTURES / "catalogue.html").read_text(encoding="utf-8"),
+        PRICE_URL: (FIXTURES / "inster-price-page.html").read_text(encoding="utf-8"),
+        API_URL: (FIXTURES / "inster-price-page.json").read_text(encoding="utf-8"),
+    }
+
+
 class TerminalenAdapterTest(unittest.TestCase):
+    def test_boundary_records_are_pydantic_models_before_composition(self) -> None:
+        client = FixtureHttpClient(fixture_responses())
+
+        records = TerminalenAdapter(
+            client, retrieved_at="2026-07-22T12:00:00Z"
+        ).collect_boundary_records(CATALOGUE_URL)
+
+        self.assertTrue(records)
+        self.assertIsInstance(records[0], TerminalenBoundaryRecord)
+        self.assertEqual(records[0].provider, "Terminalen")
+
     def test_skips_a_model_price_page_without_private_lease_offers(self) -> None:
         catalogue = json.loads(
             (
@@ -188,6 +209,13 @@ class TerminalenAdapterTest(unittest.TestCase):
                                 "template": "modelSubpage",
                             },
                             {
+                                "url": (
+                                    "https://user:password@www.terminalen.dk"
+                                    "/nye-biler/hyundai/hyundai-inster/pris-og-udstyr"
+                                ),
+                                "template": "modelSubpage",
+                            },
+                            {
                                 "url": "/nye-biler/kia/ev3/pris-og-udstyr",
                                 "template": "modelSubpage",
                             },
@@ -296,9 +324,8 @@ class TerminalenAdapterTest(unittest.TestCase):
                 for identity in identities
             )
         )
-        self.assertEqual(
-            [candidate["admissionOutcome"] for candidate in candidates],
-            ["admitted", "admitted"],
+        self.assertTrue(
+            all("admissionOutcome" not in candidate for candidate in candidates)
         )
         self.assertTrue(candidates[0]["passengerCarScope"]["value"])
         self.assertTrue(candidates[0]["currentAvailability"]["value"])
@@ -375,12 +402,8 @@ class TerminalenAdapterTest(unittest.TestCase):
             client, retrieved_at="2026-07-22T12:00:00Z"
         ).collect(CATALOGUE_URL)[0]
 
-        self.assertEqual(candidate["admissionOutcome"], "quarantined")
         self.assertEqual(candidate["passengerCarScope"]["state"], "not_stated")
-        self.assertEqual(
-            candidate["quarantineReasons"],
-            [{"fact": "passengerCarScope", "state": "not_stated"}],
-        )
+        self.assertNotIn("quarantineReasons", candidate)
 
     def test_uses_the_current_private_model_page_when_legacy_flags_are_absent(
         self,
@@ -390,6 +413,8 @@ class TerminalenAdapterTest(unittest.TestCase):
         )
         del payload["vehicleData"]["vehicleType"]
         del payload["isCurrent"]
+        payload["pimModelId"] = "HY_IONIQ5"
+        payload["vehicleData"]["model"] = "IONIQ 5"
         payload["vehicleData"].update(
             {
                 "bodyType": "SUV",
@@ -413,7 +438,7 @@ class TerminalenAdapterTest(unittest.TestCase):
             client, retrieved_at="2026-07-29T08:00:00Z"
         ).collect(CATALOGUE_URL)[0]
 
-        self.assertEqual(candidate["admissionOutcome"], "admitted")
+        self.assertNotIn("admissionOutcome", candidate)
         self.assertEqual(candidate["passengerCarScope"]["state"], "known")
         self.assertEqual(
             candidate["passengerCarScope"]["evidence"]["wording"],
@@ -480,7 +505,7 @@ class TerminalenAdapterTest(unittest.TestCase):
                 for event in candidate["baseCashFlowStream"]
             )
         )
-        self.assertEqual(candidate["admissionOutcome"], "admitted")
+        self.assertNotIn("admissionOutcome", candidate)
         self.assertNotIn("quarantineReasons", candidate)
 
     def test_quarantines_a_private_consumer_price_that_explicitly_excludes_vat(
@@ -513,15 +538,142 @@ class TerminalenAdapterTest(unittest.TestCase):
                 for event in candidate["baseCashFlowStream"]
             )
         )
-        self.assertEqual(candidate["admissionOutcome"], "quarantined")
-        self.assertIn(
-            {
-                "fact": "baseCashFlowStream",
-                "state": "conflicting",
-                "code": "private_consumer_price_excludes_vat",
-            },
-            candidate["quarantineReasons"],
+        self.assertNotIn("admissionOutcome", candidate)
+        self.assertNotIn("quarantineReasons", candidate)
+
+    def test_provider_candidate_marks_contradictory_vat_evidence_as_conflicting(
+        self,
+    ) -> None:
+        payload = json.loads(
+            (FIXTURES / "inster-price-page.json").read_text(encoding="utf-8")
         )
+        payload["grid"][0]["content"][3]["text"] = (
+            "<p>Alle beløb er inkl. moms og ekskl. moms.</p>"
+        )
+        client = FixtureHttpClient(
+            {
+                CATALOGUE_URL: (FIXTURES / "catalogue.html").read_text(
+                    encoding="utf-8"
+                ),
+                PRICE_URL: (FIXTURES / "inster-price-page.html").read_text(
+                    encoding="utf-8"
+                ),
+                API_URL: json.dumps(payload),
+            }
+        )
+
+        candidates = TerminalenProviderAdapter(
+            client, retrieved_at="2026-08-23T12:00:00Z"
+        ).collect()
+
+        self.assertTrue(
+            all(
+                candidate.admission_facts.private_consumer_eligibility.state == "known"
+                for candidate in candidates
+            )
+        )
+        self.assertIn(
+            "inkl. moms og ekskl. moms",
+            candidates[
+                0
+            ].admission_facts.private_consumer_amount_admissibility.evidence.wording,
+        )
+        self.assertTrue(
+            all(
+                candidate.admission_facts.private_consumer_amount_admissibility.state
+                == "conflicting"
+                for candidate in candidates
+            )
+        )
+
+    def test_card_level_vat_exclusion_is_quarantined_as_amount_inadmissible(
+        self,
+    ) -> None:
+        payload = json.loads(
+            (FIXTURES / "inster-price-page.json").read_text(encoding="utf-8")
+        )
+        payload["grid"][0]["content"][2]["columns"][0]["text"] += (
+            "<p>Alle beløb er ekskl. moms.</p>"
+        )
+        client = FixtureHttpClient(
+            {
+                CATALOGUE_URL: (FIXTURES / "catalogue.html").read_text(
+                    encoding="utf-8"
+                ),
+                PRICE_URL: (FIXTURES / "inster-price-page.html").read_text(
+                    encoding="utf-8"
+                ),
+                API_URL: json.dumps(payload),
+            }
+        )
+
+        candidates = TerminalenProviderAdapter(
+            client, retrieved_at="2026-08-23T12:00:00Z"
+        ).collect()
+
+        self.assertEqual(
+            candidates[0].admission_facts.private_consumer_eligibility.state,
+            "known",
+        )
+        self.assertEqual(
+            candidates[0].admission_facts.private_consumer_amount_admissibility.state,
+            "conflicting",
+        )
+        wording = candidates[
+            0
+        ].admission_facts.private_consumer_amount_admissibility.evidence.wording
+        self.assertIn("ekskl. moms", wording)
+        self.assertIn("inkl. moms", wording)
+
+    def test_unsupported_terminalen_drivetrain_is_not_defaulted_to_gasoline(
+        self,
+    ) -> None:
+        payload = json.loads(
+            (FIXTURES / "inster-price-page.json").read_text(encoding="utf-8")
+        )
+        payload["pimModelId"] = "HY_UNKNOWN"
+        payload["vehicleData"]["model"] = "UNKNOWN MODEL"
+        client = FixtureHttpClient(
+            {
+                CATALOGUE_URL: (FIXTURES / "catalogue.html").read_text(
+                    encoding="utf-8"
+                ),
+                PRICE_URL: (FIXTURES / "inster-price-page.html").read_text(
+                    encoding="utf-8"
+                ),
+                API_URL: json.dumps(payload),
+            }
+        )
+
+        candidates = TerminalenProviderAdapter(
+            client, retrieved_at="2026-08-23T12:00:00Z"
+        ).collect()
+
+        self.assertTrue(all(candidate.offer is None for candidate in candidates))
+
+    def test_suv_fallback_is_unavailable_for_non_ioniq_5_models(self) -> None:
+        payload = json.loads(
+            (FIXTURES / "inster-price-page.json").read_text(encoding="utf-8")
+        )
+        del payload["vehicleData"]["vehicleType"]
+        payload["vehicleData"]["bodyType"] = "SUV"
+        client = FixtureHttpClient(
+            {
+                CATALOGUE_URL: (FIXTURES / "catalogue.html").read_text(
+                    encoding="utf-8"
+                ),
+                PRICE_URL: (FIXTURES / "inster-price-page.html").read_text(
+                    encoding="utf-8"
+                ),
+                API_URL: json.dumps(payload),
+            }
+        )
+
+        candidate = TerminalenAdapter(
+            client, retrieved_at="2026-08-23T12:00:00Z"
+        ).collect(CATALOGUE_URL)[0]
+
+        self.assertEqual(candidate["passengerCarScope"]["state"], "unclear")
 
     def test_quarantines_structurally_invalid_admission_evidence(self) -> None:
         payload = json.loads(
@@ -545,14 +697,10 @@ class TerminalenAdapterTest(unittest.TestCase):
             client, retrieved_at="2026-07-22T12:00:00Z"
         ).collect(CATALOGUE_URL)[0]
 
-        self.assertEqual(candidate["admissionOutcome"], "quarantined")
-        self.assertEqual(
-            candidate["quarantineReasons"],
-            [
-                {"fact": "passengerCarScope", "state": "unclear"},
-                {"fact": "currentAvailability", "state": "unclear"},
-            ],
-        )
+        self.assertEqual(candidate["passengerCarScope"]["state"], "unclear")
+        self.assertEqual(candidate["currentAvailability"]["state"], "unclear")
+        self.assertNotIn("admissionOutcome", candidate)
+        self.assertNotIn("quarantineReasons", candidate)
 
     def test_distinguishes_cards_with_the_same_title_using_selected_source_values(
         self,
@@ -580,6 +728,124 @@ class TerminalenAdapterTest(unittest.TestCase):
         self.assertEqual(
             len({candidate["sourceLocalConfigurationKey"] for candidate in candidates}),
             2,
+        )
+
+    def test_offer_identity_is_stable_when_non_value_card_wording_changes(
+        self,
+    ) -> None:
+        catalogue_html = (FIXTURES / "catalogue.html").read_text(encoding="utf-8")
+        page_html = (FIXTURES / "inster-price-page.html").read_text(encoding="utf-8")
+        original_payload = json.loads(
+            (FIXTURES / "inster-price-page.json").read_text(encoding="utf-8")
+        )
+        revised_payload = json.loads(json.dumps(original_payload))
+        for column in revised_payload["grid"][0]["content"][2]["columns"]:
+            column["text"] = column["text"].replace(
+                "<p>", '<p><span class="campaign-note">Aktuel kampagne.</span>'
+            )
+
+        def collect(payload: dict[str, object]) -> list[str]:
+            client = FixtureHttpClient(
+                {
+                    CATALOGUE_URL: catalogue_html,
+                    PRICE_URL: page_html,
+                    API_URL: json.dumps(payload),
+                }
+            )
+            return [
+                candidate["offerIdentity"]
+                for candidate in TerminalenAdapter(
+                    client, retrieved_at="2026-08-23T12:00:00Z"
+                ).collect(CATALOGUE_URL)
+            ]
+
+        self.assertEqual(collect(revised_payload), collect(original_payload))
+
+    def test_collects_all_in_scope_model_pages_in_navigation_order(self) -> None:
+        second_path = "/nye-biler/hyundai/hyundai-ioniq-5/pris-og-udstyr"
+        second_url = f"https://www.terminalen.dk{second_path}"
+        second_api_url = (
+            f"https://www.terminalen.dk/api/page/url?url={second_path}&culture=da-DK"
+        )
+        navigation = {
+            NAVIGATION_STATE_KEY: {
+                "body": [
+                    {
+                        "children": [
+                            {
+                                "url": PRICE_PATH,
+                                "template": "modelSubpage",
+                                "children": [],
+                            },
+                            {
+                                "url": "/nye-biler/kia/kia-ev3/pris-og-udstyr",
+                                "template": "modelSubpage",
+                                "children": [],
+                            },
+                            {
+                                "url": second_path,
+                                "template": "modelSubpage",
+                                "children": [],
+                            },
+                            {
+                                "url": PRICE_PATH,
+                                "template": "modelSubpage",
+                                "children": [],
+                            },
+                        ]
+                    }
+                ]
+            }
+        }
+        catalogue_html = (
+            '<script id="terminalen-ncg-state" type="application/json">'
+            f"{json.dumps(navigation)}"
+            "</script>"
+        )
+        second_payload = json.loads(
+            (FIXTURES / "inster-price-page.json").read_text(encoding="utf-8")
+        )
+        second_payload["url"] = second_path
+        second_payload["pimModelId"] = "HY_IONIQ5"
+        second_payload["vehicleData"]["model"] = "IONIQ 5"
+        client = FixtureHttpClient(
+            {
+                CATALOGUE_URL: catalogue_html,
+                PRICE_URL: (FIXTURES / "inster-price-page.html").read_text(
+                    encoding="utf-8"
+                ),
+                API_URL: (FIXTURES / "inster-price-page.json").read_text(
+                    encoding="utf-8"
+                ),
+                second_url: (FIXTURES / "inster-price-page.html").read_text(
+                    encoding="utf-8"
+                ),
+                second_api_url: json.dumps(second_payload),
+            }
+        )
+
+        candidates = TerminalenProviderAdapter(
+            client, retrieved_at="2026-08-23T12:00:00Z"
+        ).collect()
+
+        self.assertEqual(
+            [candidate.offer_identity for candidate in candidates],
+            [
+                "terminalen:HY_INSTER:private-2f775a9b781a",
+                "terminalen:HY_INSTER:private-e25cc77f6e4b",
+                "terminalen:HY_IONIQ5:private-2f775a9b781a",
+                "terminalen:HY_IONIQ5:private-e25cc77f6e4b",
+            ],
+        )
+        self.assertEqual(
+            client.requested_urls,
+            [
+                CATALOGUE_URL,
+                PRICE_URL,
+                API_URL,
+                second_url,
+                second_api_url,
+            ],
         )
 
     def test_rejects_a_malformed_private_card_instead_of_publishing_a_partial_model(

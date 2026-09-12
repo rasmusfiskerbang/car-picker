@@ -1,0 +1,7 @@
+{
+  "landing": "/",
+  "catalogue": "/catalogue",
+  "offer": "/offers/$identity",
+  "comparison": "/compare",
+  "providers": "/providers"
+}

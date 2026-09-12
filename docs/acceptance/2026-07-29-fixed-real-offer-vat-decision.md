@@ -10,15 +10,25 @@ arithmetic conflict is displayed as an unexplained-difference warning instead
 of silently correcting either total. This record does not authorize release
 without the owner's dated task results and approval.
 
+## Historical disposition
+
+This record is retained as historical evidence of an unsigned intermediate
+source and arithmetic decision, not as a current acceptance or product
+requirement. ADR-0002 and the factual distinction between Advertised and
+Calculated Totals remain relevant where they agree with #67; the record's
+aggregate-reconciliation warning, provider-control wording, and withdrawal
+expectations are not separate current authorities. The clean-room replacement
+retains no withdrawal workflow or historical Dataset.
+
 ## Application and dataset
 
 - Application commit: `e85f1e9fd13eb8f7e2a42dee12134c17859378eb`
 - Acceptance implementation rerun completed: `2026-07-29T11:42:19+02:00`
 - Catalogue generation: `2026-07-29T08:57:15.069074Z`
-- Provider access policy: ADR-0001; the dated Fleasing and Terminalen source
-  audits both record `allowed`, matching `config/provider-access.json`.
-- Provider control: Fleasing and Terminalen retrieval enabled; no withdrawals
-  recorded.
+- Source audits: ADR-0001; the dated Fleasing and Terminalen source audits
+  both recorded `allowed` for this historical run.
+- Provider Registry: Fleasing and Terminalen retrieval was enabled; no
+  withdrawal workflow was part of the current replacement.
 - Dataset result: 15 admitted catalogue offers—13 Fleasing and two Terminalen—
   and 146 quarantined Fleasing candidates.
 
@@ -93,7 +103,7 @@ not select one side of the conflict as a correction for the other.
 
 | Check | Actual | Result |
 | --- | --- | --- |
-| Checkout validation | Dataset, Git history, provider controls, access records, and pre-transition legal gate passed | Pass |
+| Checkout validation | Dataset, Git history, source audits, Registry state, and pre-transition legal gate passed | Pass |
 | Live static build | Completed artifact built from generation `2026-07-29T08:57:15.069074Z` | Pass |
 | Projection safety | Both Terminalen derived amounts remain available with provider total and signed unexplained difference kept separate | Pass |
 | Python suite | 76 tests passed | Pass |
