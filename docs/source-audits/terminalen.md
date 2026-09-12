@@ -15,7 +15,10 @@ The adapter verifies that each API response identifies the exact requested path
 and the `modelSubpage` template. It does not treat Terminalen's used-car inventory
 or unrelated model pages as private-leasing offers. It retains normalized facts,
 short source wording, source URLs, content hashes, retrieval time, and parser
-version; fetched documents are not written to the active catalogue dataset.
+version; fetched documents are not written to the active catalogue dataset. It
+also retains model-identified vehicle images from the first-party
+`assets.terminalen.dk/media/` URLs embedded in the exact model-price response;
+images are not treated as evidence for offer facts.
 
 ## Applicability and normalization
 

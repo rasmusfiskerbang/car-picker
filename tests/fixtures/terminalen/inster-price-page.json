@@ -3,6 +3,8 @@
   "template": "modelSubpage",
   "pimModelId": "HY_INSTER",
   "vehicleData": {"brand": "Hyundai", "model": "INSTER", "vehicleType": "Personbil"},
+  "image": {"url": "https://assets.terminalen.dk/media/inster/model-overview.webp", "altText": "Hyundai INSTER modeloversigt"},
+  "meta": {"image": {"url": "https://images.example.test/inster.jpg", "altText": "Hyundai INSTER"}},
   "isCurrent": true,
   "grid": [{"content": [
     {"alias": "anchor", "anchorId": "privatleasing"},
@@ -13,5 +15,7 @@
     ]},
     {"alias": "richtext", "text": "<p>Alle beløb er inkl. moms. Priseksemplerne er baseret på 36 mdr. med 10.000 km/år. Samlet betaling er inkl. alle fabriksanbefalede services samt gebyr på 650 kr. som dækker inspektionen ved udløb. Gebyret opkræves sammen med sidste ydelse. Prisen er ekskl. CO2-afgift, forsikring og ekstra dæk.</p>"},
     {"alias": "imagetextpicker", "columns": [{"title": "Privatleasing", "text": "<p>Når leasingaftalen udløber, afleverer du bilen hos os, og du skal ikke håndtere et videresalg eller bekymre dig om værditab.</p>"}]}
+  ]}, {"content": [
+    {"alias": "hero", "image": {"url": "https://assets.terminalen.dk/media/inster/hero.webp", "altText": "Parkeret Hyundai INSTER"}}
   ]}]
 }

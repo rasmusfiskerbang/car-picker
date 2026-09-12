@@ -50,6 +50,13 @@ class TerminalenAdapterTest(unittest.TestCase):
         self.assertTrue(records)
         self.assertIsInstance(records[0], TerminalenBoundaryRecord)
         self.assertEqual(records[0].provider, "Terminalen")
+        self.assertEqual(
+            records[0].image_urls,
+            [
+                "https://assets.terminalen.dk/media/inster/model-overview.webp",
+                "https://assets.terminalen.dk/media/inster/hero.webp",
+            ],
+        )
 
     def test_skips_a_model_price_page_without_private_lease_offers(self) -> None:
         catalogue = json.loads(

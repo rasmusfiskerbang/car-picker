@@ -27,7 +27,9 @@ from car_picker.provider_contract import (
 )
 
 
-PARSER_VERSION = "terminalen-model-price-v3"
+PARSER_VERSION = "terminalen-model-price-v4"
+TERMINALEN_IMAGE_HOST = "assets.terminalen.dk"
+TERMINALEN_IMAGE_PATH_PREFIX = "/media/"
 NAVIGATION_STATE_KEY = "G./api/navigation?culture=da-DK&levels=10"
 AUDITED_IONIQ_5_MODEL_IDS = frozenset({"HY_IONIQ5", "HY_IONIQ5_NE_DK_IONIQ5_MY27"})
 AUDITED_BATTERY_ELECTRIC_MODELS = frozenset(
@@ -164,6 +166,7 @@ class TerminalenBoundaryRecord(_TerminalenBoundaryModel):
     provider: Literal["Terminalen"]
     provider_source_id: str = Field(min_length=1)
     canonical_offer_url: TerminalenSourceUrl
+    image_urls: list[TerminalenSourceUrl]
     source_local_configuration_key: str = Field(min_length=1)
     vehicle_specification: TerminalenBoundaryFact[TerminalenBoundaryVehicle]
     vehicle_drivetrain: TerminalenBoundaryFact[str]
@@ -364,6 +367,7 @@ def map_model_page(
     vehicle = object_value(payload.get("vehicleData"), "Terminalen vehicleData")
     brand = required_string(vehicle, "brand")
     model = required_string(vehicle, "model")
+    image_urls = model_image_urls(payload, model)
     vehicle_wording = json.dumps(vehicle, ensure_ascii=False, separators=(",", ":"))
     passenger_car_scope = passenger_car_fact(api_url, model_id, vehicle)
     vehicle_drivetrain = audited_vehicle_drivetrain_fact(api_url, model_id, model)
@@ -383,6 +387,7 @@ def map_model_page(
             model_id=model_id,
             brand=brand,
             model=model,
+            image_urls=image_urls,
             vehicle_wording=vehicle_wording,
             vehicle_drivetrain=vehicle_drivetrain,
             passenger_car_scope=passenger_car_scope,
@@ -405,6 +410,7 @@ def map_configuration(
     model_id: str,
     brand: str,
     model: str,
+    image_urls: list[str],
     vehicle_wording: str,
     vehicle_drivetrain: dict[str, Any],
     passenger_car_scope: dict[str, Any],
@@ -463,6 +469,7 @@ def map_configuration(
         "provider": "Terminalen",
         "providerSourceId": model_id,
         "canonicalOfferUrl": page_url,
+        "imageUrls": image_urls,
         "sourceLocalConfigurationKey": configuration_id,
         "vehicleSpecification": known(
             {"make": brand, "model": model}, vehicle_evidence
@@ -499,6 +506,61 @@ def map_configuration(
         "sourceMetadata": {"parserVersion": PARSER_VERSION, "documents": documents},
     }
     return candidate
+
+
+def model_image_urls(payload: Mapping[str, Any], model: str) -> list[str]:
+    """Return audited page-level images whose alt text identifies the model."""
+    normalized_model = re.sub(r"[^a-z0-9]", "", model.casefold())
+    image_urls: list[str] = []
+
+    def collect(image: object) -> None:
+        if not isinstance(image, Mapping):
+            return
+        url = image.get("url")
+        alt_text = image.get("altText")
+        if not isinstance(url, str) or not isinstance(alt_text, str):
+            return
+        normalized_alt = re.sub(r"[^a-z0-9]", "", alt_text.casefold())
+        if (
+            normalized_model in normalized_alt
+            and is_terminalen_image_url(url)
+            and url not in image_urls
+        ):
+            image_urls.append(url)
+
+    collect(payload.get("image"))
+    grid = payload.get("grid")
+    if isinstance(grid, list):
+        for section in grid:
+            if not isinstance(section, Mapping):
+                continue
+            content = section.get("content")
+            if not isinstance(content, list):
+                continue
+            for block in content:
+                if isinstance(block, Mapping) and block.get("alias") == "hero":
+                    collect(block.get("image"))
+    meta = payload.get("meta")
+    if isinstance(meta, Mapping):
+        collect(meta.get("image"))
+    return image_urls
+
+
+def is_terminalen_image_url(value: str) -> bool:
+    try:
+        parsed = urlparse(value)
+        port = parsed.port
+    except ValueError:
+        return False
+    return (
+        parsed.scheme == "https"
+        and parsed.hostname == TERMINALEN_IMAGE_HOST
+        and port is None
+        and parsed.username is None
+        and parsed.password is None
+        and parsed.path.startswith(TERMINALEN_IMAGE_PATH_PREFIX)
+        and not parsed.fragment
+    )
 
 
 def event(

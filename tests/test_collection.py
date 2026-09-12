@@ -682,6 +682,13 @@ class CollectionTest(unittest.TestCase):
             )
         )
         first_offer = dataset.offers[0]
+        self.assertEqual(
+            first_offer.image_urls,
+            [
+                "https://assets.terminalen.dk/media/inster/model-overview.webp",
+                "https://assets.terminalen.dk/media/inster/hero.webp",
+            ],
+        )
         serialized_offer = first_offer.model_dump(mode="json", by_alias=True)
         self.assertEqual(
             serialized_offer["advertisedTotal"]["value"]["amountDkk"],

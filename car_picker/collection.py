@@ -308,7 +308,7 @@ def _map_terminalen_offer(
         service_arrangements=_terminalen_service_arrangements(
             record.service_arrangements
         ),
-        image_urls=[],
+        image_urls=list(record.image_urls),
         events=events,
         advertised_total=_strict_terminalen_money_fact(
             record.provider_advertised_aggregate
