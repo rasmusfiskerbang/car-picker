@@ -25,8 +25,9 @@ version; fetched documents are not written to the active catalogue dataset.
   to the detail links enumerated from that exact catalogue page. A detail-level
   contradictory vehicle type takes precedence.
 - The detail page's private-pricing tab and configuration-specific
-  `privatleasing` wording establish private-consumer eligibility. The adapter
-  does not treat an unlabelled gross amount alone as private eligibility.
+  `privatleasing`, `privat-flexleasing`, or `privat flexleasing` wording establish
+  private-consumer eligibility. The adapter does not treat an unlabelled gross
+  amount alone as private eligibility.
 - The supporting explanation explicitly calls the site's current inventory
   flexleasing cars, identifies flexleasing as financial leasing, states that the
   lessee is responsible for selling the car at the end unless buying it, and

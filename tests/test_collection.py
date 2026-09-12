@@ -546,6 +546,55 @@ class CollectionTest(unittest.TestCase):
         with self.assertRaises(StructuralSourceError):
             FleasingProviderAdapter(client, "2026-08-16T12:00:00Z").collect()
 
+    def test_fleasing_private_flexleasing_wording_is_admitted_during_refresh(
+        self,
+    ) -> None:
+        detail_url = (
+            "https://fleasing.dk/bil/?aston-martin-db9-volante-aut&vid=442795427"
+        )
+        original_detail_html = fixture_text("fleasing/aston-martin-db9.html")
+
+        for wording in (
+            "12 måneders privat-flexleasing",
+            "12 måneders privat flexleasing",
+        ):
+            with (
+                self.subTest(wording=wording),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                detail_html = original_detail_html.replace(
+                    "12 måneders privatleasing", wording
+                )
+                client = FixtureHttpClient(
+                    {
+                        FLEASING_CATALOGUE_URL: (
+                            '<a href="/biler/">Personbiler</a>'
+                            f'<a href="{detail_url}">Aston Martin DB9</a>'
+                        ),
+                        FLEASING_FLEXLEASING_URL: fixture_text(
+                            "fleasing/flexleasing.html"
+                        ),
+                        detail_url: detail_html,
+                    }
+                )
+                workspace = Path(directory)
+                write_registry(workspace, [provider("fleasing")])
+                catalogue = Catalogue(
+                    workspace,
+                    adapters=[FleasingProviderAdapter(client, "2026-09-12T12:00:00Z")],
+                )
+
+                with patch(
+                    "car_picker.catalogue._current_timestamp",
+                    return_value="2026-09-12T12:00:00Z",
+                ):
+                    report = catalogue.refresh()
+                dataset = catalogue.current()
+
+                self.assertEqual(report.catalogue_offer_count, 1)
+                self.assertEqual(report.quarantined_candidate_count, 0)
+                self.assertEqual(dataset.offers[0].supported_leasing_form, "financial")
+
     def test_fleasing_fixture_refresh_admits_source_offers(self) -> None:
         detail_url = (
             "https://fleasing.dk/bil/?aston-martin-db9-volante-aut&vid=442795427"

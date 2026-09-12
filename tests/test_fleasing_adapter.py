@@ -254,7 +254,7 @@ class FleasingAdapterTest(unittest.TestCase):
             },
         )
         self.assertEqual(
-            candidate["sourceMetadata"]["parserVersion"], "fleasing-html-v8"
+            candidate["sourceMetadata"]["parserVersion"], "fleasing-html-v9"
         )
         self.assertEqual(
             len(candidate["sourceMetadata"]["documents"][0]["contentSha256"]), 64

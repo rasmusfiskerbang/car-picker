@@ -31,7 +31,7 @@ from car_picker.provider_scope import (
 )
 
 
-PARSER_VERSION = "fleasing-html-v8"
+PARSER_VERSION = "fleasing-html-v9"
 FLEASING_IMAGE_HOST = "billeder.bilinfo.net"
 FLEASING_IMAGE_PATH_PREFIX = "/bilinfo/"
 FLEASING_UPLOAD_PATH_PREFIX = "/wp-content/uploads/"
@@ -737,7 +737,7 @@ def private_consumer_eligibility_fact(
     if detail.private_eligibility_fragment is not None:
         return known_fact(True, source_url, detail.private_eligibility_fragment)
     private_description = re.search(
-        r"\b\d+\s+måneders\s+privatleasing\b",
+        r"\b\d+\s+måneders\s+privat(?:[-\s]+flex)?leasing\b",
         detail.description_text,
         flags=re.IGNORECASE,
     )
