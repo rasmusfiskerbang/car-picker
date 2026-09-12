@@ -68,6 +68,13 @@ class FleasingAdapterTest(unittest.TestCase):
                 },
             },
         )
+        self.assertEqual(
+            candidates[0]["imageUrls"],
+            [
+                "https://billeder.bilinfo.net/bilinfo/vehicle-one.jpeg?class=S1600X1600",
+                "https://billeder.bilinfo.net/bilinfo/vehicle-two.jpeg?class=S1600X1600",
+            ],
+        )
 
     def test_preserves_legacy_drivetrain_source_wording(self) -> None:
         catalogue_html = f'<a href="{DETAIL_URL}">Aston Martin DB9</a>'
@@ -247,7 +254,7 @@ class FleasingAdapterTest(unittest.TestCase):
             },
         )
         self.assertEqual(
-            candidate["sourceMetadata"]["parserVersion"], "fleasing-html-v7"
+            candidate["sourceMetadata"]["parserVersion"], "fleasing-html-v8"
         )
         self.assertEqual(
             len(candidate["sourceMetadata"]["documents"][0]["contentSha256"]), 64

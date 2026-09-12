@@ -5,13 +5,13 @@ import type {
 
 /**
  * Provider-controlled media origins audited against the designated source
- * pages. Third-party image hosts are intentionally absent from this registry.
+ * pages. Bilinfo hosts Fleasing's vehicle photography embedded on offer pages.
  */
 export const auditedProviderImageOrigins: Readonly<
   Record<string, readonly string[]>
 > = {
   terminalen: ["https://assets.terminalen.dk"],
-  fleasing: ["https://fleasing.dk"],
+  fleasing: ["https://fleasing.dk", "https://billeder.bilinfo.net"],
 };
 
 export function allowlistedOfferImageUrls(

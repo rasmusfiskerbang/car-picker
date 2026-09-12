@@ -13,7 +13,9 @@ Originally checked 22 July 2026; access decision revalidated 24 August 2026 unde
   identity.
 
 The adapter does not call Bilinfo, FindLeasing, WordPress administration, an
-undocumented API, or any third-party embedded source. It retains normalized facts,
+undocumented API, or any third-party embedded data source. It does retain the
+`billeder.bilinfo.net` vehicle-image URLs embedded directly in exact Fleasing offer
+pages for presentation; those images are not evidence for offer facts. It retains normalized facts,
 short source wording, source URLs, content hashes, retrieval time, and parser
 version; fetched documents are not written to the active catalogue dataset.
 
@@ -52,8 +54,9 @@ version; fetched documents are not written to the active catalogue dataset.
 - Applicable restrictions: do not access WordPress administration.
 
 ADR-0001 allows the bounded first-party source without affirmative written
-permission because no applicable opt-out was found. Do not call Bilinfo,
-FindLeasing, WordPress administration, or another third-party or unrelated
+permission because no applicable opt-out was found. Do not call Bilinfo as a data
+source; displaying exact-offer vehicle images that Fleasing embeds from
+`billeder.bilinfo.net` is allowed. Do not call FindLeasing, WordPress administration, or another third-party or unrelated
 endpoint. Stop on an applicable prohibition, authentication requirement, bot
 challenge, persistent authorization denial, rate limit, or provider instruction.
 Recheck this decision after a material source or terms change, access failure, or

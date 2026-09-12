@@ -31,7 +31,14 @@ from car_picker.provider_scope import (
 )
 
 
-PARSER_VERSION = "fleasing-html-v7"
+PARSER_VERSION = "fleasing-html-v8"
+FLEASING_IMAGE_HOST = "billeder.bilinfo.net"
+FLEASING_IMAGE_PATH_PREFIX = "/bilinfo/"
+FLEASING_UPLOAD_PATH_PREFIX = "/wp-content/uploads/"
+BACKGROUND_IMAGE_URL = re.compile(
+    r"background-image\s*:\s*url\(\s*(['\"]?)(?P<url>.*?)\1\s*\)",
+    flags=re.IGNORECASE,
+)
 
 
 class TextHttpClient(Protocol):
@@ -924,7 +931,7 @@ def passenger_car_catalogue_fact(
 
 
 def exact_offer_image_urls(image_sources: list[str], detail_url: str) -> list[str]:
-    """Keep only same-origin image URLs embedded by the exact detail page."""
+    """Keep only audited vehicle images embedded by the exact detail page."""
     detail = urlparse(detail_url)
     image_urls: list[str] = []
     for image_source in image_sources:
@@ -932,21 +939,31 @@ def exact_offer_image_urls(image_sources: list[str], detail_url: str) -> list[st
         parsed = urlparse(image_url)
         try:
             image_port = parsed.port
-            detail_port = detail.port
         except ValueError:
             continue
         if (
-            parsed.scheme != detail.scheme
-            or parsed.hostname != detail.hostname
-            or image_port != detail_port
+            parsed.scheme != "https"
             or parsed.username is not None
             or parsed.password is not None
-            or not parsed.path
-            or parsed.query
             or parsed.fragment
         ):
             continue
-        normalized = parsed._replace(query="", fragment="").geturl()
+        is_fleasing_upload = (
+            parsed.hostname == detail.hostname
+            and image_port == detail.port
+            and parsed.path.startswith(FLEASING_UPLOAD_PATH_PREFIX)
+            and not parsed.query
+        )
+        query = parse_qs(parsed.query, keep_blank_values=True)
+        is_bilinfo_vehicle_image = (
+            parsed.hostname == FLEASING_IMAGE_HOST
+            and image_port is None
+            and parsed.path.startswith(FLEASING_IMAGE_PATH_PREFIX)
+            and not set(query) - {"class"}
+        )
+        if not is_fleasing_upload and not is_bilinfo_vehicle_image:
+            continue
+        normalized = parsed.geturl()
         if normalized not in image_urls:
             image_urls.append(normalized)
     return image_urls
@@ -1227,6 +1244,7 @@ class FleasingDetailParser(HTMLParser):
         self.vehicle_types: list[str] = []
         self.leasing_forms: list[str] = []
         self.drivetrain_evidence: list[FleasingDrivetrainEvidence] = []
+        self._vehicle_gallery_depth: int | None = None
         self._vehicle_info_depth: int | None = None
         self._vehicle_short_specs_depth: int | None = None
         self._private_tab_depth: int | None = None
@@ -1243,6 +1261,8 @@ class FleasingDetailParser(HTMLParser):
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         self._depth += 1
         attributes = {name: value for name, value in attrs if value is not None}
+        if tag == "div" and "vehicle-gallery" in attributes.get("class", "").split():
+            self._vehicle_gallery_depth = self._depth
         if tag == "div" and "vehicle-page-info" in attributes.get("class", "").split():
             self.found_vehicle_info = True
             self._vehicle_info_depth = self._depth
@@ -1269,6 +1289,11 @@ class FleasingDetailParser(HTMLParser):
                     for candidate in srcset.split(",")
                     if candidate.split()
                 )
+        if self._in_vehicle_gallery():
+            style = attributes.get("style", "")
+            background_image = BACKGROUND_IMAGE_URL.search(style)
+            if background_image:
+                self.image_urls.append(background_image.group("url"))
         if (
             self._in_private_tab()
             and tag == "ul"
@@ -1344,6 +1369,8 @@ class FleasingDetailParser(HTMLParser):
             self._private_terms = {}
         if self._vehicle_info_depth == self._depth:
             self._vehicle_info_depth = None
+        if self._vehicle_gallery_depth == self._depth:
+            self._vehicle_gallery_depth = None
         if self._vehicle_short_specs_depth == self._depth:
             self._vehicle_short_specs_depth = None
         if self._private_tab_depth == self._depth:
@@ -1356,6 +1383,9 @@ class FleasingDetailParser(HTMLParser):
 
     def _in_vehicle_info(self) -> bool:
         return self._vehicle_info_depth is not None
+
+    def _in_vehicle_gallery(self) -> bool:
+        return self._vehicle_gallery_depth is not None
 
     def _in_vehicle_short_specs(self) -> bool:
         return self._vehicle_short_specs_depth is not None
